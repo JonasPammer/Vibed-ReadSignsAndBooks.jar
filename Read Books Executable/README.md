@@ -1,6 +1,6 @@
-# Read Books Executable - Build Instructions
+# Read Books Executable
 
-This project reads Minecraft books and signs from world region files and player data.
+A Gradle-based Java tool that reads Minecraft books and signs from world region files and player data.
 
 ## What This Does
 
@@ -18,51 +18,72 @@ The output is saved to text files:
 ## Prerequisites
 
 - Java 8 or higher (tested with Java 21)
-- The `json-20180130.jar` library (included in this directory)
+- Gradle 8.x (or use the included Gradle Wrapper)
 
-## Building the JAR
+## Building with Gradle
 
-### Option 1: Using PowerShell (Recommended for Windows)
+### Using Gradle Wrapper (Recommended - No Gradle installation needed)
 
-```powershell
-.\build.ps1
-```
-
-### Option 2: Using Batch File
-
+**Windows:**
 ```cmd
-build.bat
+gradlew.bat build
 ```
 
-### Option 3: Manual Build
+**Linux/Mac:**
+```bash
+./gradlew build
+```
+
+### Using Installed Gradle
 
 ```bash
-# Clean and create bin directory
-mkdir bin
-
-# Compile Java files
-javac -encoding UTF-8 -d bin -cp json-20180130.jar -source 8 -target 8 src/**/*.java
-
-# Create JAR file
-jar cfm ReadSignsAndBooks.jar MANIFEST.MF -C bin .
+gradle build
 ```
 
-## Running the Tool
+This will:
+1. Compile all Java source files
+2. Create `ReadSignsAndBooks.jar` in both `build/libs/` and the project root
+3. Copy the JSON dependency to `build/libs/`
 
-1. Place the `ReadSignsAndBooks.jar` file in a directory with:
-   - `region/` folder - containing your Minecraft world region files (*.mca or *.mcr)
-   - `playerdata/` folder - containing player data files (*.dat)
-   - `json-20180130.jar` - the JSON library dependency
+## Running the Application
 
-2. Run the JAR:
-   ```bash
-   java -jar ReadSignsAndBooks.jar
-   ```
+### Option 1: Using Gradle
+
+```bash
+gradle run
+```
+
+or with the wrapper:
+```bash
+./gradlew run
+```
+
+### Option 2: Using the JAR directly
+
+```bash
+java -jar ReadSignsAndBooks.jar
+```
+
+## Usage
+
+1. Ensure you have the following folders in the project directory:
+   - `region/` - containing your Minecraft world region files (*.mca or *.mcr)
+   - `playerdata/` - containing player data files (*.dat)
+
+2. Run the application using one of the methods above
 
 3. The tool will create three output files:
    - `bookOutput.txt`
    - `signOutput.txt`
    - `playerdataOutput.txt`
+
+## Gradle Tasks
+
+- `gradle build` - Compile and build the JAR
+- `gradle run` - Run the application directly
+- `gradle clean` - Clean build artifacts
+- `gradle jar` - Build only the JAR file
+- `gradle tasks` - List all available tasks
 
 ## Project Structure
 
@@ -72,13 +93,36 @@ Read Books Executable/
 │   ├── Main.java          # Main application
 │   ├── Anvil/             # NBT parsing for Anvil format
 │   └── MCR/               # Region file handling
-├── bin/                    # Compiled classes (generated)
+├── build/                  # Gradle build output (generated)
+│   └── libs/              # Built JAR files
+├── gradle/                 # Gradle wrapper files
 ├── json-20180130.jar      # JSON library dependency
-├── MANIFEST.MF            # JAR manifest file
-├── build.ps1              # PowerShell build script
-├── build.bat              # Batch build script
-└── ReadSignsAndBooks.jar  # Compiled JAR (generated)
+├── build.gradle           # Gradle build configuration
+├── settings.gradle        # Gradle settings
+├── gradlew                # Gradle wrapper script (Unix)
+├── gradlew.bat            # Gradle wrapper script (Windows)
+└── ReadSignsAndBooks.jar  # Compiled JAR (generated, copied to root)
 ```
+
+## Development
+
+### Building from Source
+
+The project uses Gradle for build automation. The build configuration is in `build.gradle`.
+
+**Key configuration:**
+- Source compatibility: Java 8
+- Target compatibility: Java 8
+- Encoding: UTF-8
+- Main class: `Main`
+- Dependencies: `json-20180130.jar` (local file)
+
+### IDE Support
+
+This project can be imported into any IDE that supports Gradle:
+- **IntelliJ IDEA**: File → Open → Select the project directory
+- **Eclipse**: File → Import → Gradle → Existing Gradle Project
+- **VS Code**: Open folder and use the Gradle extension
 
 ## Notes
 
@@ -91,14 +135,16 @@ Read Books Executable/
 
 **Error: "Could not find or load main class Main"**
 - Make sure `json-20180130.jar` is in the same directory as the JAR file
+- If using Gradle, run `gradle build` to ensure everything is properly built
 
 **Error: "No such file or directory: region"**
 - Create a `region/` folder and place your Minecraft world region files in it
 - Create a `playerdata/` folder for player data files
 
-**Build fails with encoding errors:**
-- Make sure you're using the provided build scripts which specify UTF-8 encoding
-- The source code has been updated to use Unicode escape sequences for special characters
+**Gradle build fails:**
+- Make sure you have Java 8 or higher installed
+- Try using the Gradle wrapper: `./gradlew build` instead of `gradle build`
+- Run `gradle clean build` to do a fresh build
 
 ## License
 
