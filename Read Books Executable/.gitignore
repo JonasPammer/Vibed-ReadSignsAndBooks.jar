@@ -1,1 +1,37 @@
-/bin/
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Eclipse
+.settings/
+.classpath
+.project
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Output files
+bookOutput.txt
+signOutput.txt
+playerdataOutput.txt
+
+# Compiled class files
+*.class
+bin/
+
+# Package Files
+*.jar
+!json-20180130.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# Log files
+*.log
+
+# OS specific
+.DS_Store
+Thumbs.db

@@ -1,0 +1,63 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+group = 'com.minecraft'
+version = '1.0.0'
+
+sourceCompatibility = '1.8'
+targetCompatibility = '1.8'
+
+// Specify source directory
+sourceSets {
+    main {
+        java {
+            srcDirs = ['src']
+        }
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation files('json-20180130.jar')
+}
+
+application {
+    mainClass = 'Main'
+}
+
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+}
+
+jar {
+    manifest {
+        attributes(
+            'Main-Class': 'Main',
+            'Class-Path': 'json-20180130.jar'
+        )
+    }
+    archiveFileName = 'ReadSignsAndBooks.jar'
+
+    // Copy the JAR to root directory after creation
+    doLast {
+        copy {
+            from "$buildDir/libs/ReadSignsAndBooks.jar"
+            into projectDir
+        }
+        copy {
+            from 'json-20180130.jar'
+            into "$buildDir/libs"
+        }
+    }
+}
+
+// Clean task to remove old builds
+clean {
+    delete 'ReadSignsAndBooks.jar'
+}
+
