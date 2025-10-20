@@ -6,7 +6,7 @@ import java.io.IOException;
 
 public abstract class NBTBase
 {
-    public static final String[] NBTTypes = new String[] {"END", "BYTE", "SHORT", "INT", "LONG", "FLOAT", "DOUBLE", "BYTE[]", "STRING", "LIST", "COMPOUND", "INT[]"};
+    public static final String[] NBTTypes = new String[] {"END", "BYTE", "SHORT", "INT", "LONG", "FLOAT", "DOUBLE", "BYTE[]", "STRING", "LIST", "COMPOUND", "INT[]", "LONG[]"};
     private static final String __OBFID = "CL_00001229";
 
     /**
@@ -51,6 +51,8 @@ public abstract class NBTBase
                 return new NBTTagCompound();
             case 11:
                 return new NBTTagIntArray();
+            case 12:
+                return new NBTTagLongArray();
             default:
                 return null;
         }

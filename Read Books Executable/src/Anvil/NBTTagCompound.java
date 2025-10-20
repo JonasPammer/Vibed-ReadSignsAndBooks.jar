@@ -51,7 +51,11 @@ public class NBTTagCompound extends NBTBase
                 String s = func_152448_b(p_152446_1_, p_152446_3_);
                 p_152446_3_.func_152450_a((long)(16 * s.length()));
                 NBTBase nbtbase = func_152449_a(b0, s, p_152446_1_, p_152446_2_ + 1, p_152446_3_);
-                this.tagMap.put(s, nbtbase);
+                // Only add to map if nbtbase is not null (handles unknown tag types)
+                if (nbtbase != null)
+                {
+                    this.tagMap.put(s, nbtbase);
+                }
             }
         }
     }
@@ -461,6 +465,13 @@ public class NBTTagCompound extends NBTBase
     static NBTBase func_152449_a(byte p_152449_0_, String p_152449_1_, DataInput p_152449_2_, int p_152449_3_, NBTSizeTracker p_152449_4_)
     {
         NBTBase nbtbase = NBTBase.func_150284_a(p_152449_0_);
+
+        // Handle unknown NBT tag types (e.g., from newer Minecraft versions)
+        if (nbtbase == null)
+        {
+            System.err.println("Warning: Unknown NBT tag type " + p_152449_0_ + " for tag '" + p_152449_1_ + "'. Skipping...");
+            return null;
+        }
 
         try
         {
