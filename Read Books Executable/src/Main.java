@@ -122,13 +122,24 @@ public class Main {
 						continue;
 					
 					Anvil.NBTTagCompound nbttagcompund = new Anvil.NBTTagCompound();
-										
+
 				    nbttagcompund = Anvil.CompressedStreamTools.read(dataInputStream);
-				    
+
+				    // Handle both pre-1.18 (with "Level" tag) and 1.18+ (without "Level" tag) formats
 				    Anvil.NBTTagCompound nbttagcompund2 = new Anvil.NBTTagCompound();
-				    nbttagcompund2 = nbttagcompund.getCompoundTag("Level");
-				       
+				    if (nbttagcompund.hasKey("Level")) {
+				        // Pre-1.18 format
+				        nbttagcompund2 = nbttagcompund.getCompoundTag("Level");
+				    } else {
+				        // 1.18+ format - Level tag was removed, everything moved up
+				        nbttagcompund2 = nbttagcompund;
+				    }
+
+				    // Try both "TileEntities" (pre-1.18) and "block_entities" (1.18+)
 				    Anvil.NBTTagList tileEntities = nbttagcompund2.getTagList("TileEntities", 10);
+				    if (tileEntities.tagCount() == 0) {
+				        tileEntities = nbttagcompund2.getTagList("block_entities", 10);
+				    }
 	
 				    for (int i = 0; i < tileEntities.tagCount(); i ++)
 				    {
@@ -146,11 +157,17 @@ public class Main {
 				    			}
 				    		}
 				    		
-				    		//If Sign
+				    		//If Sign (pre-1.20 format with Text1-Text4)
 					    	if (tileEntity.hasKey("Text1"))
 					    	{
 					    		String signInfo = "Chunk [" + x + ", " + z + "]\t(" + tileEntity.getInteger("x") + " " + tileEntity.getInteger("y") + " " + tileEntity.getInteger("z") + ")\t\t";
 					    		parseSign(tileEntity, signWriter, signInfo);
+					    	}
+					    	//If Sign (1.20+ format with front_text/back_text)
+					    	else if (tileEntity.hasKey("front_text"))
+					    	{
+					    		String signInfo = "Chunk [" + x + ", " + z + "]\t(" + tileEntity.getInteger("x") + " " + tileEntity.getInteger("y") + " " + tileEntity.getInteger("z") + ")\t\t";
+					    		parseSignNew(tileEntity, signWriter, signInfo);
 					    	}
 				    	}
 				    }
@@ -232,83 +249,39 @@ public class Main {
 					
 					Anvil. NBTTagCompound nbttagcompund = new Anvil.NBTTagCompound();
 				    nbttagcompund = Anvil.CompressedStreamTools.read(dataInputStream);
-				   
+
+				    // Handle both pre-1.18 (with "Level" tag) and 1.18+ (without "Level" tag) formats
 				    Anvil.NBTTagCompound nbttagcompund2 = new Anvil.NBTTagCompound();
-				    nbttagcompund2 = nbttagcompund.getCompoundTag("Level");
-				    
+				    if (nbttagcompund.hasKey("Level")) {
+				        // Pre-1.18 format
+				        nbttagcompund2 = nbttagcompund.getCompoundTag("Level");
+				    } else {
+				        // 1.18+ format - Level tag was removed, everything moved up
+				        nbttagcompund2 = nbttagcompund;
+				    }
+
+				    // Try both "TileEntities" (pre-1.18) and "block_entities" (1.18+)
 				    Anvil.NBTTagList tileEntities = nbttagcompund2.getTagList("TileEntities", 10);
+				    if (tileEntities.tagCount() == 0) {
+				        tileEntities = nbttagcompund2.getTagList("block_entities", 10);
+				    }
 					
 				    for (int i = 0; i < tileEntities.tagCount(); i ++)
 				    {
 				    	Anvil.NBTTagCompound entity = tileEntities.getCompoundTagAt(i);
 				    	
-				    	//If Sign
-				    	if (!entity.hasKey("Text1"))
-				    		continue;
-		            
-			    		String text1 = entity.getString("Text1");
-		                String text2 = entity.getString("Text2");
-		                String text3 = entity.getString("Text3");
-		                String text4 = entity.getString("Text4");
-		                			                
-		                JSONObject json1 = null;
-		                JSONObject json2 = null;
-		                JSONObject json3 = null;
-		                JSONObject json4 = null;
-		                
-		                String[] signLines = { text1, text2, text3, text4 };
-		                
-		                String hash = text1 + text2 + text3 + text4;
-		                if (signHashes.contains(hash))
-		                	continue;
-		                else
-		                	signHashes.add(hash);
-		                
-		                JSONObject[] objects = { json1, json2, json3, json4 };
-		                
-		                writer.write("Chunk [" + x + ", " + z + "]\t(" + entity.getInteger("x") + " " + entity.getInteger("y") + " " + entity.getInteger("z") + ")\t\t");
-		                
-		                for (int j = 0; j < 4; j++)
-		                {
-		                	if (signLines[j].startsWith("{"))
-		                	{
-		                		try
-		                		{
-		                			objects[j] = new JSONObject(signLines[j]);
-		                		}
-		                		catch (JSONException e)
-		                		{
-		                			objects[j] = null;
-		                		}
-		                	}
-		                }
-		               
-		                for (int o = 0; o < 4; o++)
-		                {
-		                	if (objects[o] != null)
-		                	{
-			                    if (objects[o].has("extra"))
-			                    {
-			                    	for (int h = 0; h < objects[o].getJSONArray("extra").length(); h++)
-			                    	{
-				                        if ((objects[o].getJSONArray("extra").get(0) instanceof String)) 
-				                        	writer.write(objects[o].getJSONArray("extra").get(0).toString());
-				                        else 
-				                        {
-				                          JSONObject temp = (JSONObject)objects[o].getJSONArray("extra").get(0);
-				                          writer.write(temp.get("text").toString());
-				                        }
-			                    	}
-			                    } 
-			                    else if (objects[o].has("text"))
-			                    	writer.write(objects[o].getString("text"));
-		                  }
-		                  else if ((!signLines[o].equals("\"\"")) && (!signLines[o].equals("null"))) 
-		                	  writer.write(signLines[o]);
-		                	
-		                  writer.write(" ");
-		                }
-		             writer.newLine();
+				    	//If Sign (pre-1.20 format)
+				    	if (entity.hasKey("Text1"))
+				    	{
+				    		String signInfo = "Chunk [" + x + ", " + z + "]\t(" + entity.getInteger("x") + " " + entity.getInteger("y") + " " + entity.getInteger("z") + ")\t\t";
+				    		parseSign(entity, writer, signInfo);
+				    	}
+				    	//If Sign (1.20+ format)
+				    	else if (entity.hasKey("front_text"))
+				    	{
+				    		String signInfo = "Chunk [" + x + ", " + z + "]\t(" + entity.getInteger("x") + " " + entity.getInteger("y") + " " + entity.getInteger("z") + ")\t\t";
+				    		parseSignNew(entity, writer, signInfo);
+				    	}
 				    }
 				}
 			}
@@ -629,7 +602,84 @@ public class Main {
         }
         signWriter.newLine();
 	}
-	
+
+	// Parse sign in Minecraft 1.20+ format (front_text/back_text)
+	private static void parseSignNew(Anvil.NBTTagCompound tileEntity, BufferedWriter signWriter, String signInfo) throws IOException
+	{
+		// Get front_text compound
+		Anvil.NBTTagCompound frontText = tileEntity.getCompoundTag("front_text");
+
+		// Extract messages array (contains 4 lines)
+		Anvil.NBTTagList messages = frontText.getTagList("messages", 8); // 8 = String type
+
+		if (messages.tagCount() == 0)
+			return;
+
+		String text1 = messages.getStringTagAt(0);
+		String text2 = messages.getStringTagAt(1);
+		String text3 = messages.getStringTagAt(2);
+		String text4 = messages.getStringTagAt(3);
+
+		JSONObject json1 = null;
+		JSONObject json2 = null;
+		JSONObject json3 = null;
+		JSONObject json4 = null;
+
+		String[] signLines = { text1, text2, text3, text4 };
+
+		String hash = text1 + text2 + text3 + text4;
+		if (signHashes.contains(hash))
+			return;
+		else
+			signHashes.add(hash);
+
+		JSONObject[] objects = { json1, json2, json3, json4 };
+
+		signWriter.write(signInfo);
+
+		for (int j = 0; j < 4; j++)
+		{
+			if (signLines[j].startsWith("{"))
+			{
+				try
+				{
+					objects[j] = new JSONObject(signLines[j]);
+				}
+				catch (JSONException e)
+				{
+					objects[j] = null;
+				}
+			}
+		}
+
+		for (int o = 0; o < 4; o++)
+		{
+			if (objects[o] != null)
+			{
+				if (objects[o].has("extra"))
+				{
+					for (int h = 0; h < objects[o].getJSONArray("extra").length(); h++)
+					{
+						if ((objects[o].getJSONArray("extra").get(0) instanceof String))
+							signWriter.write(objects[o].getJSONArray("extra").get(0).toString());
+						else
+						{
+							JSONObject temp = (JSONObject)objects[o].getJSONArray("extra").get(0);
+							signWriter.write(temp.get("text").toString());
+						}
+					}
+				}
+				else if (objects[o].has("text"))
+					signWriter.write(objects[o].getString("text"));
+			}
+			else if ((!signLines[o].equals("\"\"")) && (!signLines[o].equals("null")))
+				signWriter.write(signLines[o]);
+
+			signWriter.write(" ");
+		}
+		signWriter.newLine();
+	}
+
 	public static String removeTextFormatting(String text)
 	{
 		for (int i = 0; i < colorCodes.length; i ++)
