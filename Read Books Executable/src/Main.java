@@ -4,10 +4,14 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.UUID;
 
 import javax.swing.JComboBox;
@@ -27,16 +31,101 @@ public class Main {
 	static ArrayList<Integer> bookHashes = new ArrayList<Integer>();
 	static ArrayList<String> signHashes = new ArrayList<String>();
 	static String[] colorCodes = {"\u00A70","\u00A71","\u00A72","\u00A73","\u00A74","\u00A75","\u00A76","\u00A77","\u00A78","\u00A79","\u00A7a","\u00A7b","\u00A7c","\u00A7d","\u00A7e","\u00A7f","\u00A7k","\u00A7l","\u00A7m","\u00A7n","\u00A7o","\u00A7r"};
-	
+
+	// Logging infrastructure
+	static BufferedWriter logWriter;
+	static String outputFolder;
+	static String dateStamp;
+	static SimpleDateFormat logTimeFormat = new SimpleDateFormat("HH:mm:ss.SSS");
+
 	public static void main(String[] args) throws IOException
 	{
+		// Initialize logging and output folders
+		dateStamp = new SimpleDateFormat("yyyy-MM-dd").format(new Date());
+		outputFolder = "ReadBooks" + File.separator + dateStamp;
+
+		// Create output directory
+		File outputDir = new File(outputFolder);
+		if (!outputDir.exists()) {
+			outputDir.mkdirs();
+			System.out.println("Created output directory: " + outputFolder);
+		}
+
+		// Initialize log file
+		String logFile = outputFolder + File.separator + "logs-" + dateStamp + ".txt";
+		logWriter = new BufferedWriter(new FileWriter(logFile));
+
+		log("INFO", "=".repeat(80));
+		log("INFO", "ReadSignsAndBooks - Minecraft World Data Extractor");
+		log("INFO", "Started at: " + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
+		log("INFO", "Output folder: " + outputFolder);
+		log("INFO", "=".repeat(80));
+
 		long startTime = System.currentTimeMillis();
-		
-		readPlayerData();
-		readSignsAndBooks();
-		
-		long elapsed = System.currentTimeMillis() - startTime;
-		System.out.println(elapsed / 1000 + " seconds to complete.");
+
+		try {
+			readPlayerData();
+			readSignsAndBooks();
+
+			long elapsed = System.currentTimeMillis() - startTime;
+			log("INFO", "=".repeat(80));
+			log("INFO", "Completed successfully in " + elapsed / 1000 + " seconds (" + formatTime(elapsed) + ")");
+			log("INFO", "=".repeat(80));
+			System.out.println(elapsed / 1000 + " seconds to complete.");
+		} catch (Exception e) {
+			log("ERROR", "Fatal error during execution: " + e.getMessage());
+			logException(e);
+			throw e;
+		} finally {
+			if (logWriter != null) {
+				logWriter.close();
+			}
+		}
+	}
+
+	/**
+	 * Log a message to both console and log file
+	 */
+	static void log(String level, String message) {
+		String timestamp = logTimeFormat.format(new Date());
+		String logLine = "[" + timestamp + "] [" + level + "] " + message;
+		System.out.println(logLine);
+		try {
+			if (logWriter != null) {
+				logWriter.write(logLine);
+				logWriter.newLine();
+				logWriter.flush();
+			}
+		} catch (IOException e) {
+			System.err.println("Failed to write to log file: " + e.getMessage());
+		}
+	}
+
+	/**
+	 * Log an exception with full stack trace
+	 */
+	static void logException(Exception e) {
+		StringWriter sw = new StringWriter();
+		PrintWriter pw = new PrintWriter(sw);
+		e.printStackTrace(pw);
+		log("ERROR", "Exception stack trace:\n" + sw.toString());
+	}
+
+	/**
+	 * Format milliseconds into human-readable time
+	 */
+	static String formatTime(long millis) {
+		long seconds = millis / 1000;
+		long minutes = seconds / 60;
+		long hours = minutes / 60;
+
+		if (hours > 0) {
+			return String.format("%dh %dm %ds", hours, minutes % 60, seconds % 60);
+		} else if (minutes > 0) {
+			return String.format("%dm %ds", minutes, seconds % 60);
+		} else {
+			return String.format("%ds", seconds);
+		}
 	}
 	
 	public void displayGUI()
@@ -97,18 +186,43 @@ public class Main {
 	
 	public static void readSignsAndBooks() throws IOException
 	{
+		log("INFO", "Starting readSignsAndBooks()");
+
 		File folder = new File("region");
+		if (!folder.exists() || !folder.isDirectory()) {
+			log("ERROR", "Region folder not found: " + folder.getAbsolutePath());
+			return;
+		}
+
 		File[] listOfFiles = folder.listFiles();
-		
-		File bookOutput = new File("bookOutput.txt");
+		if (listOfFiles == null || listOfFiles.length == 0) {
+			log("WARN", "No region files found in: " + folder.getAbsolutePath());
+			return;
+		}
+
+		log("INFO", "Found " + listOfFiles.length + " region files to process");
+
+		File bookOutput = new File(outputFolder + File.separator + "bookOutput-" + dateStamp + ".txt");
 		BufferedWriter bookWriter = new BufferedWriter(new FileWriter(bookOutput));
-		File signOutput = new File("signOutput.txt");
+		File signOutput = new File(outputFolder + File.separator + "signOutput-" + dateStamp + ".txt");
 		BufferedWriter signWriter = new BufferedWriter(new FileWriter(signOutput));
-		
+
+		log("INFO", "Output files:");
+		log("INFO", "  - Books: " + bookOutput.getAbsolutePath());
+		log("INFO", "  - Signs: " + signOutput.getAbsolutePath());
+
+		int processedFiles = 0;
+		int totalChunks = 0;
+		int totalSigns = 0;
+		int totalBooks = 0;
+
 		for (int f = 0; f < listOfFiles.length; f++)
 		{
+			String fileName = listOfFiles[f].getName();
+			log("DEBUG", "Processing region file [" + (f+1) + "/" + listOfFiles.length + "]: " + fileName);
+
 			signWriter.newLine();
-			signWriter.write("--------------------------------" + listOfFiles[f].getName() + "--------------------------------");
+			signWriter.write("--------------------------------" + fileName + "--------------------------------");
 			signWriter.newLine();
 			signWriter.newLine();
 			for (int x = 0; x < 32; x++)
@@ -141,37 +255,55 @@ public class Main {
 				        tileEntities = nbttagcompund2.getTagList("block_entities", 10);
 				    }
 	
+				    int chunkSigns = 0;
+				    int chunkBooks = 0;
+
 				    for (int i = 0; i < tileEntities.tagCount(); i ++)
 				    {
 				    	Anvil.NBTTagCompound tileEntity = (Anvil.NBTTagCompound) tileEntities.getCompoundTagAt(i);
 				    	{
 				    		//If it is an item
-				    		if (tileEntity.hasKey("id")) 
+				    		if (tileEntity.hasKey("id"))
 				    		{
 				    			Anvil.NBTTagList chestItems = tileEntity.getTagList("Items", 10);
+				    			if (chestItems.tagCount() > 0) {
+				    				log("DEBUG", "  Chunk [" + x + "," + z + "] - Found container " + tileEntity.getString("id") + " with " + chestItems.tagCount() + " items");
+				    			}
 				    			for (int n = 0; n < chestItems.tagCount(); n++)
 				    			{
 				    				Anvil.NBTTagCompound item = chestItems.getCompoundTagAt(n);
 			    					String bookInfo = ("------------------------------------Chunk [" + x + ", " + z + "] Inside " + tileEntity.getString("id") + " at (" +  tileEntity.getInteger("x") + " " + tileEntity.getInteger("y") + " " + tileEntity.getInteger("z") + ") " + listOfFiles[f].getName() + "------------------------------------" );
+			    					int booksBefore = bookHashes.size();
 			    					parseItem(item, bookWriter, bookInfo);
+			    					if (bookHashes.size() > booksBefore) {
+			    						chunkBooks++;
+			    					}
 				    			}
 				    		}
-				    		
+
 				    		//If Sign (pre-1.20 format with Text1-Text4)
 					    	if (tileEntity.hasKey("Text1"))
 					    	{
 					    		String signInfo = "Chunk [" + x + ", " + z + "]\t(" + tileEntity.getInteger("x") + " " + tileEntity.getInteger("y") + " " + tileEntity.getInteger("z") + ")\t\t";
+					    		int signsBefore = signHashes.size();
 					    		parseSign(tileEntity, signWriter, signInfo);
+					    		if (signHashes.size() > signsBefore) {
+					    			chunkSigns++;
+					    		}
 					    	}
 					    	//If Sign (1.20+ format with front_text/back_text)
 					    	else if (tileEntity.hasKey("front_text"))
 					    	{
 					    		String signInfo = "Chunk [" + x + ", " + z + "]\t(" + tileEntity.getInteger("x") + " " + tileEntity.getInteger("y") + " " + tileEntity.getInteger("z") + ")\t\t";
+					    		int signsBefore = signHashes.size();
 					    		parseSignNew(tileEntity, signWriter, signInfo);
+					    		if (signHashes.size() > signsBefore) {
+					    			chunkSigns++;
+					    		}
 					    	}
 				    	}
 				    }
-				    
+
 				    Anvil.NBTTagList entities = nbttagcompund2.getTagList("Entities", 10);
 				    
 				    for (int i = 0; i < entities.tagCount(); i ++)
@@ -183,16 +315,24 @@ public class Main {
 				    		{
 				    			Anvil.NBTTagList entityItems = entity.getTagList("Items", 10);
 				    			Anvil.NBTTagList entityPos = entity.getTagList("Pos", 6);
-				    			
+
 				    			int xPos = (int) Double.parseDouble(entityPos.getStringTagAt(0));
 				    			int yPos = (int) Double.parseDouble(entityPos.getStringTagAt(1));
 				    			int zPos = (int) Double.parseDouble(entityPos.getStringTagAt(2));
-				    			
+
+				    			if (entityItems.tagCount() > 0) {
+				    				log("DEBUG", "  Chunk [" + x + "," + z + "] - Found entity with " + entityItems.tagCount() + " items at (" + xPos + "," + yPos + "," + zPos + ")");
+				    			}
+
 				    			for (int n = 0; n < entityItems.tagCount(); n++)
 				    			{
 				    				Anvil.NBTTagCompound item = entityItems.getCompoundTagAt(n);
 			    					String bookInfo = ("------------------------------------Chunk [" + x + ", " + z + "] On entity at (" + xPos + " " + yPos + " " + zPos + ") " + listOfFiles[f].getName() + "------------------------------------" );
+			    					int booksBefore = bookHashes.size();
 			    					parseItem(item, bookWriter, bookInfo);
+			    					if (bookHashes.size() > booksBefore) {
+			    						chunkBooks++;
+			    					}
 				    			}
 				    		}
 				    		//Item frame or item on the ground
@@ -200,29 +340,53 @@ public class Main {
 				    		{
 				    			Anvil.NBTTagCompound item = entity.getCompoundTag("Item");
 				    			Anvil.NBTTagList entityPos = entity.getTagList("Pos", 6);
-				    			
+
 				    			int xPos = (int) Double.parseDouble(entityPos.getStringTagAt(0));
 				    			int yPos = (int) Double.parseDouble(entityPos.getStringTagAt(1));
 				    			int zPos = (int) Double.parseDouble(entityPos.getStringTagAt(2));
-				    			
-		    					String bookInfo = ("------------------------------------Chunk [" + x + ", " + z + "] On ground or item frame at at (" + xPos + " " + yPos + " " + zPos + ") " + listOfFiles[f].getName() + "--------------------------------" );
 
+		    					String bookInfo = ("------------------------------------Chunk [" + x + ", " + z + "] On ground or item frame at at (" + xPos + " " + yPos + " " + zPos + ") " + listOfFiles[f].getName() + "--------------------------------" );
+		    					int booksBefore = bookHashes.size();
 				    			parseItem(item, bookWriter, bookInfo);
+				    			if (bookHashes.size() > booksBefore) {
+		    						chunkBooks++;
+		    					}
 				    		}
 				    	}
 				    }
+
+				    totalChunks++;
+				    totalSigns += chunkSigns;
+				    totalBooks += chunkBooks;
+
+				    if (chunkSigns > 0 || chunkBooks > 0) {
+				    	log("DEBUG", "  Chunk [" + x + "," + z + "] - Found " + chunkSigns + " signs, " + chunkBooks + " books");
+				    }
 				}
-			}	
+			}
+
+			processedFiles++;
+			log("INFO", "Completed region file [" + processedFiles + "/" + listOfFiles.length + "]: " + fileName);
 		}
+
+		log("INFO", "");
+		log("INFO", "Processing complete!");
+		log("INFO", "Total region files processed: " + processedFiles);
+		log("INFO", "Total chunks processed: " + totalChunks);
+		log("INFO", "Total unique signs found: " + signHashes.size());
+		log("INFO", "Total unique books found: " + bookHashes.size());
+
 		bookWriter.newLine();
 		bookWriter.write("Completed.");
 		bookWriter.newLine();
 		bookWriter.close();
-		
+
 		signWriter.newLine();
 		signWriter.write("Completed.");
 		signWriter.newLine();
 		signWriter.close();
+
+		log("INFO", "Output files written successfully");
 	}
 	
 	public static void readSignsAnvil() throws IOException
@@ -294,41 +458,81 @@ public class Main {
 	
 	public static void readPlayerData() throws IOException
 	{
+		log("INFO", "Starting readPlayerData()");
+
 		File folder = new File("playerdata");
+		if (!folder.exists() || !folder.isDirectory()) {
+			log("WARN", "Playerdata folder not found: " + folder.getAbsolutePath());
+			return;
+		}
+
 		File[] listOfFiles = folder.listFiles();
-		File output = new File("playerdataOutput.txt");
+		if (listOfFiles == null || listOfFiles.length == 0) {
+			log("WARN", "No player data files found in: " + folder.getAbsolutePath());
+			return;
+		}
+
+		log("INFO", "Found " + listOfFiles.length + " player data files to process");
+
+		File output = new File(outputFolder + File.separator + "playerdataOutput-" + dateStamp + ".txt");
 		BufferedWriter writer = new BufferedWriter(new FileWriter(output));
-		
+
+		log("INFO", "Output file: " + output.getAbsolutePath());
+
+		int totalPlayerBooks = 0;
+
 		//Loop through player .dat files
 		for (int i = 0; i < listOfFiles.length; i++)
-		{	
-			System.out.println(i + " / " + listOfFiles.length);
+		{
+			log("DEBUG", "Processing player data [" + (i+1) + "/" + listOfFiles.length + "]: " + listOfFiles[i].getName());
+
 			FileInputStream fileinputstream = new FileInputStream(listOfFiles[i]);
 			Anvil.NBTTagCompound playerCompound = Anvil.CompressedStreamTools.readCompressed(fileinputstream);
 			Anvil.NBTTagList playerInventory = playerCompound.getTagList("Inventory", 10);
-						
+
+			int playerBooks = 0;
+
 			for (int n = 0; n < playerInventory.tagCount(); n ++)
 			{
 				Anvil.NBTTagCompound item = (Anvil.NBTTagCompound) playerInventory.getCompoundTagAt(n);
 				String bookInfo = ("------------------------------------Inventory of player " + listOfFiles[i].getName() + "------------------------------------" );
+				int booksBefore = bookHashes.size();
 				parseItem(item, writer, bookInfo);
+				if (bookHashes.size() > booksBefore) {
+					playerBooks++;
+				}
 			}
-			
+
 			Anvil.NBTTagList enderInventory = playerCompound.getTagList("EnderItems", 10);
-			
+
 			for (int e = 0; e < enderInventory.tagCount(); e ++)
 			{
 				Anvil.NBTTagCompound item = (Anvil.NBTTagCompound) playerInventory.getCompoundTagAt(e);
 				String bookInfo = ("------------------------------------Ender Chest of player " + listOfFiles[i].getName() + "------------------------------------" );
+				int booksBefore = bookHashes.size();
 				parseItem(item, writer, bookInfo);
+				if (bookHashes.size() > booksBefore) {
+					playerBooks++;
+				}
 			}
-			
+
+			if (playerBooks > 0) {
+				log("DEBUG", "  Found " + playerBooks + " books in player inventory/ender chest");
+			}
+			totalPlayerBooks += playerBooks;
+
 			//MCR.NBTTagCompound nbttagcompound = MCR.CompressedStreamTools.func_1138_a(fileinputstream);
 		}
+
+		log("INFO", "Player data processing complete!");
+		log("INFO", "Total books found in player inventories: " + totalPlayerBooks);
+
 		writer.newLine();
 		writer.write("Completed.");
 		writer.newLine();
 		writer.close();
+
+		log("INFO", "Player data output file written successfully");
 	}
 
 	public static void readBooksAnvil() throws IOException
@@ -427,19 +631,25 @@ public class Main {
 	
 	public static void parseItem(Anvil.NBTTagCompound item, BufferedWriter writer, String bookInfo) throws IOException
 	{
-		if (item.getString("id").equals("minecraft:written_book") || item.getShort("id") == 387)
+		String itemId = item.getString("id");
+
+		if (itemId.equals("minecraft:written_book") || item.getShort("id") == 387)
 		{
+			log("DEBUG", "    Found written book: " + bookInfo.substring(0, Math.min(80, bookInfo.length())) + "...");
 			readWrittenBook(item, writer, bookInfo);
 		}
-		if (item.getString("id").equals("minecraft:writable_book") || item.getShort("id") == 386)
+		if (itemId.equals("minecraft:writable_book") || item.getShort("id") == 386)
 		{
+			log("DEBUG", "    Found writable book: " + bookInfo.substring(0, Math.min(80, bookInfo.length())) + "...");
 			readWritableBook(item, writer, bookInfo);
 		}
-		if (item.getString("id").contains("shulker_box") || (item.getShort("id") >= 219 && item.getShort("id") <= 234))
+		if (itemId.contains("shulker_box") || (item.getShort("id") >= 219 && item.getShort("id") <= 234))
 		{
+			log("DEBUG", "    Found shulker box, scanning contents...");
 			Anvil.NBTTagCompound shelkerCompound = item.getCompoundTag("tag");
 			Anvil.NBTTagCompound shelkerCompound2 = shelkerCompound.getCompoundTag("BlockEntityTag");
 			Anvil.NBTTagList shelkerContents = shelkerCompound2.getTagList("Items", 10);
+			log("DEBUG", "      Shulker box contains " + shelkerContents.tagCount() + " items");
 			for (int i = 0; i < shelkerContents.tagCount(); i++)
 			{
 				Anvil.NBTTagCompound shelkerItem = shelkerContents.getCompoundTagAt(i);
@@ -453,11 +663,13 @@ public class Main {
 		// Try both old format (pre-1.20.5 with "tag") and new format (1.20.5+ with "components")
 		Anvil.NBTTagCompound tag = null;
 		Anvil.NBTTagList pages = null;
+		String format = "unknown";
 
 		if (item.hasKey("tag")) {
 			// Pre-1.20.5 format
 			tag = item.getCompoundTag("tag");
 			pages = tag.getTagList("pages", 8);
+			format = "pre-1.20.5";
 		} else if (item.hasKey("components")) {
 			// 1.20.5+ format
 			Anvil.NBTTagCompound components = item.getCompoundTag("components");
@@ -465,14 +677,18 @@ public class Main {
 				Anvil.NBTTagCompound bookContent = components.getCompoundTag("minecraft:written_book_content");
 				pages = bookContent.getTagList("pages", 10); // In 1.20.5+, pages are compounds, not strings
 				tag = bookContent; // Use bookContent as tag for author/title
+				format = "1.20.5+";
 			}
 		}
 
 		if (pages == null || pages.tagCount() == 0) {
+			log("DEBUG", "      Written book has no pages (format: " + format + ")");
 			return;
 		}
-		if (bookHashes.contains(pages.hashCode()))
+		if (bookHashes.contains(pages.hashCode())) {
+			log("DEBUG", "      Written book already processed (duplicate)");
 			return;
+		}
 		else
 			bookHashes.add(pages.hashCode());
 
@@ -489,7 +705,7 @@ public class Main {
 					author = authorJSON.getString("raw");
 				}
 			} catch (JSONException e) {
-				// If parsing fails, keep the original string
+				log("WARN", "      Failed to parse author JSON: " + e.getMessage());
 			}
 		}
 		if (title.startsWith("{") && title.contains("raw:")) {
@@ -499,9 +715,11 @@ public class Main {
 					title = titleJSON.getString("raw");
 				}
 			} catch (JSONException e) {
-				// If parsing fails, keep the original string
+				log("WARN", "      Failed to parse title JSON: " + e.getMessage());
 			}
 		}
+
+		log("DEBUG", "      Extracted written book: \"" + title + "\" by " + author + " (" + pages.tagCount() + " pages, format: " + format + ")");
 
 		writer.newLine();
 		writer.write(bookInfo);
@@ -575,27 +793,35 @@ public class Main {
 	{
 		// Try both old format (pre-1.20.5 with "tag") and new format (1.20.5+ with "components")
 		Anvil.NBTTagList pages = null;
+		String format = "unknown";
 
 		if (item.hasKey("tag")) {
 			// Pre-1.20.5 format
 			Anvil.NBTTagCompound tag = item.getCompoundTag("tag");
 			pages = tag.getTagList("pages", 8);
+			format = "pre-1.20.5";
 		} else if (item.hasKey("components")) {
 			// 1.20.5+ format
 			Anvil.NBTTagCompound components = item.getCompoundTag("components");
 			if (components.hasKey("minecraft:writable_book_content")) {
 				Anvil.NBTTagCompound bookContent = components.getCompoundTag("minecraft:writable_book_content");
 				pages = bookContent.getTagList("pages", 10); // In 1.20.5+, pages are compounds
+				format = "1.20.5+";
 			}
 		}
 
 		if (pages == null || pages.tagCount() == 0) {
+			log("DEBUG", "      Writable book has no pages (format: " + format + ")");
 			return;
 		}
-		if (bookHashes.contains(pages.hashCode()))
+		if (bookHashes.contains(pages.hashCode())) {
+			log("DEBUG", "      Writable book already processed (duplicate)");
 			return;
+		}
 		else
 			bookHashes.add(pages.hashCode());
+
+		log("DEBUG", "      Extracted writable book (" + pages.tagCount() + " pages, format: " + format + ")");
 		writer.newLine();
 		writer.write(bookInfo);
 		writer.newLine();
