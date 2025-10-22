@@ -6,6 +6,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.zip.GZIPInputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -26,7 +27,11 @@ import picocli.CommandLine.Option;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import Anvil.NBTTagCompound;
+// BitBuf NBT library imports
+import dev.dewy.nbt.Nbt;
+import dev.dewy.nbt.tags.collection.CompoundTag;
+import dev.dewy.nbt.tags.collection.ListTag;
+import dev.dewy.nbt.tags.primitive.*;
 
 import java.awt.*;
 
@@ -457,49 +462,47 @@ public class Main implements Runnable {
 					DataInputStream dataInputStream  = MCR.RegionFileCache.getChunkInputStream(listOfFiles[f], x, z); 
 					
 					//Stops a null pointer exception when there is no chunk in the .mcr
-					if (dataInputStream == null) 
+					if (dataInputStream == null)
 						continue;
-					
-					Anvil.NBTTagCompound nbttagcompund = new Anvil.NBTTagCompound();
 
-				    nbttagcompund = Anvil.CompressedStreamTools.read(dataInputStream);
+					CompoundTag nbttagcompund = readNBT(dataInputStream);
 
 				    // Handle both pre-1.18 (with "Level" tag) and 1.18+ (without "Level" tag) formats
-				    Anvil.NBTTagCompound nbttagcompund2 = new Anvil.NBTTagCompound();
-				    if (nbttagcompund.hasKey("Level")) {
+				    CompoundTag nbttagcompund2;
+				    if (hasKey(nbttagcompund, "Level")) {
 				        // Pre-1.18 format
-				        nbttagcompund2 = nbttagcompund.getCompoundTag("Level");
+				        nbttagcompund2 = getCompoundTag(nbttagcompund, "Level");
 				    } else {
 				        // 1.18+ format - Level tag was removed, everything moved up
 				        nbttagcompund2 = nbttagcompund;
 				    }
 
 				    // Try both "TileEntities" (pre-1.18) and "block_entities" (1.18+)
-				    Anvil.NBTTagList tileEntities = nbttagcompund2.getTagList("TileEntities", 10);
-				    if (tileEntities.tagCount() == 0) {
-				        tileEntities = nbttagcompund2.getTagList("block_entities", 10);
+				    ListTag<CompoundTag> tileEntities = getTagList(nbttagcompund2, "TileEntities", 10);
+				    if (tagCount(tileEntities) == 0) {
+				        tileEntities = getTagList(nbttagcompund2, "block_entities", 10);
 				    }
 	
 				    int chunkSigns = 0;
 				    int chunkBooks = 0;
 
-				    for (int i = 0; i < tileEntities.tagCount(); i ++)
+				    for (int i = 0; i < tagCount(tileEntities); i ++)
 				    {
-				    	Anvil.NBTTagCompound tileEntity = (Anvil.NBTTagCompound) tileEntities.getCompoundTagAt(i);
+				    	CompoundTag tileEntity = getCompoundTagAt(tileEntities, i);
 				    	{
 				    		//If it is an item
-				    		if (tileEntity.hasKey("id"))
+				    		if (hasKey(tileEntity, "id"))
 				    		{
-				    			String blockId = tileEntity.getString("id");
+				    			String blockId = getString(tileEntity, "id");
 				    			log("DEBUG", "  Chunk [" + x + "," + z + "] - Processing block entity: " + blockId);
-				    			Anvil.NBTTagList chestItems = tileEntity.getTagList("Items", 10);
-				    			if (chestItems.tagCount() > 0) {
-				    				log("DEBUG", "  Chunk [" + x + "," + z + "] - Found container " + tileEntity.getString("id") + " with " + chestItems.tagCount() + " items");
+				    			ListTag<CompoundTag> chestItems = getTagList(tileEntity, "Items", 10);
+				    			if (tagCount(chestItems) > 0) {
+				    				log("DEBUG", "  Chunk [" + x + "," + z + "] - Found container " + getString(tileEntity, "id") + " with " + tagCount(chestItems) + " items");
 				    			}
-				    			for (int n = 0; n < chestItems.tagCount(); n++)
+				    			for (int n = 0; n < tagCount(chestItems); n++)
 				    			{
-				    				Anvil.NBTTagCompound item = chestItems.getCompoundTagAt(n);
-			    					String bookInfo = ("Chunk [" + x + ", " + z + "] Inside " + tileEntity.getString("id") + " at (" +  tileEntity.getInteger("x") + " " + tileEntity.getInteger("y") + " " + tileEntity.getInteger("z") + ") " + listOfFiles[f].getName());
+				    				CompoundTag item = getCompoundTagAt(chestItems, n);
+			    					String bookInfo = ("Chunk [" + x + ", " + z + "] Inside " + getString(tileEntity, "id") + " at (" +  getInteger(tileEntity, "x") + " " + getInteger(tileEntity, "y") + " " + getInteger(tileEntity, "z") + ") " + listOfFiles[f].getName());
 			    					int booksBefore = bookCounter;
 			    					parseItem(item, bookInfo);
 			    					if (bookCounter > booksBefore) {
@@ -510,11 +513,11 @@ public class Main implements Runnable {
 				    		}
 
 				    		//If Lectern (stores single book in "Book" tag, not "Items")
-				    		if (tileEntity.hasKey("Book"))
+				    		if (hasKey(tileEntity, "Book"))
 				    		{
-				    			Anvil.NBTTagCompound book = tileEntity.getCompoundTag("Book");
+				    			CompoundTag book = getCompoundTag(tileEntity, "Book");
 				    			log("DEBUG", "  Chunk [" + x + "," + z + "] - Found lectern with book");
-				    			String bookInfo = ("Chunk [" + x + ", " + z + "] Inside " + tileEntity.getString("id") + " at (" +  tileEntity.getInteger("x") + " " + tileEntity.getInteger("y") + " " + tileEntity.getInteger("z") + ") " + listOfFiles[f].getName());
+				    			String bookInfo = ("Chunk [" + x + ", " + z + "] Inside " + getString(tileEntity, "id") + " at (" +  getInteger(tileEntity, "x") + " " + getInteger(tileEntity, "y") + " " + getInteger(tileEntity, "z") + ") " + listOfFiles[f].getName());
 				    			int booksBefore = bookCounter;
 				    			parseItem(book, bookInfo);
 				    			if (bookCounter > booksBefore) {
@@ -524,10 +527,10 @@ public class Main implements Runnable {
 				    		}
 
 				    		//If Sign (pre-1.20 format with Text1-Text4)
-					    	if (tileEntity.hasKey("Text1"))
+					    	if (hasKey(tileEntity, "Text1"))
 					    	{
-					    		log("DEBUG", "  Chunk [" + x + "," + z + "] - Found sign (pre-1.20 format) at (" + tileEntity.getInteger("x") + " " + tileEntity.getInteger("y") + " " + tileEntity.getInteger("z") + ")");
-					    		String signInfo = "Chunk [" + x + ", " + z + "]\t(" + tileEntity.getInteger("x") + " " + tileEntity.getInteger("y") + " " + tileEntity.getInteger("z") + ")\t\t";
+					    		log("DEBUG", "  Chunk [" + x + "," + z + "] - Found sign (pre-1.20 format) at (" + getInteger(tileEntity, "x") + " " + getInteger(tileEntity, "y") + " " + getInteger(tileEntity, "z") + ")");
+					    		String signInfo = "Chunk [" + x + ", " + z + "]\t(" + getInteger(tileEntity, "x") + " " + getInteger(tileEntity, "y") + " " + getInteger(tileEntity, "z") + ")\t\t";
 					    		int signsBefore = signHashes.size();
 					    		parseSign(tileEntity, signWriter, signInfo);
 					    		if (signHashes.size() > signsBefore) {
@@ -538,10 +541,10 @@ public class Main implements Runnable {
 					    		}
 					    	}
 					    	//If Sign (1.20+ format with front_text/back_text)
-					    	else if (tileEntity.hasKey("front_text"))
+					    	else if (hasKey(tileEntity, "front_text"))
 					    	{
-					    		log("DEBUG", "  Chunk [" + x + "," + z + "] - Found sign (1.20+ format) at (" + tileEntity.getInteger("x") + " " + tileEntity.getInteger("y") + " " + tileEntity.getInteger("z") + ")");
-					    		String signInfo = "Chunk [" + x + ", " + z + "]\t(" + tileEntity.getInteger("x") + " " + tileEntity.getInteger("y") + " " + tileEntity.getInteger("z") + ")\t\t";
+					    		log("DEBUG", "  Chunk [" + x + "," + z + "] - Found sign (1.20+ format) at (" + getInteger(tileEntity, "x") + " " + getInteger(tileEntity, "y") + " " + getInteger(tileEntity, "z") + ")");
+					    		String signInfo = "Chunk [" + x + ", " + z + "]\t(" + getInteger(tileEntity, "x") + " " + getInteger(tileEntity, "y") + " " + getInteger(tileEntity, "z") + ")\t\t";
 					    		int signsBefore = signHashes.size();
 					    		parseSignNew(tileEntity, signWriter, signInfo);
 					    		if (signHashes.size() > signsBefore) {
@@ -554,31 +557,31 @@ public class Main implements Runnable {
 				    	}
 				    }
 
-				    Anvil.NBTTagList entities = nbttagcompund2.getTagList("Entities", 10);
+				    ListTag<?> entities = getTagList(nbttagcompund2, "Entities", 10);
 
-				    for (int i = 0; i < entities.tagCount(); i ++)
+				    for (int i = 0; i < tagCount(entities); i ++)
 				    {
-				    	Anvil.NBTTagCompound entity = (Anvil.NBTTagCompound) entities.getCompoundTagAt(i);
+				    	CompoundTag entity = (CompoundTag) getCompoundTagAt(entities, i);
 				    	{
-				    		String entityId = entity.getString("id");
+				    		String entityId = getString(entity, "id");
 
 				    		//Donkey, llama, villagers, zombies, etc.
-				    		if (entity.hasKey("Items"))
+				    		if (hasKey(entity, "Items"))
 				    		{
-				    			Anvil.NBTTagList entityItems = entity.getTagList("Items", 10);
-				    			Anvil.NBTTagList entityPos = entity.getTagList("Pos", 6);
+				    			ListTag<?> entityItems = getTagList(entity, "Items", 10);
+				    			ListTag<?> entityPos = getTagList(entity, "Pos", 6);
 
-				    			int xPos = (int) Double.parseDouble(entityPos.getStringTagAt(0));
-				    			int yPos = (int) Double.parseDouble(entityPos.getStringTagAt(1));
-				    			int zPos = (int) Double.parseDouble(entityPos.getStringTagAt(2));
+				    			int xPos = (int) Double.parseDouble(getStringTagAt(entityPos, 0));
+				    			int yPos = (int) Double.parseDouble(getStringTagAt(entityPos, 1));
+				    			int zPos = (int) Double.parseDouble(getStringTagAt(entityPos, 2));
 
-				    			if (entityItems.tagCount() > 0) {
-				    				log("DEBUG", "  Chunk [" + x + "," + z + "] - Found " + entityId + " with " + entityItems.tagCount() + " items at (" + xPos + "," + yPos + "," + zPos + ")");
+				    			if (tagCount(entityItems) > 0) {
+				    				log("DEBUG", "  Chunk [" + x + "," + z + "] - Found " + entityId + " with " + tagCount(entityItems) + " items at (" + xPos + "," + yPos + "," + zPos + ")");
 				    			}
 
-				    			for (int n = 0; n < entityItems.tagCount(); n++)
+				    			for (int n = 0; n < tagCount(entityItems); n++)
 				    			{
-				    				Anvil.NBTTagCompound item = entityItems.getCompoundTagAt(n);
+				    				CompoundTag item = getCompoundTagAt(entityItems, n);
 			    					String bookInfo = ("Chunk [" + x + ", " + z + "] In " + entityId + " at (" + xPos + " " + yPos + " " + zPos + ") " + listOfFiles[f].getName());
 			    					int booksBefore = bookCounter;
 			    					parseItem(item, bookInfo);
@@ -589,14 +592,14 @@ public class Main implements Runnable {
 				    			}
 				    		}
 				    		//Item frame or item on the ground
-				    		if (entity.hasKey("Item"))
+				    		if (hasKey(entity, "Item"))
 				    		{
-				    			Anvil.NBTTagCompound item = entity.getCompoundTag("Item");
-				    			Anvil.NBTTagList entityPos = entity.getTagList("Pos", 6);
+				    			CompoundTag item = getCompoundTag(entity, "Item");
+				    			ListTag<?> entityPos = getTagList(entity, "Pos", 6);
 
-				    			int xPos = (int) Double.parseDouble(entityPos.getStringTagAt(0));
-				    			int yPos = (int) Double.parseDouble(entityPos.getStringTagAt(1));
-				    			int zPos = (int) Double.parseDouble(entityPos.getStringTagAt(2));
+				    			int xPos = (int) Double.parseDouble(getStringTagAt(entityPos, 0));
+				    			int yPos = (int) Double.parseDouble(getStringTagAt(entityPos, 1));
+				    			int zPos = (int) Double.parseDouble(getStringTagAt(entityPos, 2));
 
 		    					String bookInfo = ("Chunk [" + x + ", " + z + "] In " + entityId + " at (" + xPos + " " + yPos + " " + zPos + ") " + listOfFiles[f].getName());
 		    					int booksBefore = bookCounter;
@@ -683,25 +686,25 @@ public class Main implements Runnable {
 								continue;
 							}
 
-							Anvil.NBTTagCompound nbttagcompund = Anvil.CompressedStreamTools.read(dataInputStream);
+							CompoundTag nbttagcompund = readNBT(dataInputStream);
 							dataInputStream.close();
 
 							// Get the entities list
-							Anvil.NBTTagList entities = nbttagcompund.getTagList("Entities", 10);
+							ListTag<?> entities = getTagList(nbttagcompund, "Entities", 10);
 
-							for (int i = 0; i < entities.tagCount(); i++)
+							for (int i = 0; i < tagCount(entities); i++)
 							{
 								totalEntities++;
-								Anvil.NBTTagCompound entity = (Anvil.NBTTagCompound) entities.getCompoundTagAt(i);
+								CompoundTag entity = (CompoundTag) getCompoundTagAt(entities, i);
 
-								String entityId = entity.getString("id");
-								Anvil.NBTTagList entityPos = entity.getTagList("Pos", 6);
+								String entityId = getString(entity, "id");
+								ListTag<?> entityPos = getTagList(entity, "Pos", 6);
 
 								int xPos = 0, yPos = 0, zPos = 0;
-								if (entityPos.tagCount() >= 3) {
-									xPos = (int) Double.parseDouble(entityPos.getStringTagAt(0));
-									yPos = (int) Double.parseDouble(entityPos.getStringTagAt(1));
-									zPos = (int) Double.parseDouble(entityPos.getStringTagAt(2));
+								if (tagCount(entityPos) >= 3) {
+									xPos = (int) Double.parseDouble(getStringTagAt(entityPos, 0));
+									yPos = (int) Double.parseDouble(getStringTagAt(entityPos, 1));
+									zPos = (int) Double.parseDouble(getStringTagAt(entityPos, 2));
 								}
 
 								int booksBefore = bookCounter;
@@ -709,17 +712,17 @@ public class Main implements Runnable {
 
 
 								// Entities with inventory (minecarts, boats, donkeys, llamas, villagers, zombies, etc.)
-								if (entity.hasKey("Items"))
+								if (hasKey(entity, "Items"))
 								{
-									Anvil.NBTTagList entityItems = entity.getTagList("Items", 10);
+									ListTag<?> entityItems = getTagList(entity, "Items", 10);
 
-									if (entityItems.tagCount() > 0) {
-										log("DEBUG", "  Chunk [" + x + "," + z + "] - Found " + entityId + " with " + entityItems.tagCount() + " items at (" + xPos + "," + yPos + "," + zPos + ")");
+									if (tagCount(entityItems) > 0) {
+										log("DEBUG", "  Chunk [" + x + "," + z + "] - Found " + entityId + " with " + tagCount(entityItems) + " items at (" + xPos + "," + yPos + "," + zPos + ")");
 									}
 
-									for (int n = 0; n < entityItems.tagCount(); n++)
+									for (int n = 0; n < tagCount(entityItems); n++)
 									{
-										Anvil.NBTTagCompound item = entityItems.getCompoundTagAt(n);
+										CompoundTag item = getCompoundTagAt(entityItems, n);
 										String bookInfo = ("Chunk [" + x + ", " + z + "] In " + entityId + " at (" + xPos + " " + yPos + " " + zPos + ") " + listOfFiles[f].getName());
 										int booksBeforeItem = bookCounter;
 										parseItem(item, bookInfo);
@@ -730,9 +733,9 @@ public class Main implements Runnable {
 								}
 
 								// Item frames and items on ground (single item)
-								if (entity.hasKey("Item"))
+								if (hasKey(entity, "Item"))
 								{
-									Anvil.NBTTagCompound item = entity.getCompoundTag("Item");
+									CompoundTag item = getCompoundTag(entity, "Item");
 									String bookInfo = ("Chunk [" + x + ", " + z + "] In " + entityId + " at (" + xPos + " " + yPos + " " + zPos + ") " + listOfFiles[f].getName());
 									log("DEBUG", "  Chunk [" + x + "," + z + "] - Found " + entityId + " with item at (" + xPos + "," + yPos + "," + zPos + ")");
 									int booksBeforeItem = bookCounter;
@@ -786,39 +789,39 @@ public class Main implements Runnable {
 					if (dataInputStream == null) 
 						continue;
 					
-					Anvil. NBTTagCompound nbttagcompund = new Anvil.NBTTagCompound();
-				    nbttagcompund = Anvil.CompressedStreamTools.read(dataInputStream);
+					CompoundTag nbttagcompund = new CompoundTag();
+				    nbttagcompund = readNBT(dataInputStream);
 
 				    // Handle both pre-1.18 (with "Level" tag) and 1.18+ (without "Level" tag) formats
-				    Anvil.NBTTagCompound nbttagcompund2 = new Anvil.NBTTagCompound();
-				    if (nbttagcompund.hasKey("Level")) {
+				    CompoundTag nbttagcompund2 = new CompoundTag();
+				    if (hasKey(nbttagcompund, "Level")) {
 				        // Pre-1.18 format
-				        nbttagcompund2 = nbttagcompund.getCompoundTag("Level");
+				        nbttagcompund2 = getCompoundTag(nbttagcompund, "Level");
 				    } else {
 				        // 1.18+ format - Level tag was removed, everything moved up
 				        nbttagcompund2 = nbttagcompund;
 				    }
 
 				    // Try both "TileEntities" (pre-1.18) and "block_entities" (1.18+)
-				    Anvil.NBTTagList tileEntities = nbttagcompund2.getTagList("TileEntities", 10);
-				    if (tileEntities.tagCount() == 0) {
-				        tileEntities = nbttagcompund2.getTagList("block_entities", 10);
+				    ListTag<?> tileEntities = getTagList(nbttagcompund2, "TileEntities", 10);
+				    if (tagCount(tileEntities) == 0) {
+				        tileEntities = getTagList(nbttagcompund2, "block_entities", 10);
 				    }
 					
-				    for (int i = 0; i < tileEntities.tagCount(); i ++)
+				    for (int i = 0; i < tagCount(tileEntities); i ++)
 				    {
-				    	Anvil.NBTTagCompound entity = tileEntities.getCompoundTagAt(i);
+				    	CompoundTag entity = getCompoundTagAt(tileEntities, i);
 				    	
 				    	//If Sign (pre-1.20 format)
-				    	if (entity.hasKey("Text1"))
+				    	if (hasKey(entity, "Text1"))
 				    	{
-				    		String signInfo = "Chunk [" + x + ", " + z + "]\t(" + entity.getInteger("x") + " " + entity.getInteger("y") + " " + entity.getInteger("z") + ")\t\t";
+				    		String signInfo = "Chunk [" + x + ", " + z + "]\t(" + getInteger(entity, "x") + " " + getInteger(entity, "y") + " " + getInteger(entity, "z") + ")\t\t";
 				    		parseSign(entity, writer, signInfo);
 				    	}
 				    	//If Sign (1.20+ format)
-				    	else if (entity.hasKey("front_text"))
+				    	else if (hasKey(entity, "front_text"))
 				    	{
-				    		String signInfo = "Chunk [" + x + ", " + z + "]\t(" + entity.getInteger("x") + " " + entity.getInteger("y") + " " + entity.getInteger("z") + ")\t\t";
+				    		String signInfo = "Chunk [" + x + ", " + z + "]\t(" + getInteger(entity, "x") + " " + getInteger(entity, "y") + " " + getInteger(entity, "z") + ")\t\t";
 				    		parseSignNew(entity, writer, signInfo);
 				    	}
 				    }
@@ -857,14 +860,14 @@ public class Main implements Runnable {
 			log("DEBUG", "Processing player data [" + (i+1) + "/" + listOfFiles.length + "]: " + listOfFiles[i].getName());
 
 			FileInputStream fileinputstream = new FileInputStream(listOfFiles[i]);
-			Anvil.NBTTagCompound playerCompound = Anvil.CompressedStreamTools.readCompressed(fileinputstream);
-			Anvil.NBTTagList playerInventory = playerCompound.getTagList("Inventory", 10);
+			CompoundTag playerCompound = readCompressedNBT(fileinputstream);
+			ListTag<?> playerInventory = getTagList(playerCompound, "Inventory", 10);
 
 			int playerBooks = 0;
 
-			for (int n = 0; n < playerInventory.tagCount(); n ++)
+			for (int n = 0; n < tagCount(playerInventory); n ++)
 			{
-				Anvil.NBTTagCompound item = (Anvil.NBTTagCompound) playerInventory.getCompoundTagAt(n);
+				CompoundTag item = (CompoundTag) getCompoundTagAt(playerInventory, n);
 				String bookInfo = ("Inventory of player " + listOfFiles[i].getName());
 				int booksBefore = bookCounter;
 				parseItem(item, bookInfo);
@@ -874,11 +877,11 @@ public class Main implements Runnable {
 				}
 			}
 
-			Anvil.NBTTagList enderInventory = playerCompound.getTagList("EnderItems", 10);
+			ListTag<?> enderInventory = getTagList(playerCompound, "EnderItems", 10);
 
-			for (int e = 0; e < enderInventory.tagCount(); e ++)
+			for (int e = 0; e < tagCount(enderInventory); e ++)
 			{
-				Anvil.NBTTagCompound item = (Anvil.NBTTagCompound) playerInventory.getCompoundTagAt(e);
+				CompoundTag item = (CompoundTag) getCompoundTagAt(playerInventory, e);
 				String bookInfo = ("Ender Chest of player " + listOfFiles[i].getName());
 				int booksBefore = bookCounter;
 				parseItem(item, bookInfo);
@@ -893,7 +896,7 @@ public class Main implements Runnable {
 			}
 			totalPlayerBooks += playerBooks;
 
-			//MCR.NBTTagCompound nbttagcompound = MCR.CompressedStreamTools.func_1138_a(fileinputstream);
+			//MCR.CompoundTag nbttagcompound = MCR.CompressedStreamTools.func_1138_a(fileinputstream);
 		}
 
 		log("INFO", "Player data processing complete!");
@@ -919,64 +922,64 @@ public class Main implements Runnable {
 					if (dataInputStream == null) 
 						continue;
 					
-					Anvil.NBTTagCompound nbttagcompund = new Anvil.NBTTagCompound();
+					CompoundTag nbttagcompund = new CompoundTag();
 										
-				    nbttagcompund = Anvil.CompressedStreamTools.read(dataInputStream);
+				    nbttagcompund = readNBT(dataInputStream);
 				    
-				    Anvil.NBTTagCompound nbttagcompund2 = new Anvil.NBTTagCompound();
-				    nbttagcompund2 = nbttagcompund.getCompoundTag("Level");
+				    CompoundTag nbttagcompund2 = new CompoundTag();
+				    nbttagcompund2 = getCompoundTag(nbttagcompund, "Level");
 				       
-				    Anvil.NBTTagList tileEntities = nbttagcompund2.getTagList("TileEntities", 10);
+				    ListTag<?> tileEntities = getTagList(nbttagcompund2, "TileEntities", 10);
 	
-				    for (int i = 0; i < tileEntities.tagCount(); i ++)
+				    for (int i = 0; i < tagCount(tileEntities); i ++)
 				    {
-				    	Anvil.NBTTagCompound tileEntity = (Anvil.NBTTagCompound) tileEntities.getCompoundTagAt(i);
+				    	CompoundTag tileEntity = (CompoundTag) getCompoundTagAt(tileEntities, i);
 				    	{
-				    		if (tileEntity.hasKey("id")) //If it is an item
+				    		if (hasKey(tileEntity, "id")) //If it is an item
 				    		{
-				    			Anvil.NBTTagList chestItems = tileEntity.getTagList("Items", 10);
-				    			for (int n = 0; n < chestItems.tagCount(); n++)
+				    			ListTag<?> chestItems = getTagList(tileEntity, "Items", 10);
+				    			for (int n = 0; n < tagCount(chestItems); n++)
 				    			{
-				    				Anvil.NBTTagCompound item = chestItems.getCompoundTagAt(n);
-			    					String bookInfo = ("Chunk [" + x + ", " + z + "] Inside " + tileEntity.getString("id") + " at (" +  tileEntity.getInteger("x") + " " + tileEntity.getInteger("y") + " " + tileEntity.getInteger("z") + ") " + listOfFiles[f].getName());
+				    				CompoundTag item = getCompoundTagAt(chestItems, n);
+			    					String bookInfo = ("Chunk [" + x + ", " + z + "] Inside " + tileEntity.getString("id") + " at (" +  getInteger(tileEntity, "x") + " " + getInteger(tileEntity, "y") + " " + getInteger(tileEntity, "z") + ") " + listOfFiles[f].getName());
 			    					parseItem(item, bookInfo);
 				    			}
 				    		}
 				    	}
 				    }
 				    
-				    Anvil.NBTTagList entities = nbttagcompund2.getTagList("Entities", 10);
+				    ListTag<?> entities = getTagList(nbttagcompund2, "Entities", 10);
 				    
-				    for (int i = 0; i < entities.tagCount(); i ++)
+				    for (int i = 0; i < tagCount(entities); i ++)
 				    {
-				    	Anvil.NBTTagCompound entity = (Anvil.NBTTagCompound) entities.getCompoundTagAt(i);
+				    	CompoundTag entity = (CompoundTag) getCompoundTagAt(entities, i);
 				    	{
 				    		//Donkey, llama etc.
-				    		if (entity.hasKey("Items"))
+				    		if (hasKey(entity, "Items"))
 				    		{
-				    			Anvil.NBTTagList entityItems = entity.getTagList("Items", 10);
-				    			Anvil.NBTTagList entityPos = entity.getTagList("Pos", 6);
+				    			ListTag<?> entityItems = getTagList(entity, "Items", 10);
+				    			ListTag<?> entityPos = getTagList(entity, "Pos", 6);
 				    			
-				    			int xPos = (int) Double.parseDouble(entityPos.getStringTagAt(0));
-				    			int yPos = (int) Double.parseDouble(entityPos.getStringTagAt(1));
-				    			int zPos = (int) Double.parseDouble(entityPos.getStringTagAt(2));
+				    			int xPos = (int) Double.parseDouble(getStringTagAt(entityPos, 0));
+				    			int yPos = (int) Double.parseDouble(getStringTagAt(entityPos, 1));
+				    			int zPos = (int) Double.parseDouble(getStringTagAt(entityPos, 2));
 				    			
-				    			for (int n = 0; n < entityItems.tagCount(); n++)
+				    			for (int n = 0; n < tagCount(entityItems); n++)
 				    			{
-				    				Anvil.NBTTagCompound item = entityItems.getCompoundTagAt(n);
+				    				CompoundTag item = getCompoundTagAt(entityItems, n);
 			    					String bookInfo = ("Chunk [" + x + ", " + z + "] On entity at (" + xPos + " " + yPos + " " + zPos + ") " + listOfFiles[f].getName());
 			    					parseItem(item, bookInfo);
 				    			}
 				    		}
 				    		//Item frame or item on the ground
-				    		if (entity.hasKey("Item"))
+				    		if (hasKey(entity, "Item"))
 				    		{
-				    			Anvil.NBTTagCompound item = entity.getCompoundTag("Item");
-				    			Anvil.NBTTagList entityPos = entity.getTagList("Pos", 6);
+				    			CompoundTag item = getCompoundTag(entity, "Item");
+				    			ListTag<?> entityPos = getTagList(entity, "Pos", 6);
 
-				    			int xPos = (int) Double.parseDouble(entityPos.getStringTagAt(0));
-				    			int yPos = (int) Double.parseDouble(entityPos.getStringTagAt(1));
-				    			int zPos = (int) Double.parseDouble(entityPos.getStringTagAt(2));
+				    			int xPos = (int) Double.parseDouble(getStringTagAt(entityPos, 0));
+				    			int yPos = (int) Double.parseDouble(getStringTagAt(entityPos, 1));
+				    			int zPos = (int) Double.parseDouble(getStringTagAt(entityPos, 2));
 
 		    					String bookInfo = ("Chunk [" + x + ", " + z + "] On ground or item frame at at (" + xPos + " " + yPos + " " + zPos + ") " + listOfFiles[f].getName());
 
@@ -1039,46 +1042,46 @@ public class Main implements Runnable {
 	 * 3. Item containers: Detected by itemId and scanning nested components
 	 * 4. Player inventory: Detected by scanning player data files
 	 */
-	public static void parseItem(Anvil.NBTTagCompound item, String bookInfo) throws IOException
+	public static void parseItem(CompoundTag item, String bookInfo) throws IOException
 	{
-		String itemId = item.getString("id");
+		String itemId = getString(item, "id");
 
-		if (itemId.equals("minecraft:written_book") || item.getShort("id") == 387)
+		if (itemId.equals("minecraft:written_book") || getShort(item, "id") == 387)
 		{
 			log("DEBUG", "    Found written book: " + bookInfo.substring(0, Math.min(80, bookInfo.length())) + "...");
 			readWrittenBook(item, bookInfo);
 		}
-		if (itemId.equals("minecraft:writable_book") || item.getShort("id") == 386)
+		if (itemId.equals("minecraft:writable_book") || getShort(item, "id") == 386)
 		{
 			log("DEBUG", "    Found writable book: " + bookInfo.substring(0, Math.min(80, bookInfo.length())) + "...");
 			readWritableBook(item, bookInfo);
 		}
-		if (itemId.contains("shulker_box") || (item.getShort("id") >= 219 && item.getShort("id") <= 234))
+		if (itemId.contains("shulker_box") || (getShort(item, "id") >= 219 && getShort(item, "id") <= 234))
 		{
 			log("DEBUG", "    Found shulker box, scanning contents...");
 
 			// Try new format first (1.20.5+ with components)
-			if (item.hasKey("components")) {
-				Anvil.NBTTagCompound components = item.getCompoundTag("components");
-				if (components.hasKey("minecraft:container")) {
-					Anvil.NBTTagList shelkerContents = components.getTagList("minecraft:container", 10);
-					log("DEBUG", "      Shulker box contains " + shelkerContents.tagCount() + " items (1.20.5+ format)");
-					for (int i = 0; i < shelkerContents.tagCount(); i++)
+			if (hasKey(item, "components")) {
+				CompoundTag components = getCompoundTag(item, "components");
+				if (hasKey(components, "minecraft:container")) {
+					ListTag<?> shelkerContents = getTagList(components, "minecraft:container", 10);
+					log("DEBUG", "      Shulker box contains " + tagCount(shelkerContents) + " items (1.20.5+ format)");
+					for (int i = 0; i < tagCount(shelkerContents); i++)
 					{
-						Anvil.NBTTagCompound containerEntry = shelkerContents.getCompoundTagAt(i);
-						Anvil.NBTTagCompound shelkerItem = containerEntry.getCompoundTag("item");
+						CompoundTag containerEntry = getCompoundTagAt(shelkerContents, i);
+						CompoundTag shelkerItem = getCompoundTag(containerEntry, "item");
 						parseItem(shelkerItem, bookInfo + " > shulker_box");
 					}
 				}
-			} else if (item.hasKey("tag")) {
+			} else if (hasKey(item, "tag")) {
 				// Old format (pre-1.20.5)
-				Anvil.NBTTagCompound shelkerCompound = item.getCompoundTag("tag");
-				Anvil.NBTTagCompound shelkerCompound2 = shelkerCompound.getCompoundTag("BlockEntityTag");
-				Anvil.NBTTagList shelkerContents = shelkerCompound2.getTagList("Items", 10);
-				log("DEBUG", "      Shulker box contains " + shelkerContents.tagCount() + " items (pre-1.20.5 format)");
-				for (int i = 0; i < shelkerContents.tagCount(); i++)
+				CompoundTag shelkerCompound = getCompoundTag(item, "tag");
+				CompoundTag shelkerCompound2 = getCompoundTag(shelkerCompound, "BlockEntityTag");
+				ListTag<?> shelkerContents = getTagList(shelkerCompound2, "Items", 10);
+				log("DEBUG", "      Shulker box contains " + tagCount(shelkerContents) + " items (pre-1.20.5 format)");
+				for (int i = 0; i < tagCount(shelkerContents); i++)
 				{
-					Anvil.NBTTagCompound shelkerItem = shelkerContents.getCompoundTagAt(i);
+					CompoundTag shelkerItem = getCompoundTagAt(shelkerContents, i);
 					parseItem(shelkerItem, bookInfo + " > shulker_box");
 				}
 			}
@@ -1090,14 +1093,14 @@ public class Main implements Runnable {
 		{
 			log("DEBUG", "    Found bundle, scanning contents...");
 
-			if (item.hasKey("components")) {
-				Anvil.NBTTagCompound components = item.getCompoundTag("components");
-				if (components.hasKey("minecraft:bundle_contents")) {
-					Anvil.NBTTagList bundleContents = components.getTagList("minecraft:bundle_contents", 10);
-					log("DEBUG", "      Bundle contains " + bundleContents.tagCount() + " items");
-					for (int i = 0; i < bundleContents.tagCount(); i++)
+			if (hasKey(item, "components")) {
+				CompoundTag components = getCompoundTag(item, "components");
+				if (hasKey(components, "minecraft:bundle_contents")) {
+					ListTag<?> bundleContents = getTagList(components, "minecraft:bundle_contents", 10);
+					log("DEBUG", "      Bundle contains " + tagCount(bundleContents) + " items");
+					for (int i = 0; i < tagCount(bundleContents); i++)
 					{
-						Anvil.NBTTagCompound bundleItem = bundleContents.getCompoundTagAt(i);
+						CompoundTag bundleItem = getCompoundTagAt(bundleContents, i);
 						parseItem(bundleItem, bookInfo + " > bundle");
 					}
 				}
@@ -1111,27 +1114,27 @@ public class Main implements Runnable {
 		{
 			log("DEBUG", "    Found copper chest, scanning contents...");
 
-			if (item.hasKey("components")) {
-				Anvil.NBTTagCompound components = item.getCompoundTag("components");
-				if (components.hasKey("minecraft:container")) {
-					Anvil.NBTTagList chestContents = components.getTagList("minecraft:container", 10);
-					log("DEBUG", "      Copper chest contains " + chestContents.tagCount() + " items");
-					for (int i = 0; i < chestContents.tagCount(); i++)
+			if (hasKey(item, "components")) {
+				CompoundTag components = getCompoundTag(item, "components");
+				if (hasKey(components, "minecraft:container")) {
+					ListTag<?> chestContents = getTagList(components, "minecraft:container", 10);
+					log("DEBUG", "      Copper chest contains " + tagCount(chestContents) + " items");
+					for (int i = 0; i < tagCount(chestContents); i++)
 					{
-						Anvil.NBTTagCompound containerEntry = chestContents.getCompoundTagAt(i);
-						Anvil.NBTTagCompound chestItem = containerEntry.getCompoundTag("item");
+						CompoundTag containerEntry = getCompoundTagAt(chestContents, i);
+						CompoundTag chestItem = getCompoundTag(containerEntry, "item");
 						parseItem(chestItem, bookInfo + " > copper_chest");
 					}
 				}
-			} else if (item.hasKey("tag")) {
+			} else if (hasKey(item, "tag")) {
 				// Old format (if copper chests existed in pre-1.20.5)
-				Anvil.NBTTagCompound chestCompound = item.getCompoundTag("tag");
-				Anvil.NBTTagCompound chestCompound2 = chestCompound.getCompoundTag("BlockEntityTag");
-				Anvil.NBTTagList chestContents = chestCompound2.getTagList("Items", 10);
-				log("DEBUG", "      Copper chest contains " + chestContents.tagCount() + " items (pre-1.20.5 format)");
-				for (int i = 0; i < chestContents.tagCount(); i++)
+				CompoundTag chestCompound = getCompoundTag(item, "tag");
+				CompoundTag chestCompound2 = getCompoundTag(chestCompound, "BlockEntityTag");
+				ListTag<?> chestContents = getTagList(chestCompound2, "Items", 10);
+				log("DEBUG", "      Copper chest contains " + tagCount(chestContents) + " items (pre-1.20.5 format)");
+				for (int i = 0; i < tagCount(chestContents); i++)
 				{
-					Anvil.NBTTagCompound chestItem = chestContents.getCompoundTagAt(i);
+					CompoundTag chestItem = getCompoundTagAt(chestContents, i);
 					parseItem(chestItem, bookInfo + " > copper_chest");
 				}
 			}
@@ -1158,30 +1161,30 @@ public class Main implements Runnable {
 		return sanitized;
 	}
 	
-	private static void readWrittenBook(Anvil.NBTTagCompound item, String bookInfo) throws IOException
+	private static void readWrittenBook(CompoundTag item, String bookInfo) throws IOException
 	{
 		// Try both old format (pre-1.20.5 with "tag") and new format (1.20.5+ with "components")
-		Anvil.NBTTagCompound tag = null;
-		Anvil.NBTTagList pages = null;
+		CompoundTag tag = null;
+		ListTag<?> pages = null;
 		String format = "unknown";
 
-		if (item.hasKey("tag")) {
+		if (hasKey(item, "tag")) {
 			// Pre-1.20.5 format
-			tag = item.getCompoundTag("tag");
-			pages = tag.getTagList("pages", 8);
+			tag = getCompoundTag(item, "tag");
+			pages = getTagList(tag, "pages", 8);
 			format = "pre-1.20.5";
-		} else if (item.hasKey("components")) {
+		} else if (hasKey(item, "components")) {
 			// 1.20.5+ format
-			Anvil.NBTTagCompound components = item.getCompoundTag("components");
-			if (components.hasKey("minecraft:written_book_content")) {
-				Anvil.NBTTagCompound bookContent = components.getCompoundTag("minecraft:written_book_content");
-				pages = bookContent.getTagList("pages", 10); // In 1.20.5+, pages are compounds, not strings
+			CompoundTag components = getCompoundTag(item, "components");
+			if (hasKey(components, "minecraft:written_book_content")) {
+				CompoundTag bookContent = getCompoundTag(components, "minecraft:written_book_content");
+				pages = getTagList(bookContent, "pages", 10); // In 1.20.5+, pages are compounds, not strings
 				tag = bookContent; // Use bookContent as tag for author/title
 				format = "1.20.5+";
 			}
 		}
 
-		if (pages == null || pages.tagCount() == 0) {
+		if (pages == null || tagCount(pages) == 0) {
 			log("DEBUG", "      Written book has no pages (format: " + format + ")");
 			return;
 		}
@@ -1195,8 +1198,8 @@ public class Main implements Runnable {
 		}
 
 		// Extract author and title - handle both old format (plain string) and new format (text component)
-		String author = tag.getString("author");
-		String title = tag.getString("title");
+		String author = getString(tag, "author");
+		String title = getString(tag, "title");
 
 		// In 1.20.5+, author and title might be stored as text components like {raw:"text",}
 		// Extract the actual text from the component if needed
@@ -1221,7 +1224,7 @@ public class Main implements Runnable {
 			}
 		}
 
-		log("DEBUG", "      Extracted written book: \"" + title + "\" by " + author + " (" + pages.tagCount() + " pages, format: " + format + ")");
+		log("DEBUG", "      Extracted written book: \"" + title + "\" by " + author + " (" + tagCount(pages) + " pages, format: " + format + ")");
 
 		// Create individual file for this book
 		bookCounter++;
@@ -1244,7 +1247,7 @@ public class Main implements Runnable {
 		writer.newLine();
 		writer.write("Author: " + author);
 		writer.newLine();
-		writer.write("Pages: " + pages.tagCount());
+		writer.write("Pages: " + tagCount(pages));
 		writer.newLine();
 		writer.write("Format: " + format);
 		writer.newLine();
@@ -1253,21 +1256,21 @@ public class Main implements Runnable {
 		writer.write("=".repeat(80));
 		writer.newLine();
 		writer.newLine();
-		for (int pc = 0; pc < pages.tagCount(); pc++)
+		for (int pc = 0; pc < tagCount(pages); pc++)
 		{
 			String pageText = null;
 
 			// Check if pages are stored as strings (pre-1.20.5) or compounds (1.20.5+)
-			if (pages.func_150303_d() == 8) {
+			if (getListType(pages) == 8) {
 				// String list (pre-1.20.5)
-				pageText = pages.getStringTagAt(pc);
-			} else if (pages.func_150303_d() == 10) {
+				pageText = getStringTagAt(pages, pc);
+			} else if (getListType(pages) == 10) {
 				// Compound list (1.20.5+)
-				Anvil.NBTTagCompound pageCompound = pages.getCompoundTagAt(pc);
-				if (pageCompound.hasKey("raw")) {
-					pageText = pageCompound.getString("raw");
-				} else if (pageCompound.hasKey("filtered")) {
-					pageText = pageCompound.getString("filtered");
+				CompoundTag pageCompound = getCompoundTagAt(pages, pc);
+				if (hasKey(pageCompound, "raw")) {
+					pageText = getString(pageCompound, "raw");
+				} else if (hasKey(pageCompound, "filtered")) {
+					pageText = getString(pageCompound, "filtered");
 				}
 			}
 
@@ -1313,28 +1316,28 @@ public class Main implements Runnable {
 		writer.close();
 	}
 
-	private static void readWritableBook(Anvil.NBTTagCompound item, String bookInfo) throws IOException
+	private static void readWritableBook(CompoundTag item, String bookInfo) throws IOException
 	{
 		// Try both old format (pre-1.20.5 with "tag") and new format (1.20.5+ with "components")
-		Anvil.NBTTagList pages = null;
+		ListTag<?> pages = null;
 		String format = "unknown";
 
-		if (item.hasKey("tag")) {
+		if (hasKey(item, "tag")) {
 			// Pre-1.20.5 format
-			Anvil.NBTTagCompound tag = item.getCompoundTag("tag");
-			pages = tag.getTagList("pages", 8);
+			CompoundTag tag = getCompoundTag(item, "tag");
+			pages = getTagList(tag, "pages", 8);
 			format = "pre-1.20.5";
-		} else if (item.hasKey("components")) {
+		} else if (hasKey(item, "components")) {
 			// 1.20.5+ format
-			Anvil.NBTTagCompound components = item.getCompoundTag("components");
-			if (components.hasKey("minecraft:writable_book_content")) {
-				Anvil.NBTTagCompound bookContent = components.getCompoundTag("minecraft:writable_book_content");
-				pages = bookContent.getTagList("pages", 10); // In 1.20.5+, pages are compounds
+			CompoundTag components = getCompoundTag(item, "components");
+			if (hasKey(components, "minecraft:writable_book_content")) {
+				CompoundTag bookContent = getCompoundTag(components, "minecraft:writable_book_content");
+				pages = getTagList(bookContent, "pages", 10); // In 1.20.5+, pages are compounds
 				format = "1.20.5+";
 			}
 		}
 
-		if (pages == null || pages.tagCount() == 0) {
+		if (pages == null || tagCount(pages) == 0) {
 			log("DEBUG", "      Writable book has no pages (format: " + format + ")");
 			return;
 		}
@@ -1347,7 +1350,7 @@ public class Main implements Runnable {
 			bookHashes.add(pages.hashCode());
 		}
 
-		log("DEBUG", "      Extracted writable book (" + pages.tagCount() + " pages, format: " + format + ")");
+		log("DEBUG", "      Extracted writable book (" + tagCount(pages) + " pages, format: " + format + ")");
 
 		// Create individual file for this book
 		bookCounter++;
@@ -1366,7 +1369,7 @@ public class Main implements Runnable {
 		writer.newLine();
 		writer.write("=".repeat(80));
 		writer.newLine();
-		writer.write("Pages: " + pages.tagCount());
+		writer.write("Pages: " + tagCount(pages));
 		writer.newLine();
 		writer.write("Format: " + format);
 		writer.newLine();
@@ -1376,21 +1379,21 @@ public class Main implements Runnable {
 		writer.newLine();
 		writer.newLine();
 
-		for (int pc = 0; pc < pages.tagCount(); pc++)
+		for (int pc = 0; pc < tagCount(pages); pc++)
 		{
 			String pageText = null;
 
 			// Check if pages are stored as strings (pre-1.20.5) or compounds (1.20.5+)
-			if (pages.func_150303_d() == 8) {
+			if (getListType(pages) == 8) {
 				// String list (pre-1.20.5)
-				pageText = pages.getStringTagAt(pc);
-			} else if (pages.func_150303_d() == 10) {
+				pageText = getStringTagAt(pages, pc);
+			} else if (getListType(pages) == 10) {
 				// Compound list (1.20.5+)
-				Anvil.NBTTagCompound pageCompound = pages.getCompoundTagAt(pc);
-				if (pageCompound.hasKey("raw")) {
-					pageText = pageCompound.getString("raw");
-				} else if (pageCompound.hasKey("filtered")) {
-					pageText = pageCompound.getString("filtered");
+				CompoundTag pageCompound = getCompoundTagAt(pages, pc);
+				if (hasKey(pageCompound, "raw")) {
+					pageText = getString(pageCompound, "raw");
+				} else if (hasKey(pageCompound, "filtered")) {
+					pageText = getString(pageCompound, "filtered");
 				}
 			}
 
@@ -1408,13 +1411,13 @@ public class Main implements Runnable {
 		writer.close();
 	}
 	
-	private static void parseSign(Anvil.NBTTagCompound tileEntity, BufferedWriter signWriter, String signInfo) throws IOException
+	private static void parseSign(CompoundTag tileEntity, BufferedWriter signWriter, String signInfo) throws IOException
 	{
 		log("DEBUG", "    parseSign() - Extracting text from pre-1.20 sign");
-		String text1 = tileEntity.getString("Text1");
-        String text2 = tileEntity.getString("Text2");
-        String text3 = tileEntity.getString("Text3");
-        String text4 = tileEntity.getString("Text4");
+		String text1 = getString(tileEntity, "Text1");
+        String text2 = getString(tileEntity, "Text2");
+        String text3 = getString(tileEntity, "Text3");
+        String text4 = getString(tileEntity, "Text4");
         log("DEBUG", "    parseSign() - Raw text: [" + text1 + "] [" + text2 + "] [" + text3 + "] [" + text4 + "]");
         			                
         JSONObject json1 = null;
@@ -1485,24 +1488,24 @@ public class Main implements Runnable {
 	}
 
 	// Parse sign in Minecraft 1.20+ format (front_text/back_text)
-	private static void parseSignNew(Anvil.NBTTagCompound tileEntity, BufferedWriter signWriter, String signInfo) throws IOException
+	private static void parseSignNew(CompoundTag tileEntity, BufferedWriter signWriter, String signInfo) throws IOException
 	{
 		log("DEBUG", "    parseSignNew() - Extracting text from 1.20+ sign");
 		// Get front_text compound
-		Anvil.NBTTagCompound frontText = tileEntity.getCompoundTag("front_text");
+		CompoundTag frontText = getCompoundTag(tileEntity, "front_text");
 
 		// Extract messages array (contains 4 lines)
-		Anvil.NBTTagList messages = frontText.getTagList("messages", 8); // 8 = String type
+		ListTag<?> messages = getTagList(frontText, "messages", 8); // 8 = String type
 
-		if (messages.tagCount() == 0) {
+		if (tagCount(messages) == 0) {
 			log("DEBUG", "    parseSignNew() - No messages found, returning");
 			return;
 		}
 
-		String text1 = messages.getStringTagAt(0);
-		String text2 = messages.getStringTagAt(1);
-		String text3 = messages.getStringTagAt(2);
-		String text4 = messages.getStringTagAt(3);
+		String text1 = getStringTagAt(messages, 0);
+		String text2 = getStringTagAt(messages, 1);
+		String text3 = getStringTagAt(messages, 2);
+		String text4 = getStringTagAt(messages, 3);
 		log("DEBUG", "    parseSignNew() - Raw text: [" + text1 + "] [" + text2 + "] [" + text3 + "] [" + text4 + "]");
 
 		JSONObject json1 = null;
@@ -1578,5 +1581,131 @@ public class Main implements Runnable {
 			text = text.replace(colorCodes[i], "");
 		return text;
 	}
-	
+
+	// ========== BitBuf NBT Helper Methods ==========
+	// These methods provide compatibility with the old Anvil API patterns
+
+	/**
+	 * Read NBT data from a DataInputStream (GZIP compressed)
+	 */
+	private static CompoundTag readNBT(DataInputStream input) throws IOException {
+		Nbt nbt = new Nbt();
+		return nbt.fromStream(input);
+	}
+
+	/**
+	 * Read NBT data from a FileInputStream (GZIP compressed)
+	 */
+	private static CompoundTag readCompressedNBT(FileInputStream input) throws IOException {
+		Nbt nbt = new Nbt();
+		// Manually decompress GZIP stream
+		GZIPInputStream gzipInputStream = new GZIPInputStream(input);
+		DataInputStream dataInputStream = new DataInputStream(gzipInputStream);
+		return nbt.fromStream(dataInputStream);
+	}
+
+	/**
+	 * Check if a CompoundTag has a key
+	 */
+	private static boolean hasKey(CompoundTag tag, String key) {
+		return tag.get(key) != null;
+	}
+
+	/**
+	 * Get a string value from a CompoundTag, returns empty string if not found
+	 */
+	private static String getString(CompoundTag tag, String key) {
+		dev.dewy.nbt.api.Tag value = tag.get(key);
+		if (value == null) {
+			return "";
+		}
+		if (value instanceof StringTag) {
+			return ((StringTag) value).getValue();
+		}
+		// If it's not a StringTag, return empty string
+		return "";
+	}
+
+	/**
+	 * Get an integer value from a CompoundTag, returns 0 if not found
+	 */
+	private static int getInteger(CompoundTag tag, String key) {
+		dev.dewy.nbt.api.Tag value = tag.get(key);
+		if (value instanceof IntTag) {
+			return ((IntTag) value).getValue();
+		}
+		return 0;
+	}
+
+	/**
+	 * Get a short value from a CompoundTag, returns 0 if not found
+	 */
+	private static short getShort(CompoundTag tag, String key) {
+		dev.dewy.nbt.api.Tag value = tag.get(key);
+		if (value instanceof ShortTag) {
+			return ((ShortTag) value).getValue();
+		}
+		return 0;
+	}
+
+	/**
+	 * Get a CompoundTag from a CompoundTag, returns empty CompoundTag if not found
+	 */
+	private static CompoundTag getCompoundTag(CompoundTag tag, String key) {
+		dev.dewy.nbt.api.Tag value = tag.get(key);
+		if (value instanceof CompoundTag) {
+			return (CompoundTag) value;
+		}
+		return new CompoundTag();
+	}
+
+	/**
+	 * Get a ListTag from a CompoundTag, returns empty ListTag if not found
+	 * @param typeId The NBT type ID (not used in BitBuf, kept for API compatibility)
+	 */
+	private static <T extends dev.dewy.nbt.api.Tag> ListTag<T> getTagList(CompoundTag tag, String key, int typeId) {
+		ListTag<T> list = tag.getList(key);
+		return list != null ? list : new ListTag<>();
+	}
+
+	/**
+	 * Get the number of elements in a ListTag
+	 */
+	private static int tagCount(ListTag<?> list) {
+		return list.size();
+	}
+
+	/**
+	 * Get a CompoundTag at a specific index in a ListTag
+	 */
+	private static CompoundTag getCompoundTagAt(ListTag<?> list, int index) {
+		if (index >= 0 && index < list.size()) {
+			return (CompoundTag) list.getValue().get(index);
+		}
+		return new CompoundTag();
+	}
+
+	/**
+	 * Get a string value at a specific index in a ListTag
+	 */
+	private static String getStringTagAt(ListTag<?> list, int index) {
+		if (index >= 0 && index < list.size()) {
+			dev.dewy.nbt.api.Tag tag = list.getValue().get(index);
+			if (tag instanceof StringTag) {
+				return ((StringTag) tag).getValue();
+			} else if (tag instanceof DoubleTag) {
+				return String.valueOf(((DoubleTag) tag).getValue());
+			}
+			return tag.toString();
+		}
+		return "";
+	}
+
+	/**
+	 * Get the type ID of elements in a ListTag (for compatibility with old API)
+	 */
+	private static int getListType(ListTag<?> list) {
+		return list.getListType();
+	}
+
 }

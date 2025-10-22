@@ -37,6 +37,9 @@ dependencies {
     // Picocli for command-line argument parsing (annotation-based, modern)
     implementation 'info.picocli:picocli:4.7.5'
 
+    // BitBuf NBT library - Modern, well-maintained NBT implementation
+    implementation 'dev.dewy:nbt:1.5.1'
+
     // Spock Framework for testing
     testImplementation 'org.spockframework:spock-core:2.3-groovy-3.0'
     testImplementation 'org.codehaus.groovy:groovy-all:3.0.19'
