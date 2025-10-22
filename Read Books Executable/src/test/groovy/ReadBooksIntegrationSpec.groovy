@@ -232,7 +232,12 @@ class ReadBooksIntegrationSpec extends Specification {
             def logContent = logFile.text
             assert logContent.contains("[INFO]")
             assert logContent.contains("Starting readSignsAndBooks()")
-            assert logContent.contains("Completed successfully")
+
+            // Check that summary file contains completion message
+            def summaryFile = outputDir.resolve("summary.txt")
+            assert Files.exists(summaryFile)
+            def summaryContent = summaryFile.text
+            assert summaryContent.contains("Completed successfully")
             true
         }
     }
@@ -296,6 +301,11 @@ class ReadBooksIntegrationSpec extends Specification {
             def logFile = outputDir.resolve("logs.txt")
             assert Files.exists(logFile)
             assert Files.isRegularFile(logFile)
+
+            // Verify summary file
+            def summaryFile = outputDir.resolve("summary.txt")
+            assert Files.exists(summaryFile)
+            assert Files.isRegularFile(summaryFile)
 
             true
         }
@@ -464,10 +474,10 @@ class ReadBooksIntegrationSpec extends Specification {
         try {
             // Change to test world directory
             System.setProperty("user.dir", testWorldDir.toString())
-            
-            // Run the main program
-            Main.main([] as String[])
-            
+
+            // Run the extraction directly (avoid System.exit() in main())
+            Main.runExtraction()
+
         } finally {
             // Restore original directory
             System.setProperty("user.dir", originalUserDir)

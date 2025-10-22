@@ -12,12 +12,17 @@ import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 import javax.swing.JComboBox;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
 
+import picocli.CommandLine;
+import picocli.CommandLine.Command;
+import picocli.CommandLine.Option;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -26,7 +31,11 @@ import Anvil.NBTTagCompound;
 import java.awt.*;
 
 
-public class Main {
+@Command(name = "ReadSignsAndBooks",
+         mixinStandardHelpOptions = true,
+         description = "Minecraft World Data Extractor - Extracts books and signs from Minecraft worlds",
+         version = "1.0")
+public class Main implements Runnable {
 
 	static ArrayList<Integer> bookHashes = new ArrayList<Integer>();
 	static ArrayList<String> signHashes = new ArrayList<String>();
@@ -44,17 +53,99 @@ public class Main {
 	static SimpleDateFormat logTimeFormat = new SimpleDateFormat("HH:mm:ss.SSS");
 	static int bookCounter = 0;
 
+	// Statistics tracking
+	static Map<String, Integer> booksByContainerType = new HashMap<>();
+	static Map<String, Integer> booksByLocationType = new HashMap<>();
+	static int totalSignsFound = 0;
+	static int totalBooksFound = 0;
+	static int totalDuplicateBooks = 0;
+
+	// Configuration flags (set via command-line arguments using Picocli annotations)
+	@Option(names = {"-w", "--world"},
+	        description = "Specify custom world directory (default: current directory)")
+	static String customWorldDirectory = null;
+
+	@Option(names = {"-o", "--output"},
+	        description = "Specify custom output directory (default: ReadBooks/YYYY-MM-DD)")
+	static String customOutputDirectory = null;
+
+	@Option(names = {"--no-books"},
+	        description = "Disable book extraction")
+	static boolean disableBooks = false;
+
+	@Option(names = {"--no-signs"},
+	        description = "Disable sign extraction")
+	static boolean disableSigns = false;
+
+	@Option(names = {"--books-only"},
+	        description = "Extract only books (same as --no-signs)")
+	static boolean booksOnly = false;
+
+	@Option(names = {"--signs-only"},
+	        description = "Extract only signs (same as --no-books)")
+	static boolean signsOnly = false;
+
+	// Derived flags
+	static boolean enableBookExtraction = true;
+	static boolean enableSignExtraction = true;
+
 	public static void main(String[] args) throws IOException
 	{
+		// Parse command-line arguments using Picocli
+		int exitCode = new CommandLine(new Main()).execute(args);
+		System.exit(exitCode);
+	}
+
+	@Override
+	public void run() {
+		try {
+			runExtraction();
+		} catch (IOException e) {
+			System.err.println("Error during extraction: " + e.getMessage());
+			e.printStackTrace();
+			System.exit(1);
+		}
+	}
+
+	static void runExtraction() throws IOException {
+		// Apply flag logic
+		if (booksOnly) {
+			enableSignExtraction = false;
+		}
+		if (signsOnly) {
+			enableBookExtraction = false;
+		}
+		if (disableBooks) {
+			enableBookExtraction = false;
+		}
+		if (disableSigns) {
+			enableSignExtraction = false;
+		}
+
 		// Reset static state (important for tests that run multiple times)
 		bookHashes.clear();
 		signHashes.clear();
 		bookCounter = 0;
-		baseDirectory = System.getProperty("user.dir");
+		booksByContainerType.clear();
+		booksByLocationType.clear();
+		totalSignsFound = 0;
+		totalBooksFound = 0;
+		totalDuplicateBooks = 0;
+
+		// Set base directory from command-line or default to current directory
+		if (customWorldDirectory != null) {
+			baseDirectory = customWorldDirectory;
+		} else {
+			baseDirectory = System.getProperty("user.dir");
+		}
 
 		// Initialize logging and output folders
 		dateStamp = new SimpleDateFormat("yyyy-MM-dd").format(new Date());
-		outputFolder = "ReadBooks" + File.separator + dateStamp;
+		if (customOutputDirectory != null) {
+			outputFolder = customOutputDirectory;
+		} else {
+			outputFolder = "ReadBooks" + File.separator + dateStamp;
+		}
 		booksFolder = outputFolder + File.separator + "books";
 		duplicatesFolder = booksFolder + File.separator + ".duplicates";
 
@@ -84,20 +175,28 @@ public class Main {
 		log("INFO", "=".repeat(80));
 		log("INFO", "ReadSignsAndBooks - Minecraft World Data Extractor");
 		log("INFO", "Started at: " + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
+		log("INFO", "World directory: " + baseDirectory);
 		log("INFO", "Output folder: " + outputFolder);
+		log("INFO", "Book extraction: " + (enableBookExtraction ? "ENABLED" : "DISABLED"));
+		log("INFO", "Sign extraction: " + (enableSignExtraction ? "ENABLED" : "DISABLED"));
 		log("INFO", "=".repeat(80));
 
 		long startTime = System.currentTimeMillis();
 
 		try {
-			readPlayerData();
+			if (enableBookExtraction) {
+				readPlayerData();
+			}
 			readSignsAndBooks();
-			readEntities();
+			if (enableBookExtraction) {
+				readEntities();
+			}
 
 			long elapsed = System.currentTimeMillis() - startTime;
-			log("INFO", "=".repeat(80));
-			log("INFO", "Completed successfully in " + elapsed / 1000 + " seconds (" + formatTime(elapsed) + ")");
-			log("INFO", "=".repeat(80));
+
+			// Print summary statistics
+			printSummaryStatistics(elapsed);
+
 			System.out.println(elapsed / 1000 + " seconds to complete.");
 		} catch (Exception e) {
 			log("ERROR", "Fatal error during execution: " + e.getMessage());
@@ -154,7 +253,108 @@ public class Main {
 			return String.format("%ds", seconds);
 		}
 	}
-	
+
+
+
+	/**
+	 * Print summary statistics at the end of processing
+	 */
+	static void printSummaryStatistics(long elapsedMillis) throws IOException {
+		// Write summary to separate file
+		File summaryFile = new File(baseDirectory, outputFolder + File.separator + "summary.txt");
+		try (BufferedWriter summaryWriter = new BufferedWriter(new FileWriter(summaryFile))) {
+			summaryWriter.write("=".repeat(80));
+			summaryWriter.newLine();
+			summaryWriter.write("SUMMARY STATISTICS");
+			summaryWriter.newLine();
+			summaryWriter.write("=".repeat(80));
+			summaryWriter.newLine();
+
+			// Books summary
+			if (enableBookExtraction) {
+				summaryWriter.newLine();
+				summaryWriter.write("Books:");
+				summaryWriter.newLine();
+				summaryWriter.write("  Total unique books found: " + bookHashes.size());
+				summaryWriter.newLine();
+				summaryWriter.write("  Total books extracted (including duplicates): " + bookCounter);
+				summaryWriter.newLine();
+				summaryWriter.write("  Duplicate books: " + (bookCounter - bookHashes.size()));
+				summaryWriter.newLine();
+
+				if (!booksByLocationType.isEmpty()) {
+					summaryWriter.newLine();
+					summaryWriter.write("  Books by location type:");
+					summaryWriter.newLine();
+					booksByLocationType.entrySet().stream()
+						.sorted((a, b) -> b.getValue().compareTo(a.getValue()))
+						.forEach(entry -> {
+							try {
+								summaryWriter.write("    " + entry.getKey() + ": " + entry.getValue());
+								summaryWriter.newLine();
+							} catch (IOException e) {
+								throw new RuntimeException(e);
+							}
+						});
+				}
+
+				if (!booksByContainerType.isEmpty()) {
+					summaryWriter.newLine();
+					summaryWriter.write("  Books by container type:");
+					summaryWriter.newLine();
+					booksByContainerType.entrySet().stream()
+						.sorted((a, b) -> b.getValue().compareTo(a.getValue()))
+						.forEach(entry -> {
+							try {
+								summaryWriter.write("    " + entry.getKey() + ": " + entry.getValue());
+								summaryWriter.newLine();
+							} catch (IOException e) {
+								throw new RuntimeException(e);
+							}
+						});
+				}
+			}
+
+			// Signs summary
+			if (enableSignExtraction) {
+				summaryWriter.newLine();
+				summaryWriter.write("Signs:");
+				summaryWriter.newLine();
+				summaryWriter.write("  Total signs found: " + signHashes.size());
+				summaryWriter.newLine();
+			}
+
+			// Performance metrics
+			summaryWriter.newLine();
+			summaryWriter.write("Performance:");
+			summaryWriter.newLine();
+			summaryWriter.write("  Total processing time: " + formatTime(elapsedMillis) + " (" + (elapsedMillis / 1000) + " seconds)");
+			summaryWriter.newLine();
+
+			summaryWriter.newLine();
+			summaryWriter.write("=".repeat(80));
+			summaryWriter.newLine();
+			summaryWriter.write("Completed successfully!");
+			summaryWriter.newLine();
+			summaryWriter.write("=".repeat(80));
+			summaryWriter.newLine();
+		}
+
+		// Also log to console and logs.txt
+		log("INFO", "");
+		log("INFO", "=".repeat(80));
+		log("INFO", "Summary statistics written to: " + summaryFile.getAbsolutePath());
+		log("INFO", "=".repeat(80));
+	}
+
+	/**
+	 * Increment statistics for a book found in a specific container type and location
+	 */
+	static void incrementBookStats(String containerType, String locationType) {
+		booksByContainerType.put(containerType, booksByContainerType.getOrDefault(containerType, 0) + 1);
+		booksByLocationType.put(locationType, booksByLocationType.getOrDefault(locationType, 0) + 1);
+	}
+
 	public void displayGUI()
 	{
 		
@@ -300,10 +500,11 @@ public class Main {
 				    			{
 				    				Anvil.NBTTagCompound item = chestItems.getCompoundTagAt(n);
 			    					String bookInfo = ("Chunk [" + x + ", " + z + "] Inside " + tileEntity.getString("id") + " at (" +  tileEntity.getInteger("x") + " " + tileEntity.getInteger("y") + " " + tileEntity.getInteger("z") + ") " + listOfFiles[f].getName());
-			    					int booksBefore = bookHashes.size();
+			    					int booksBefore = bookCounter;
 			    					parseItem(item, bookInfo);
-			    					if (bookHashes.size() > booksBefore) {
+			    					if (bookCounter > booksBefore) {
 			    						chunkBooks++;
+			    						incrementBookStats(blockId, "Block Entity");
 			    					}
 				    			}
 				    		}
@@ -314,10 +515,11 @@ public class Main {
 				    			Anvil.NBTTagCompound book = tileEntity.getCompoundTag("Book");
 				    			log("DEBUG", "  Chunk [" + x + "," + z + "] - Found lectern with book");
 				    			String bookInfo = ("Chunk [" + x + ", " + z + "] Inside " + tileEntity.getString("id") + " at (" +  tileEntity.getInteger("x") + " " + tileEntity.getInteger("y") + " " + tileEntity.getInteger("z") + ") " + listOfFiles[f].getName());
-				    			int booksBefore = bookHashes.size();
+				    			int booksBefore = bookCounter;
 				    			parseItem(book, bookInfo);
-				    			if (bookHashes.size() > booksBefore) {
+				    			if (bookCounter > booksBefore) {
 				    				chunkBooks++;
+				    				incrementBookStats("Lectern", "Block Entity");
 				    			}
 				    		}
 
@@ -353,12 +555,14 @@ public class Main {
 				    }
 
 				    Anvil.NBTTagList entities = nbttagcompund2.getTagList("Entities", 10);
-				    
+
 				    for (int i = 0; i < entities.tagCount(); i ++)
 				    {
 				    	Anvil.NBTTagCompound entity = (Anvil.NBTTagCompound) entities.getCompoundTagAt(i);
 				    	{
-				    		//Donkey, llama etc.
+				    		String entityId = entity.getString("id");
+
+				    		//Donkey, llama, villagers, zombies, etc.
 				    		if (entity.hasKey("Items"))
 				    		{
 				    			Anvil.NBTTagList entityItems = entity.getTagList("Items", 10);
@@ -369,17 +573,18 @@ public class Main {
 				    			int zPos = (int) Double.parseDouble(entityPos.getStringTagAt(2));
 
 				    			if (entityItems.tagCount() > 0) {
-				    				log("DEBUG", "  Chunk [" + x + "," + z + "] - Found entity with " + entityItems.tagCount() + " items at (" + xPos + "," + yPos + "," + zPos + ")");
+				    				log("DEBUG", "  Chunk [" + x + "," + z + "] - Found " + entityId + " with " + entityItems.tagCount() + " items at (" + xPos + "," + yPos + "," + zPos + ")");
 				    			}
 
 				    			for (int n = 0; n < entityItems.tagCount(); n++)
 				    			{
 				    				Anvil.NBTTagCompound item = entityItems.getCompoundTagAt(n);
-			    					String bookInfo = ("Chunk [" + x + ", " + z + "] On entity at (" + xPos + " " + yPos + " " + zPos + ") " + listOfFiles[f].getName());
-			    					int booksBefore = bookHashes.size();
+			    					String bookInfo = ("Chunk [" + x + ", " + z + "] In " + entityId + " at (" + xPos + " " + yPos + " " + zPos + ") " + listOfFiles[f].getName());
+			    					int booksBefore = bookCounter;
 			    					parseItem(item, bookInfo);
-			    					if (bookHashes.size() > booksBefore) {
+			    					if (bookCounter > booksBefore) {
 			    						chunkBooks++;
+			    						incrementBookStats(entityId, "Entity");
 			    					}
 				    			}
 				    		}
@@ -393,11 +598,12 @@ public class Main {
 				    			int yPos = (int) Double.parseDouble(entityPos.getStringTagAt(1));
 				    			int zPos = (int) Double.parseDouble(entityPos.getStringTagAt(2));
 
-		    					String bookInfo = ("Chunk [" + x + ", " + z + "] On ground or item frame at at (" + xPos + " " + yPos + " " + zPos + ") " + listOfFiles[f].getName());
-		    					int booksBefore = bookHashes.size();
+		    					String bookInfo = ("Chunk [" + x + ", " + z + "] In " + entityId + " at (" + xPos + " " + yPos + " " + zPos + ") " + listOfFiles[f].getName());
+		    					int booksBefore = bookCounter;
 				    			parseItem(item, bookInfo);
-				    			if (bookHashes.size() > booksBefore) {
+				    			if (bookCounter > booksBefore) {
 		    						chunkBooks++;
+		    						incrementBookStats(entityId, "Entity");
 		    					}
 				    		}
 				    	}
@@ -498,22 +704,28 @@ public class Main {
 									zPos = (int) Double.parseDouble(entityPos.getStringTagAt(2));
 								}
 
-								int booksBefore = bookHashes.size();
+								int booksBefore = bookCounter;
 
-								// Entities with inventory (minecarts, boats, donkeys, llamas, etc.)
+
+
+								// Entities with inventory (minecarts, boats, donkeys, llamas, villagers, zombies, etc.)
 								if (entity.hasKey("Items"))
 								{
 									Anvil.NBTTagList entityItems = entity.getTagList("Items", 10);
 
 									if (entityItems.tagCount() > 0) {
-										log("DEBUG", "  Chunk [" + x + "," + z + "] - Found entity " + entityId + " with " + entityItems.tagCount() + " items at (" + xPos + "," + yPos + "," + zPos + ")");
+										log("DEBUG", "  Chunk [" + x + "," + z + "] - Found " + entityId + " with " + entityItems.tagCount() + " items at (" + xPos + "," + yPos + "," + zPos + ")");
 									}
 
 									for (int n = 0; n < entityItems.tagCount(); n++)
 									{
 										Anvil.NBTTagCompound item = entityItems.getCompoundTagAt(n);
-										String bookInfo = ("Chunk [" + x + ", " + z + "] In entity " + entityId + " at (" + xPos + " " + yPos + " " + zPos + ") " + listOfFiles[f].getName());
+										String bookInfo = ("Chunk [" + x + ", " + z + "] In " + entityId + " at (" + xPos + " " + yPos + " " + zPos + ") " + listOfFiles[f].getName());
+										int booksBeforeItem = bookCounter;
 										parseItem(item, bookInfo);
+										if (bookCounter > booksBeforeItem) {
+											incrementBookStats(entityId, "Entity");
+										}
 									}
 								}
 
@@ -521,12 +733,16 @@ public class Main {
 								if (entity.hasKey("Item"))
 								{
 									Anvil.NBTTagCompound item = entity.getCompoundTag("Item");
-									String bookInfo = ("Chunk [" + x + ", " + z + "] In entity " + entityId + " at (" + xPos + " " + yPos + " " + zPos + ") " + listOfFiles[f].getName());
-									log("DEBUG", "  Chunk [" + x + "," + z + "] - Found entity " + entityId + " with item at (" + xPos + "," + yPos + "," + zPos + ")");
+									String bookInfo = ("Chunk [" + x + ", " + z + "] In " + entityId + " at (" + xPos + " " + yPos + " " + zPos + ") " + listOfFiles[f].getName());
+									log("DEBUG", "  Chunk [" + x + "," + z + "] - Found " + entityId + " with item at (" + xPos + "," + yPos + "," + zPos + ")");
+									int booksBeforeItem = bookCounter;
 									parseItem(item, bookInfo);
+									if (bookCounter > booksBeforeItem) {
+										incrementBookStats(entityId, "Entity");
+									}
 								}
 
-								if (bookHashes.size() > booksBefore) {
+								if (bookCounter > booksBefore) {
 									entitiesWithBooks++;
 								}
 							}
@@ -650,10 +866,11 @@ public class Main {
 			{
 				Anvil.NBTTagCompound item = (Anvil.NBTTagCompound) playerInventory.getCompoundTagAt(n);
 				String bookInfo = ("Inventory of player " + listOfFiles[i].getName());
-				int booksBefore = bookHashes.size();
+				int booksBefore = bookCounter;
 				parseItem(item, bookInfo);
-				if (bookHashes.size() > booksBefore) {
+				if (bookCounter > booksBefore) {
 					playerBooks++;
+					incrementBookStats("Player Inventory", "Player");
 				}
 			}
 
@@ -663,10 +880,11 @@ public class Main {
 			{
 				Anvil.NBTTagCompound item = (Anvil.NBTTagCompound) playerInventory.getCompoundTagAt(e);
 				String bookInfo = ("Ender Chest of player " + listOfFiles[i].getName());
-				int booksBefore = bookHashes.size();
+				int booksBefore = bookCounter;
 				parseItem(item, bookInfo);
-				if (bookHashes.size() > booksBefore) {
+				if (bookCounter > booksBefore) {
 					playerBooks++;
+					incrementBookStats("Ender Chest", "Player");
 				}
 			}
 
