@@ -1,1 +1,75 @@
-{"stats":{"minecraft:dropped":{"minecraft:red_shulker_box":1,"minecraft:grass_block":1,"minecraft:written_book":1},"minecraft:custom":{"minecraft:trigger_trapped_chest":3,"minecraft:time_since_rest":42202,"minecraft:inspect_dropper":3,"minecraft:walk_one_cm":2172,"minecraft:leave_game":5,"minecraft:horse_one_cm":68,"minecraft:play_time":42202,"minecraft:open_shulker_box":3,"minecraft:jump":9,"minecraft:time_since_death":42202,"minecraft:drop":3,"minecraft:open_enderchest":1,"minecraft:open_barrel":1,"minecraft:interact_with_furnace":1,"minecraft:open_chest":6,"minecraft:inspect_dispenser":2,"minecraft:interact_with_smoker":1,"minecraft:inspect_hopper":5,"minecraft:total_world_time":47790,"minecraft:fly_one_cm":489,"minecraft:crouch_one_cm":839,"minecraft:sneak_time":651,"minecraft:interact_with_blast_furnace":1},"minecraft:used":{"minecraft:oak_shelf":4,"minecraft:grass_block":3,"minecraft:glow_item_frame":2,"minecraft:honeycomb":2,"minecraft:smoker":1,"minecraft:shulker_box":2,"minecraft:copper_chest":4,"minecraft:trapped_chest":1,"minecraft:red_shulker_box":1,"minecraft:writable_book":6,"minecraft:item_frame":2,"minecraft:white_shulker_box":1,"minecraft:bamboo_sign":1,"minecraft:furnace":1,"minecraft:barrel":5,"minecraft:written_book":2,"minecraft:warped_shelf":1,"minecraft:blast_furnace":1,"minecraft:redstone_block":3,"minecraft:chest_minecart":1,"minecraft:bundle":1,"minecraft:oak_slab":2,"minecraft:dispenser":1,"minecraft:crimson_sign":1,"minecraft:waxed_weathered_copper_chest":6,"minecraft:rail":12,"minecraft:hopper":1,"minecraft:ender_chest":1,"minecraft:birch_hanging_sign":1,"minecraft:chest":1,"minecraft:birch_chest_boat":1,"minecraft:chiseled_bookshelf":2,"minecraft:hopper_minecart":1,"minecraft:dropper":1},"minecraft:picked_up":{"minecraft:leather":1,"minecraft:chest":1}},"DataVersion":4556}
+{
+  "stats": {
+    "minecraft:dropped": {
+      "minecraft:red_shulker_box": 1,
+      "minecraft:grass_block": 1,
+      "minecraft:written_book": 1
+    },
+    "minecraft:custom": {
+      "minecraft:trigger_trapped_chest": 3,
+      "minecraft:time_since_rest": 42202,
+      "minecraft:inspect_dropper": 3,
+      "minecraft:walk_one_cm": 2172,
+      "minecraft:leave_game": 5,
+      "minecraft:horse_one_cm": 68,
+      "minecraft:play_time": 42202,
+      "minecraft:open_shulker_box": 3,
+      "minecraft:jump": 9,
+      "minecraft:time_since_death": 42202,
+      "minecraft:drop": 3,
+      "minecraft:open_enderchest": 1,
+      "minecraft:open_barrel": 1,
+      "minecraft:interact_with_furnace": 1,
+      "minecraft:open_chest": 6,
+      "minecraft:inspect_dispenser": 2,
+      "minecraft:interact_with_smoker": 1,
+      "minecraft:inspect_hopper": 5,
+      "minecraft:total_world_time": 47790,
+      "minecraft:fly_one_cm": 489,
+      "minecraft:crouch_one_cm": 839,
+      "minecraft:sneak_time": 651,
+      "minecraft:interact_with_blast_furnace": 1
+    },
+    "minecraft:used": {
+      "minecraft:oak_shelf": 4,
+      "minecraft:grass_block": 3,
+      "minecraft:glow_item_frame": 2,
+      "minecraft:honeycomb": 2,
+      "minecraft:smoker": 1,
+      "minecraft:shulker_box": 2,
+      "minecraft:copper_chest": 4,
+      "minecraft:trapped_chest": 1,
+      "minecraft:red_shulker_box": 1,
+      "minecraft:writable_book": 6,
+      "minecraft:item_frame": 2,
+      "minecraft:white_shulker_box": 1,
+      "minecraft:bamboo_sign": 1,
+      "minecraft:furnace": 1,
+      "minecraft:barrel": 5,
+      "minecraft:written_book": 2,
+      "minecraft:warped_shelf": 1,
+      "minecraft:blast_furnace": 1,
+      "minecraft:redstone_block": 3,
+      "minecraft:chest_minecart": 1,
+      "minecraft:bundle": 1,
+      "minecraft:oak_slab": 2,
+      "minecraft:dispenser": 1,
+      "minecraft:crimson_sign": 1,
+      "minecraft:waxed_weathered_copper_chest": 6,
+      "minecraft:rail": 12,
+      "minecraft:hopper": 1,
+      "minecraft:ender_chest": 1,
+      "minecraft:birch_hanging_sign": 1,
+      "minecraft:chest": 1,
+      "minecraft:birch_chest_boat": 1,
+      "minecraft:chiseled_bookshelf": 2,
+      "minecraft:hopper_minecart": 1,
+      "minecraft:dropper": 1
+    },
+    "minecraft:picked_up": {
+      "minecraft:leather": 1,
+      "minecraft:chest": 1
+    }
+  },
+  "DataVersion": 4556
+}

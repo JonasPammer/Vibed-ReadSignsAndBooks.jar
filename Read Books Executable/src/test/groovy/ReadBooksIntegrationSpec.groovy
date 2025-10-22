@@ -3,7 +3,6 @@ import spock.lang.Specification
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
-import java.nio.file.StandardCopyOption
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -135,8 +134,8 @@ class ReadBooksIntegrationSpec extends Specification {
 
                 // Location should mention chunk coordinates or player inventory
                 content =~ /Chunk \[\d+, \d+\]/ ||
-                    content.contains("Inventory of player") ||
-                    content.contains("Ender Chest")
+                        content.contains("Inventory of player") ||
+                        content.contains("Ender Chest")
             }
         }
     }
@@ -390,11 +389,11 @@ class ReadBooksIntegrationSpec extends Specification {
                     def bookCount = matcher.group(2).toInteger()
                     def signCount = matcher.group(3).toInteger()
                     testWorlds << [
-                        name: folderName,
-                        worldName: worldName,
-                        bookCount: bookCount,
-                        signCount: signCount,
-                        resourcePath: path
+                            name        : folderName,
+                            worldName   : worldName,
+                            bookCount   : bookCount,
+                            signCount   : signCount,
+                            resourcePath: path
                     ]
                     println "  ✓ Discovered test world: ${folderName} (${bookCount} books, ${signCount} signs expected)"
                 }
@@ -470,7 +469,7 @@ class ReadBooksIntegrationSpec extends Specification {
     private void runReadBooksProgram() {
         // Save current directory
         def originalUserDir = System.getProperty("user.dir")
-        
+
         try {
             // Change to test world directory
             System.setProperty("user.dir", testWorldDir.toString())
