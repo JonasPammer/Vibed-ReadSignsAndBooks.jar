@@ -444,24 +444,64 @@ public class Main {
 			{
 				Anvil.NBTTagCompound shelkerItem = shelkerContents.getCompoundTagAt(i);
 				parseItem(shelkerItem, writer, bookInfo);
-			}	
+			}
 		}
 	}
 	
 	private static void readWrittenBook(Anvil.NBTTagCompound item, BufferedWriter writer, String bookInfo) throws IOException
 	{
-		Anvil.NBTTagCompound tag = item.getCompoundTag("tag");
-		Anvil.NBTTagList pages = tag.getTagList("pages", 8);
-		
-		if (pages.tagCount() == 0)
+		// Try both old format (pre-1.20.5 with "tag") and new format (1.20.5+ with "components")
+		Anvil.NBTTagCompound tag = null;
+		Anvil.NBTTagList pages = null;
+
+		if (item.hasKey("tag")) {
+			// Pre-1.20.5 format
+			tag = item.getCompoundTag("tag");
+			pages = tag.getTagList("pages", 8);
+		} else if (item.hasKey("components")) {
+			// 1.20.5+ format
+			Anvil.NBTTagCompound components = item.getCompoundTag("components");
+			if (components.hasKey("minecraft:written_book_content")) {
+				Anvil.NBTTagCompound bookContent = components.getCompoundTag("minecraft:written_book_content");
+				pages = bookContent.getTagList("pages", 10); // In 1.20.5+, pages are compounds, not strings
+				tag = bookContent; // Use bookContent as tag for author/title
+			}
+		}
+
+		if (pages == null || pages.tagCount() == 0) {
 			return;
+		}
 		if (bookHashes.contains(pages.hashCode()))
 			return;
 		else
 			bookHashes.add(pages.hashCode());
-		
+
+		// Extract author and title - handle both old format (plain string) and new format (text component)
 		String author = tag.getString("author");
 		String title = tag.getString("title");
+
+		// In 1.20.5+, author and title might be stored as text components like {raw:"text",}
+		// Extract the actual text from the component if needed
+		if (author.startsWith("{") && author.contains("raw:")) {
+			try {
+				JSONObject authorJSON = new JSONObject(author);
+				if (authorJSON.has("raw")) {
+					author = authorJSON.getString("raw");
+				}
+			} catch (JSONException e) {
+				// If parsing fails, keep the original string
+			}
+		}
+		if (title.startsWith("{") && title.contains("raw:")) {
+			try {
+				JSONObject titleJSON = new JSONObject(title);
+				if (titleJSON.has("raw")) {
+					title = titleJSON.getString("raw");
+				}
+			} catch (JSONException e) {
+				// If parsing fails, keep the original string
+			}
+		}
 
 		writer.newLine();
 		writer.write(bookInfo);
@@ -475,23 +515,41 @@ public class Main {
 		writer.newLine();
 		for (int pc = 0; pc < pages.tagCount(); pc++)
 		{
+			String pageText = null;
+
+			// Check if pages are stored as strings (pre-1.20.5) or compounds (1.20.5+)
+			if (pages.func_150303_d() == 8) {
+				// String list (pre-1.20.5)
+				pageText = pages.getStringTagAt(pc);
+			} else if (pages.func_150303_d() == 10) {
+				// Compound list (1.20.5+)
+				Anvil.NBTTagCompound pageCompound = pages.getCompoundTagAt(pc);
+				if (pageCompound.hasKey("raw")) {
+					pageText = pageCompound.getString("raw");
+				} else if (pageCompound.hasKey("filtered")) {
+					pageText = pageCompound.getString("filtered");
+				}
+			}
+
+			if (pageText == null || pageText.isEmpty()) {
+				continue;
+			}
+
 			JSONObject pageJSON = null;
-			String pageText = pages.getStringTagAt(pc);
-			
 			if (pageText.startsWith("{")) //If valid JSON
 			{
 				try { pageJSON = new JSONObject(pageText); }
 				catch(JSONException e) { pageJSON = null; }
 			}
-			
+
 			writer.write("Page " + pc + ": ");
-			
+
 			//IF VALID JSON
 			if (pageJSON != null)
 			{
 				if (pageJSON.has("extra"))
 				{
-					
+
     				for (int h = 0; h < pageJSON.getJSONArray("extra").length(); h++)
     				{
     					if (pageJSON.getJSONArray("extra").get(h) instanceof String)
@@ -500,25 +558,40 @@ public class Main {
     					{
     						JSONObject temp = (JSONObject) pageJSON.getJSONArray("extra").get(h);
     						writer.write(removeTextFormatting(temp.get("text").toString()));
-    					}				    			
+    					}
     				}
 				}
 				else if (pageJSON.has("text"))
 					writer.write(removeTextFormatting(pageJSON.getString("text")));
 			}
 			else
-				writer.write(removeTextFormatting(pages.getStringTagAt(pc)));
-			
+				writer.write(removeTextFormatting(pageText));
+
 			writer.newLine();
 		}
 	}
 	
 	private static void readWritableBook(Anvil.NBTTagCompound item, BufferedWriter writer, String bookInfo) throws IOException
 	{
-		Anvil.NBTTagCompound tag = item.getCompoundTag("tag");
-		Anvil.NBTTagList pages = tag.getTagList("pages", 8);
-		if (pages.tagCount() == 0)
+		// Try both old format (pre-1.20.5 with "tag") and new format (1.20.5+ with "components")
+		Anvil.NBTTagList pages = null;
+
+		if (item.hasKey("tag")) {
+			// Pre-1.20.5 format
+			Anvil.NBTTagCompound tag = item.getCompoundTag("tag");
+			pages = tag.getTagList("pages", 8);
+		} else if (item.hasKey("components")) {
+			// 1.20.5+ format
+			Anvil.NBTTagCompound components = item.getCompoundTag("components");
+			if (components.hasKey("minecraft:writable_book_content")) {
+				Anvil.NBTTagCompound bookContent = components.getCompoundTag("minecraft:writable_book_content");
+				pages = bookContent.getTagList("pages", 10); // In 1.20.5+, pages are compounds
+			}
+		}
+
+		if (pages == null || pages.tagCount() == 0) {
 			return;
+		}
 		if (bookHashes.contains(pages.hashCode()))
 			return;
 		else
@@ -531,7 +604,27 @@ public class Main {
 		writer.newLine();
 		for (int pc = 0; pc < pages.tagCount(); pc++)
 		{
-			writer.write("Page " + pc + ": " + removeTextFormatting(pages.getStringTagAt(pc)));
+			String pageText = null;
+
+			// Check if pages are stored as strings (pre-1.20.5) or compounds (1.20.5+)
+			if (pages.func_150303_d() == 8) {
+				// String list (pre-1.20.5)
+				pageText = pages.getStringTagAt(pc);
+			} else if (pages.func_150303_d() == 10) {
+				// Compound list (1.20.5+)
+				Anvil.NBTTagCompound pageCompound = pages.getCompoundTagAt(pc);
+				if (pageCompound.hasKey("raw")) {
+					pageText = pageCompound.getString("raw");
+				} else if (pageCompound.hasKey("filtered")) {
+					pageText = pageCompound.getString("filtered");
+				}
+			}
+
+			if (pageText == null || pageText.isEmpty()) {
+				continue;
+			}
+
+			writer.write("Page " + pc + ": " + removeTextFormatting(pageText));
 			writer.newLine();
 		}
 	}
