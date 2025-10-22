@@ -1,6 +1,7 @@
 plugins {
     id 'java'
     id 'application'
+    id 'groovy'
 }
 
 group = 'com.minecraft'
@@ -16,6 +17,14 @@ sourceSets {
             srcDirs = ['src']
         }
     }
+    test {
+        groovy {
+            srcDirs = ['src/test/groovy']
+        }
+        resources {
+            srcDirs = ['src/test/resources']
+        }
+    }
 }
 
 repositories {
@@ -24,6 +33,13 @@ repositories {
 
 dependencies {
     implementation 'org.json:json:20180130'
+
+    // Spock Framework for testing
+    testImplementation 'org.spockframework:spock-core:2.3-groovy-3.0'
+    testImplementation 'org.codehaus.groovy:groovy-all:3.0.19'
+
+    // JUnit Platform for running Spock tests
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 application {
@@ -61,5 +77,19 @@ jar {
 // Clean task to remove old builds
 clean {
     delete 'ReadSignsAndBooks.jar'
+}
+
+// Configure test task
+test {
+    useJUnitPlatform()
+
+    testLogging {
+        events "passed", "skipped", "failed"
+        exceptionFormat "full"
+        showStandardStreams = true
+    }
+
+    // Increase test timeout for integration tests
+    timeout = java.time.Duration.ofMinutes(10)
 }
 

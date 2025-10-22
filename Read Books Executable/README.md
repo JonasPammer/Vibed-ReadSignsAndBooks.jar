@@ -5,31 +5,31 @@ A Gradle-based Java tool that reads Minecraft books and signs from world region 
 ## What This Does
 
 This tool scans Minecraft world files and extracts:
-- Written books (with title and author)
-- Writable books (book and quill)
-- Signs with text
-- Books in chests, shulker boxes, item frames, entities, and player inventories
+- **Written books** (with title and author)
+- **Writable books** (book and quill)
+- **Signs** with text (all variants: regular, hanging, wall signs)
+- **Books in containers:** chests, barrels, shulker boxes, bundles, item frames, minecarts, boats, and more
+- **Books in containers of containers** (e.g., inside bundles in frames, inside shulker boxes in chests)
+- **Books in player inventories** and ender chests
 
-## Building with Gradle
+### Key Features
+
+- **Comprehensive container support:** Detects books in 24+ container types including nested containers (bundles in chests, etc.)
+- **Duplicate tracking:** Saves duplicate books to `.duplicates/` folder instead of skipping them
+- **Sign location tracking:** Counts all physical signs by location, not just unique text content
+- **Version compatibility:** Supports Minecraft 1.13+ through 1.21+ (including 1.20.5+ item components)
+- **Detailed logging:** DEBUG-level logs show every block entity, sign, and book found
+
+## Running
+
+Although the jar is also committed, here's how to build from source
+(if gradle is installed, otherwise use gradlew.bat/gradlew):
 
 ```cmd
-gradlew.bat build
+gradle build
 ```
 
-## Running the Application
-
-### Option 1: Using Gradle
-
-```bash
-gradle run
-```
-
-or with the wrapper:
-```bash
-./gradlew run
-```
-
-### Option 2: Using the JAR directly
+Now, copy the jar file into the world directory and run it from there:
 
 ```bash
 java -jar ReadSignsAndBooks.jar
@@ -43,8 +43,47 @@ java -jar ReadSignsAndBooks.jar
 
 2. Run the application using one of the methods above
 
-3. The tool will create three output files:
-   - `bookOutput.txt`
-   - `signOutput.txt`
-   - `playerdataOutput.txt`
+3. The tool will create output in `ReadBooks/YYYY-MM-DD/`:
+   - `books/` - directory containing individual text files for each unique book
+     - Each book is saved as: `NNN_written_title_by_author.txt` or `NNN_writable_book.txt`
+     - Books are numbered sequentially (001, 002, 003, etc.)
+   - `books/.duplicates/` - directory containing duplicate books (same content, different locations)
+     - Uses the same naming convention as the main books folder
+     - Allows you to see all instances of the same book across your world
+   - `signs.txt` - all signs found in the world
+     - Organized by region file
+     - Shows chunk coordinates, block coordinates, and sign text
+     - Supports all sign variants (oak, birch, spruce, etc.) and hanging signs
+     - **Signs are counted by location:** Multiple signs with identical text are listed separately
+     - Example: 3 signs with same text at different coordinates = 3 entries in output
+   - `logs.txt` - program debug logs
 
+## Testing
+
+Integration tests are available using Spock Framework:
+
+```bash
+gradle test
+```
+
+### Test World Setup
+
+To add test worlds: Place Minecraft world in `src/test/resources/WORLDNAME-BOOKCOUNT-SIGNCOUNT/`
+   - Example: `src/test/resources/1_21_10-44-3/` (Minecraft 1.21.10 world with 44 books and 3 signs)
+   - `WORLDNAME`: Any descriptive name (e.g., `1_21_10`, `vanilla_1_18`, `modded_world`)
+   - `BOOKCOUNT`: Total number of books including duplicates (main folder + .duplicates folder)
+   - `SIGNCOUNT`: Total number of physical signs (counted by location, not unique text)
+
+**Note:** Signs with identical text but different locations are counted separately.
+
+### Test Output Locations
+
+When tests run, they create directories and output files in the project's `build/` folder (gitignored):
+
+**Test World Directories:**
+- Location: `build/test-worlds/<worldname>/`
+- Structure: Each test world is copied here with its output
+- Cleanup: **NOT automatically deleted** - persists for inspection
+- Example: `build/test-worlds/1_21_10-44-3/`
+
+**Test Report:**  `build/reports/tests/test/index.html`

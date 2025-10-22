@@ -19,6 +19,7 @@ out/
 bookOutput.txt
 signOutput.txt
 playerdataOutput.txt
+ReadBooks/
 
 # Compiled class files
 *.class
