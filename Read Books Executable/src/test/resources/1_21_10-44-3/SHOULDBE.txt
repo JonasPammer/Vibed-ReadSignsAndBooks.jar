@@ -1,0 +1,35 @@
+pseudo id (made up)                 count
+
+minecraft:dropper:                  2 books (1 book, 1 bundle with 1 book)
+minecraft:dispenser:                1 book
+minecraft:hopper:                   2 books (1 book, 1 bundle with 2 books)
+supplementaries:oak_shelf:          2 books (1 book, 1 bundle with 1 book)
+supplementaries:warped_shelf:       1 book
+3x supplementaries:oak_shelf:       9 books (all slots filled)
+copperchests:waxed_copper_chest:    1 book
+copperchests:copper_chest:          1 book
+copperchests:oxidized_copper_chest: 1 book
+minecraft:glow_item_frame:          1 book
+minecraft:item_frame:               1 book
+minecraft:barrel:                   1 book
+minecraft:chiseled_bookshelf:       1 book
+minecraft:chest:                    1 book
+minecraft:ender_chest:              1 book
+minecraft:trapped_chest:            2 books (1 book, 1 shulker box with 1 book)
+minecraft:shulker_box:              1 book
+minecraft:white_shulker_box:        1 book
+minecraft:furnace:                  1 book
+minecraft:blast_furnace:            1 book
+minecraft:smoker:                   1 book
+minecraft:chest_minecart:           1 book
+minecraft:hopper_minecart:          1 book
+minecraft:chest_boat:               1 book
+minecraft:donkey:                   1 book
+minecraft:lectern:                  0 (forgot)
+minecraft:player:                   13 books (in a stack)
+
+should be:                          56 (or, 44 if stack size is ignored)
+
+1 hanging birch sign: onesided
+1 birch sign: onesided
+1 warped sign: onesided

@@ -11,12 +11,16 @@ This tool scans Minecraft world files and extracts:
 - **Books in containers:** chests, barrels, shulker boxes, bundles, item frames, minecarts, boats, and more
 - **Books in containers of containers** (e.g., inside bundles in frames, inside shulker boxes in chests)
 - **Books in player inventories** and ender chests
+- **Books in mob inventories:** villagers, zombies, skeletons, piglins, and other mobs that can hold items
 
 ### Key Features
 
 - **Comprehensive container support:** Detects books in 24+ container types including nested containers (bundles in chests, etc.)
+- **Mob inventory support:** Extracts books from villagers, zombies, skeletons, piglins, and other mobs with inventories
 - **Duplicate tracking:** Saves duplicate books to `.duplicates/` folder instead of skipping them
 - **Sign location tracking:** Counts all physical signs by location, not just unique text content
+- **Summary statistics:** Detailed breakdown of books by container type and location, with performance metrics
+- **Command-line arguments:** Customize world directory, output directory, and enable/disable specific extraction types
 - **Version compatibility:** Supports Minecraft 1.13+ through 1.21+ (including 1.20.5+ item components)
 - **Detailed logging:** DEBUG-level logs show every block entity, sign, and book found
 
@@ -37,13 +41,14 @@ java -jar ReadSignsAndBooks.jar
 
 ## Usage
 
-1. Ensure you have the following folders in the project directory:
+1. Ensure you have the following folders in the executable's directory (or specify with `--world`):
    - `region/` - containing your Minecraft world region files (*.mca or *.mcr)
    - `playerdata/` - containing player data files (*.dat)
+   - `entities/` - containing entity files (*.mca) for Minecraft 1.17+
 
 2. Run the application using one of the methods above
 
-3. The tool will create output in `ReadBooks/YYYY-MM-DD/`:
+3. The tool will create output in `ReadBooks/YYYY-MM-DD/` (or custom path with `--output`):
    - `books/` - directory containing individual text files for each unique book
      - Each book is saved as: `NNN_written_title_by_author.txt` or `NNN_writable_book.txt`
      - Books are numbered sequentially (001, 002, 003, etc.)
@@ -56,7 +61,12 @@ java -jar ReadSignsAndBooks.jar
      - Supports all sign variants (oak, birch, spruce, etc.) and hanging signs
      - **Signs are counted by location:** Multiple signs with identical text are listed separately
      - Example: 3 signs with same text at different coordinates = 3 entries in output
-   - `logs.txt` - program debug logs
+   - `logs.txt` - program debug logs 
+   - `summary.txt`
+     - Shows total books/signs found
+     - Breakdown by container type (chests, shulker boxes, villagers, etc.)
+     - Breakdown by location type (block entities, entities, players)
+     - Processing time and performance metrics
 
 ## Testing
 
