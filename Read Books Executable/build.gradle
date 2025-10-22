@@ -29,6 +29,7 @@ sourceSets {
 
 repositories {
     mavenCentral()
+    maven { url 'https://jitpack.io' }
 }
 
 dependencies {
@@ -37,8 +38,8 @@ dependencies {
     // Picocli for command-line argument parsing (annotation-based, modern)
     implementation 'info.picocli:picocli:4.7.5'
 
-    // BitBuf NBT library - Modern, well-maintained NBT implementation
-    implementation 'dev.dewy:nbt:1.5.1'
+    // Querz NBT library - Complete NBT + MCA/Region file support
+    implementation 'com.github.Querz:NBT:6.1'
 
     // Spock Framework for testing
     testImplementation 'org.spockframework:spock-core:2.3-groovy-3.0'
@@ -59,7 +60,7 @@ tasks.withType(JavaCompile) {
 jar {
     manifest {
         attributes(
-            'Main-Class': 'Main'
+                'Main-Class': 'Main'
         )
     }
     archiveFileName = 'ReadSignsAndBooks.jar'
