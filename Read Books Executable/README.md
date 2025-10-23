@@ -35,10 +35,22 @@ Although the jar is also committed, here's how to build from source
 gradle build
 ```
 
-Now, copy the jar file into the world directory and run it from there:
+Run directly with Gradle:
 
 ```bash
-java -jar ReadSignsAndBooks.jar
+gradle run --args="--world /path/to/world"
+```
+
+To use custom JVM arguments for large worlds:
+
+```bash
+gradle run "-Dorg.gradle.jvmargs=-Xmx10G -XX:+UseG1GC -XX:MaxGCPauseMillis=200" --args="--world /path/to/world"
+```
+
+Or with built jar:
+
+```bash
+java -Xmx10G -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -jar ReadSignsAndBooks.jar --world /path/to/world
 ```
 
 ## Usage
