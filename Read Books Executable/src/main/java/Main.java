@@ -1033,6 +1033,7 @@ public class Main implements Runnable {
             logger.debug("    Found shulker box, scanning contents...");
 
             // Try new format first (1.20.5+ with components)
+            // Note: minecraft:container stores items as a list of slot records: {slot: int, item: ItemStack}
             if (hasKey(item, "components")) {
                 CompoundTag components = getCompoundTag(item, "components");
                 if (hasKey(components, "minecraft:container")) {
@@ -1059,6 +1060,7 @@ public class Main implements Runnable {
 
         // Bundle support (1.20.5+)
         // Matches: minecraft:bundle, minecraft:white_bundle, minecraft:orange_bundle, etc.
+        // Note: minecraft:bundle_contents stores items as a direct list of ItemStacks (not slot records like containers)
         if (itemId.contains("bundle")) {
             logger.debug("    Found bundle, scanning contents...");
 
@@ -1078,6 +1080,7 @@ public class Main implements Runnable {
         // Copper chest support (various oxidation states)
         // Matches: minecraft:copper_chest, minecraft:exposed_copper_chest, minecraft:weathered_copper_chest,
         //          minecraft:oxidized_copper_chest, and waxed variants
+        // Note: minecraft:container stores items as a list of slot records: {slot: int, item: ItemStack}
         if (itemId.contains("copper_chest")) {
             logger.debug("    Found copper chest, scanning contents...");
 
@@ -1161,35 +1164,25 @@ public class Main implements Runnable {
             bookHashes.add(pages.hashCode());
         }
 
-        // Extract author and title - handle both old format (plain string) and new format (text component)
+        // Extract author and title - handle both old format (plain string) and new format (filterable string)
         String author = "";
         String title = "";
 
-        // In 1.20.5+, author and title are stored as CompoundTags (text components)
-        // In pre-1.20.5, they're stored as strings
+        // IMPORTANT: In 1.20.5+, author is a plain STRING, but title is a filterable string (CompoundTag with "raw"/"filtered")
+        // In pre-1.20.5, both are plain strings
         if (tag.containsKey("author")) {
-            Tag<?> authorTag = tag.get("author");
-            if (authorTag instanceof CompoundTag authorComp) {
-                // 1.20.5+ format: text component
-                if (authorComp.containsKey("raw")) {
-                    author = authorComp.getString("raw");
-                } else if (authorComp.containsKey("text")) {
-                    author = authorComp.getString("text");
-                }
-            } else if (authorTag instanceof StringTag) {
-                // Pre-1.20.5 format: plain string
-                author = tag.getString("author");
-            }
+            // Author is always a plain string in both formats
+            author = tag.getString("author");
         }
 
         if (tag.containsKey("title")) {
             Tag<?> titleTag = tag.get("title");
             if (titleTag instanceof CompoundTag titleComp) {
-                // 1.20.5+ format: text component
+                // 1.20.5+ format: filterable string (compound with "raw"/"filtered" fields)
                 if (titleComp.containsKey("raw")) {
                     title = titleComp.getString("raw");
-                } else if (titleComp.containsKey("text")) {
-                    title = titleComp.getString("text");
+                } else if (titleComp.containsKey("filtered")) {
+                    title = titleComp.getString("filtered");
                 }
             } else if (titleTag instanceof StringTag) {
                 // Pre-1.20.5 format: plain string
@@ -1233,11 +1226,12 @@ public class Main implements Runnable {
             String pageText = null;
 
             // Check if pages are stored as strings (pre-1.20.5) or compounds (1.20.5+)
+            // In 1.20.5+, pages are filterable text components (compound with "raw"/"filtered" fields containing Component JSON)
             if (isStringList(pages)) {
                 // String list (pre-1.20.5)
                 pageText = getStringAt(pages, pc);
             } else if (isCompoundList(pages)) {
-                // Compound list (1.20.5+)
+                // Compound list (1.20.5+): filterable text components
                 CompoundTag pageCompound = getCompoundAt(pages, pc);
                 if (hasKey(pageCompound, "raw")) {
                     pageText = pageCompound.getString("raw");
@@ -1351,11 +1345,12 @@ public class Main implements Runnable {
             String pageText = null;
 
             // Check if pages are stored as strings (pre-1.20.5) or compounds (1.20.5+)
+            // In 1.20.5+, pages are filterable strings (compound with "raw"/"filtered" fields containing plain strings)
             if (isStringList(pages)) {
                 // String list (pre-1.20.5)
                 pageText = getStringAt(pages, pc);
             } else if (isCompoundList(pages)) {
-                // Compound list (1.20.5+)
+                // Compound list (1.20.5+): filterable strings
                 CompoundTag pageCompound = getCompoundAt(pages, pc);
                 if (hasKey(pageCompound, "raw")) {
                     pageText = pageCompound.getString("raw");
@@ -1446,13 +1441,14 @@ public class Main implements Runnable {
 
     /**
      * Parse sign in new format (front_text/back_text fields, introduced in 1.20)
+     * The front_text/back_text compounds contain a "messages" array of 4 text component JSON strings
      */
     private static void parseSignNew(CompoundTag tileEntity, BufferedWriter signWriter, String signInfo) throws IOException {
         logger.debug("    parseSignNew() - Extracting text from new format sign");
         // Get front_text compound
         CompoundTag frontText = getCompoundTag(tileEntity, "front_text");
 
-        // Extract messages array (contains 4 lines)
+        // Extract messages array (contains 4 text component JSON lines)
         ListTag<?> messages = getListTag(frontText, "messages");
 
         if (messages.size() == 0) {
