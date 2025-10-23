@@ -2,40 +2,23 @@
 type: "always_apply"
 ---
 
-# Custom Code Added to Handle Minecraft Format Changes
+# Querz NBT Library & Custom Format Handling
 
-## Why We Need Custom Code
+## Core Principle
+**Querz NBT library (`com.github.Querz:NBT:6.1`) handles all low-level NBT/MCA I/O.** Our custom code (132 lines in Main.java) only adds:
+1. Null-safe wrappers (returns empty objects instead of null)
+2. Format detection for Minecraft version changes (1.20, 1.20.5, 21w43a)
+3. Fallback logic for old/new format compatibility
 
-The Querz NBT library (`com.github.Querz:NBT:6.1`) is an excellent library for reading/writing NBT and MCA files, but it has limitations:
+## DO NOT
+- Replace Querz with custom NBT parsing
+- Add custom MCA file reading logic
+- Duplicate Querz functionality
 
-1. **Library is unmaintained**: Last updated ~6 years ago (version 6.1), does not include built-in support for newer Minecraft formats
-2. **No high-level format handling**: Library provides low-level NBT access but doesn't handle Minecraft's format changes across versions
-3. **Minecraft format evolution**: Minecraft has changed item/book/sign formats multiple times (1.13, 1.20, 1.20.5, 21w43a, etc.)
-
-## Custom Helper Methods Added (Main.java lines 1538-1669)
-
-We added minimal helper methods to handle format variations that the library doesn't know about:
-
-### 1. Safe Null-Handling Wrappers
-- `hasKey(CompoundTag, String)` - Null-safe key checking
-- `getCompoundTag(CompoundTag, String)` - Returns empty CompoundTag instead of null (easier chaining)
-- `getCompoundTagList(CompoundTag, String)` - Returns empty ListTag instead of null, with ClassCastException handling
-- `getListTag(CompoundTag, String)` - Returns empty ListTag instead of null
-
-**Reason**: Querz library returns null for missing keys, which requires verbose null checks. Our wrappers return empty objects for safer chaining.
-
-### 2. List Element Access Helpers
-- `getDoubleAt(ListTag, int)` - Extract double from list (for entity positions)
-- `getStringAt(ListTag, int)` - Extract string from list (for book pages)
-- `getCompoundAt(ListTag, int)` - Extract compound from list (for 1.20.5+ book pages)
-
-**Reason**: Querz library doesn't provide type-safe list element access. We need to handle both old formats (string lists) and new formats (compound lists).
-
-### 3. List Type Detection
-- `isStringList(ListTag)` - Check if list contains strings (pre-1.20.5 book pages)
-- `isCompoundList(ListTag)` - Check if list contains compounds (1.20.5+ book pages)
-
-**Reason**: Minecraft changed book page format from string list to compound list in 1.20.5. We need to detect which format to parse.
+## Custom Helper Methods (Main.java lines 1538-1669)
+- **Null-safe wrappers**: `hasKey()`, `getCompoundTag()`, `getCompoundTagList()`, `getListTag()`
+- **List access**: `getDoubleAt()`, `getStringAt()`, `getCompoundAt()`
+- **Type detection**: `isStringList()`, `isCompoundList()`
 
 ## Custom Format Handling Logic
 
@@ -146,7 +129,7 @@ if (authorTag instanceof CompoundTag) {
 3. **Fallback logic** to support both old and new formats
 
 **Do NOT**:
-- Replace Querz NBT library with custom NBT parsing
+- Replace Querz with custom NBT parsing
 - Add custom MCA file reading logic
 - Duplicate functionality that Querz already provides
 
