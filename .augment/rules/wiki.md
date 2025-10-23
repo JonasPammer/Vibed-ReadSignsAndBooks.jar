@@ -2,44 +2,20 @@
 type: "always_apply"
 ---
 
-Read the following links to find out everything about Minecraft's file formats,
-including changes over time and exact nbt tag paths.
+# Minecraft File Formats (Java Edition Only)
 
-# 1. https://minecraft.wiki/w/Java_Edition_level_format
+## World Directory Structure
+Reference: https://minecraft.wiki/w/Java_Edition_level_format
 
-**World directory structure**: Each world is a folder containing level.dat and subfolders for dimensions.
+**Directories we process**:
+- `playerdata/<uuid>.dat` - Player inventory/ender chest (via `NBTUtil.read()`)
+- `region/r.x.z.mca` - Chunk data with block entities (via `MCAUtil.read()`)
+- `entities/r.x.z.mca` - Entity data (1.17+, via `MCAUtil.read()`)
+- `DIM-1/region/`, `DIM-1/entities/` - Nether
+- `DIM1/region/`, `DIM1/entities/` - End
+- `dimensions/<namespace>/<path>/region/`, `/entities/` - Custom dimensions
 
-**Key directories used by our code**:
-- `playerdata/<uuid>.dat` - Player inventory/ender chest data (since 1.7.6)
-  - **Handled by**: `net.querz.nbt.io.NBTUtil.read(File)` - reads player NBT data
-  - **Our code**: `Main.readPlayerData()` iterates through playerdata folder, extracts books from player inventories and ender chests
-- `region/r.x.z.mca` - Overworld chunk data (block entities like chests, signs)
-  - **Handled by**: `net.querz.mca.MCAUtil.read(File, LoadFlags)`
-  - **Our code**: `Main.readBooksAnvil()` and `Main.readSignsAnvil()` process region files
-- `entities/r.x.z.mca` - Overworld entity data (minecarts, item frames) (since 20w45a/1.17)
-  - **Handled by**: `net.querz.mca.MCAUtil.read(File, LoadFlags)` - same API as chunk regions
-  - **Our code**: `Main.readEntities()` processes entity region files
-- `DIM-1/region/` - Nether chunk data
-- `DIM-1/entities/` - Nether entity data
-- `DIM1/region/` - End chunk data
-- `DIM1/entities/` - End entity data
-- `dimensions/<namespace>/<path>/region/` - Custom dimension chunk data
-- `dimensions/<namespace>/<path>/entities/` - Custom dimension entity data
-
-**Files/directories not used by our code**:
-- `level.dat` - World settings, game rules, spawn point, etc.
-- `session.lock` - File lock (contains single character ☃ U+2603 since 1.16-pre1, previously Unix timestamp)
-- `stats/<uuid>.json` - Player statistics
-- `advancements/<uuid>.json` - Player advancements/recipes
-- `data/` - Command storage, maps, raids, scoreboards, etc.
-- `poi/` - Points of interest (beds, job sites, portals, etc.)
-- `datapacks/` - Data packs
-- `resources.zip` - Resource pack
-
-**Deprecated formats**:
-- `players/<player>.dat` - Old player data location (pre-1.7.6)
-- `region/r.x.z.mcr` - Old MCRegion format (pre-1.2.1)
-- **Not handled by our code**: We only support modern formats (Anvil .mca files, UUID-based playerdata)
+**Not supported**: Bedrock Edition (uses LevelDB, not Anvil .mca files), old MCRegion format (.mcr), pre-1.7.6 player data
 
 
 ## 1a. https://minecraft.wiki/w/Anvil_file_format
@@ -102,32 +78,8 @@ We must only support Anvil, no need to handle old Region File.
 **Status field**: Indicates generation status (e.g., "minecraft:full" for complete, others for proto-chunks).
 - **Not used by our code**: We process all chunks regardless of status
 
-# 2. https://minecraft.wiki/w/Bedrock_Edition_level_format
+# 2. Bedrock Edition - NOT SUPPORTED
 
-**Bedrock Edition is NOT supported by our code or library.**
-
-**Bedrock Edition format differences**:
-- Uses LevelDB database (Google's LevelDB with Zlib compression) instead of Anvil .mca files
-- Stores world data in `db/` subdirectory with LevelDB format
-- Uses little-endian NBT format (Java Edition uses big-endian)
-- Different chunk key format (concatenation of coordinates + dimension + tag byte)
-- Different file structure (no `region/` folder, uses `db/` folder instead)
-
-**Why we don't support Bedrock**:
-- Querz NBT library (`com.github.Querz:NBT:6.1`) only supports Java Edition Anvil format (.mca files)
-- Querz NBT library does support little-endian NBT via `NBTDeserializer(compressed, littleEndian)` and `NBTSerializer(compressed, littleEndian)`, but does NOT support LevelDB database format
-- Our code only reads from `region/` and `entities/` folders with .mca files, not `db/` folders
-- Our code only reads player data from `playerdata/<uuid>.dat` files, not LevelDB keys
-
-**To support Bedrock Edition would require**:
-- A LevelDB library for Java (e.g., https://github.com/HiveGamesOSS/leveldb-mcpe-java)
-- Complete rewrite of world reading logic to use LevelDB API instead of MCA file API
-- Handling little-endian NBT format
-- Different chunk key parsing logic
-- Different level.dat structure (Bedrock uses different NBT structure with different field names and types)
-- This is out of scope for our current implementation
-
-**Note**: The Bedrock Edition level.dat and chunk NBT structures are completely different from Java Edition and are not documented here since we don't support Bedrock Edition
-(e.g., abilities, experiments, FlatWorldLayers, GameType, Generator, etc. vs Java Edition's Data, WorldGenSettings, GameRules, etc.).
+**Bedrock Edition uses LevelDB database (not Anvil .mca files).** Querz NBT library only supports Java Edition. Supporting Bedrock would require a LevelDB library and complete rewrite of world reading logic.
 
 
