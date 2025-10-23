@@ -7,14 +7,17 @@ plugins {
 group = 'com.minecraft'
 version = '1.0.0'
 
-sourceCompatibility = '1.8'
-targetCompatibility = '1.8'
+sourceCompatibility = '21'
+targetCompatibility = '21'
 
-// Specify source directory
+// Specify source directory (now using standard Maven/Gradle layout)
 sourceSets {
     main {
         java {
-            srcDirs = ['src']
+            srcDirs = ['src/main/java']
+        }
+        resources {
+            srcDirs = ['src/main/resources']
         }
     }
     test {
@@ -33,13 +36,23 @@ repositories {
 }
 
 dependencies {
-    implementation 'org.json:json:20180130'
+    // JSON library - latest stable version
+    implementation 'org.json:json:20250517'
 
     // Picocli for command-line argument parsing (annotation-based, modern)
-    implementation 'info.picocli:picocli:4.7.5'
+    implementation 'info.picocli:picocli:4.7.7'
 
     // Querz NBT library - Complete NBT + MCA/Region file support
     implementation 'com.github.Querz:NBT:6.1'
+
+    // SLF4J API for logging
+    implementation 'org.slf4j:slf4j-api:2.0.16'
+
+    // Logback as SLF4J implementation
+    implementation 'ch.qos.logback:logback-classic:1.5.12'
+
+    // Progress bar library for console output
+    implementation 'me.tongfei:progressbar:0.10.1'
 
     // Spock Framework for testing
     testImplementation 'org.spockframework:spock-core:2.3-groovy-3.0'

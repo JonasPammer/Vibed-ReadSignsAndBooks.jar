@@ -1,25 +1,25 @@
+import me.tongfei.progressbar.ProgressBar;
+import me.tongfei.progressbar.ProgressBarBuilder;
+import me.tongfei.progressbar.ProgressBarStyle;
 import net.querz.mca.Chunk;
 import net.querz.mca.LoadFlags;
 import net.querz.mca.MCAFile;
 import net.querz.mca.MCAUtil;
 import net.querz.nbt.io.NBTUtil;
 import net.querz.nbt.io.NamedTag;
-import net.querz.nbt.tag.CompoundTag;
-import net.querz.nbt.tag.ListTag;
-import net.querz.nbt.tag.NumberTag;
-import net.querz.nbt.tag.StringTag;
-import net.querz.nbt.tag.Tag;
+import net.querz.nbt.tag.*;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
-import java.awt.*;
-import java.io.*;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -33,6 +33,8 @@ import java.util.Map;
         version = "1.0")
 public class Main implements Runnable {
 
+    private static final Logger logger = LoggerFactory.getLogger(Main.class);
+
     static ArrayList<Integer> bookHashes = new ArrayList<Integer>();
     static ArrayList<String> signHashes = new ArrayList<String>();
     static String[] colorCodes = {"\u00A70", "\u00A71", "\u00A72", "\u00A73", "\u00A74", "\u00A75", "\u00A76", "\u00A77", "\u00A78", "\u00A79", "\u00A7a", "\u00A7b", "\u00A7c", "\u00A7d", "\u00A7e", "\u00A7f", "\u00A7k", "\u00A7l", "\u00A7m", "\u00A7n", "\u00A7o", "\u00A7r"};
@@ -40,13 +42,11 @@ public class Main implements Runnable {
     // Base directory for all file operations (defaults to current directory)
     static String baseDirectory = System.getProperty("user.dir");
 
-    // Logging infrastructure
-    static BufferedWriter logWriter;
+    // Output folders
     static String outputFolder;
     static String booksFolder;
     static String duplicatesFolder;
     static String dateStamp;
-    static SimpleDateFormat logTimeFormat = new SimpleDateFormat("HH:mm:ss.SSS");
     static int bookCounter = 0;
 
     // Statistics tracking
@@ -133,37 +133,48 @@ public class Main implements Runnable {
         booksFolder = outputFolder + File.separator + "books";
         duplicatesFolder = booksFolder + File.separator + ".duplicates";
 
+        // Configure Logback to write to the output folder BEFORE any logging
+        System.setProperty("LOG_FILE", new File(baseDirectory, outputFolder + File.separator + "logs.txt").getAbsolutePath());
+
+        // Reload Logback configuration to pick up the new LOG_FILE property
+        ch.qos.logback.classic.LoggerContext loggerContext = (ch.qos.logback.classic.LoggerContext) LoggerFactory.getILoggerFactory();
+        loggerContext.reset();
+        ch.qos.logback.classic.joran.JoranConfigurator configurator = new ch.qos.logback.classic.joran.JoranConfigurator();
+        configurator.setContext(loggerContext);
+        try {
+            configurator.doConfigure(Main.class.getClassLoader().getResourceAsStream("logback.xml"));
+        } catch (Exception e) {
+            // Fallback to basic configuration if logback.xml is not found
+            e.printStackTrace();
+        }
+
         // Create output directories (relative to baseDirectory)
         File outputDir = new File(baseDirectory, outputFolder);
         if (!outputDir.exists()) {
             outputDir.mkdirs();
-            System.out.println("Created output directory: " + outputDir.getAbsolutePath());
+            logger.info("Created output directory: {}", outputDir.getAbsolutePath());
         }
 
         File booksDirFile = new File(baseDirectory, booksFolder);
         if (!booksDirFile.exists()) {
             booksDirFile.mkdirs();
-            System.out.println("Created books directory: " + booksDirFile.getAbsolutePath());
+            logger.info("Created books directory: {}", booksDirFile.getAbsolutePath());
         }
 
         File duplicatesDirFile = new File(baseDirectory, duplicatesFolder);
         if (!duplicatesDirFile.exists()) {
             duplicatesDirFile.mkdirs();
-            System.out.println("Created duplicates directory: " + duplicatesDirFile.getAbsolutePath());
+            logger.info("Created duplicates directory: {}", duplicatesDirFile.getAbsolutePath());
         }
 
-        // Initialize log file (relative to baseDirectory)
-        File logFile = new File(baseDirectory, outputFolder + File.separator + "logs.txt");
-        logWriter = new BufferedWriter(new FileWriter(logFile));
-
-        log("INFO", "=".repeat(80));
-        log("INFO", "ReadSignsAndBooks - Minecraft World Data Extractor");
-        log("INFO", "Started at: " + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
-        log("INFO", "World directory: " + baseDirectory);
-        log("INFO", "Output folder: " + outputFolder);
-        log("INFO", "Book extraction: " + (enableBookExtraction ? "ENABLED" : "DISABLED"));
-        log("INFO", "Sign extraction: " + (enableSignExtraction ? "ENABLED" : "DISABLED"));
-        log("INFO", "=".repeat(80));
+        logger.info("=".repeat(80));
+        logger.info("ReadSignsAndBooks - Minecraft World Data Extractor");
+        logger.info("Started at: {}", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
+        logger.info("World directory: {}", baseDirectory);
+        logger.info("Output folder: {}", outputFolder);
+        logger.info("Book extraction: {}", enableBookExtraction ? "ENABLED" : "DISABLED");
+        logger.info("Sign extraction: {}", enableSignExtraction ? "ENABLED" : "DISABLED");
+        logger.info("=".repeat(80));
 
         long startTime = System.currentTimeMillis();
 
@@ -181,44 +192,11 @@ public class Main implements Runnable {
             // Print summary statistics
             printSummaryStatistics(elapsed);
 
-            System.out.println(elapsed / 1000 + " seconds to complete.");
+            logger.info("{} seconds to complete.", elapsed / 1000);
         } catch (Exception e) {
-            log("ERROR", "Fatal error during execution: " + e.getMessage());
-            logException(e);
+            logger.error("Fatal error during execution: {}", e.getMessage(), e);
             throw e;
-        } finally {
-            if (logWriter != null) {
-                logWriter.close();
-            }
         }
-    }
-
-    /**
-     * Log a message to both console and log file
-     */
-    static void log(String level, String message) {
-        String timestamp = logTimeFormat.format(new Date());
-        String logLine = "[" + timestamp + "] [" + level + "] " + message;
-        System.out.println(logLine);
-        try {
-            if (logWriter != null) {
-                logWriter.write(logLine);
-                logWriter.newLine();
-                logWriter.flush();
-            }
-        } catch (IOException e) {
-            System.err.println("Failed to write to log file: " + e.getMessage());
-        }
-    }
-
-    /**
-     * Log an exception with full stack trace
-     */
-    static void logException(Exception e) {
-        StringWriter sw = new StringWriter();
-        PrintWriter pw = new PrintWriter(sw);
-        e.printStackTrace(pw);
-        log("ERROR", "Exception stack trace:\n" + sw);
     }
 
     /**
@@ -323,10 +301,10 @@ public class Main implements Runnable {
         }
 
         // Also log to console and logs.txt
-        log("INFO", "");
-        log("INFO", "=".repeat(80));
-        log("INFO", "Summary statistics written to: " + summaryFile.getAbsolutePath());
-        log("INFO", "=".repeat(80));
+        logger.info("");
+        logger.info("{}", "=".repeat(80));
+        logger.info("Summary statistics written to: {}", summaryFile.getAbsolutePath());
+        logger.info("{}", "=".repeat(80));
     }
 
     /**
@@ -338,288 +316,63 @@ public class Main implements Runnable {
     }
 
     public static void readSignsAndBooks() throws IOException {
-        log("INFO", "Starting readSignsAndBooks()");
+        logger.info("Starting readSignsAndBooks()");
 
         File folder = new File(baseDirectory, "region");
         if (!folder.exists() || !folder.isDirectory()) {
-            log("WARN", "No region files found in: " + folder.getAbsolutePath());
+            logger.warn("No region files found in: {}", folder.getAbsolutePath());
             return;
         }
 
         File[] listOfFiles = folder.listFiles();
         if (listOfFiles == null || listOfFiles.length == 0) {
-            log("WARN", "No region files found in: " + folder.getAbsolutePath());
+            logger.warn("No region files found in: {}", folder.getAbsolutePath());
             return;
         }
 
-        log("INFO", "Found " + listOfFiles.length + " region files to process");
+        logger.info("Found {}", listOfFiles.length + " region files to process");
 
         File signOutput = new File(baseDirectory, outputFolder + File.separator + "signs.txt");
         BufferedWriter signWriter = new BufferedWriter(new FileWriter(signOutput));
 
-        log("INFO", "Output files:");
-        log("INFO", "  - Books: Individual files in " + booksFolder);
-        log("INFO", "  - Signs: " + signOutput.getAbsolutePath());
+        logger.info("Output files:");
+        logger.info("  - Books: Individual files in {}", booksFolder);
+        logger.info("  - Signs: {}", signOutput.getAbsolutePath());
 
         int processedFiles = 0;
         int totalChunks = 0;
         int totalSigns = 0;
         int totalBooks = 0;
 
-        for (int f = 0; f < listOfFiles.length; f++) {
-            String fileName = listOfFiles[f].getName();
-            log("DEBUG", "Processing region file [" + (f + 1) + "/" + listOfFiles.length + "]: " + fileName);
+        try (ProgressBar pb = new ProgressBarBuilder()
+                .setTaskName("Region files")
+                .setInitialMax(listOfFiles.length)
+                .setStyle(ProgressBarStyle.ASCII)
+                .build()) {
 
-            signWriter.newLine();
-            signWriter.write("--------------------------------" + fileName + "--------------------------------");
-            signWriter.newLine();
-            signWriter.newLine();
+            for (int f = 0; f < listOfFiles.length; f++) {
+                String fileName = listOfFiles[f].getName();
+                logger.debug("Processing region file [{}/{}]: {}", (f + 1), listOfFiles.length, fileName);
 
-            try {
-                // Load the entire region file using Querz MCA library
-                // Note: We use RAW mode to avoid chunk format validation (supports both old and new chunk formats)
-                MCAFile mcaFile = MCAUtil.read(listOfFiles[f], LoadFlags.RAW);
-
-                // Iterate through all chunks in the region (32x32 grid)
-                for (int x = 0; x < 32; x++) {
-                    for (int z = 0; z < 32; z++) {
-                        Chunk chunk = mcaFile.getChunk(x, z);
-                        if (chunk == null) {
-                            continue;
-                        }
-
-                        totalChunks++;
-
-                        // Get the raw chunk data
-                        CompoundTag chunkData = chunk.getHandle();
-                        if (chunkData == null) {
-                            continue;
-                        }
-
-                        // Handle both old format (with "Level" tag, removed in 21w43a/1.18) and new format (without "Level" tag)
-                        CompoundTag level = chunkData.getCompoundTag("Level");
-                        CompoundTag chunkRoot = (level != null) ? level : chunkData;
-
-                        // Get tile entities (block entities) from the chunk
-                        ListTag<CompoundTag> tileEntities = null;
-                        if (chunkRoot.containsKey("block_entities")) {
-                            // New format (21w43a+): uses "block_entities"
-                            tileEntities = getCompoundTagList(chunkRoot, "block_entities");
-                        } else if (chunkRoot.containsKey("TileEntities")) {
-                            // Old format (pre-21w43a): uses "TileEntities"
-                            tileEntities = getCompoundTagList(chunkRoot, "TileEntities");
-                        }
-                        if (tileEntities == null) {
-                            tileEntities = new ListTag<>(CompoundTag.class);
-                        }
-
-                        int chunkSigns = 0;
-                        int chunkBooks = 0;
-
-                        for (int i = 0; i < tileEntities.size(); i++) {
-                            CompoundTag tileEntity = tileEntities.get(i);
-                            {
-                                //If it is an item
-                                if (hasKey(tileEntity, "id")) {
-                                    String blockId = tileEntity.getString("id");
-                                    log("DEBUG", "  Chunk [" + x + "," + z + "] - Processing block entity: " + blockId);
-                                    ListTag<CompoundTag> chestItems = getCompoundTagList(tileEntity, "Items");
-                                    if (chestItems.size() > 0) {
-                                        log("DEBUG", "  Chunk [" + x + "," + z + "] - Found container " + tileEntity.getString("id") + " with " + chestItems.size() + " items");
-                                    }
-                                    for (int n = 0; n < chestItems.size(); n++) {
-                                        CompoundTag item = chestItems.get(n);
-                                        String bookInfo = ("Chunk [" + x + ", " + z + "] Inside " + tileEntity.getString("id") + " at (" + tileEntity.getInt("x") + " " + tileEntity.getInt("y") + " " + tileEntity.getInt("z") + ") " + listOfFiles[f].getName());
-                                        int booksBefore = bookCounter;
-                                        parseItem(item, bookInfo);
-                                        if (bookCounter > booksBefore) {
-                                            chunkBooks++;
-                                            incrementBookStats(blockId, "Block Entity");
-                                        }
-                                    }
-                                }
-
-                                //If Lectern (stores single book in "Book" tag, not "Items")
-                                if (hasKey(tileEntity, "Book")) {
-                                    CompoundTag book = getCompoundTag(tileEntity, "Book");
-                                    log("DEBUG", "  Chunk [" + x + "," + z + "] - Found lectern with book");
-                                    String bookInfo = ("Chunk [" + x + ", " + z + "] Inside " + tileEntity.getString("id") + " at (" + tileEntity.getInt("x") + " " + tileEntity.getInt("y") + " " + tileEntity.getInt("z") + ") " + listOfFiles[f].getName());
-                                    int booksBefore = bookCounter;
-                                    parseItem(book, bookInfo);
-                                    if (bookCounter > booksBefore) {
-                                        chunkBooks++;
-                                        incrementBookStats("Lectern", "Block Entity");
-                                    }
-                                }
-
-                                //If Sign (old format with Text1-Text4, changed in 1.20)
-                                if (hasKey(tileEntity, "Text1")) {
-                                    log("DEBUG", "  Chunk [" + x + "," + z + "] - Found sign (old format) at (" + tileEntity.getInt("x") + " " + tileEntity.getInt("y") + " " + tileEntity.getInt("z") + ")");
-                                    String signInfo = "Chunk [" + x + ", " + z + "]\t(" + tileEntity.getInt("x") + " " + tileEntity.getInt("y") + " " + tileEntity.getInt("z") + ")\t\t";
-                                    int signsBefore = signHashes.size();
-                                    parseSign(tileEntity, signWriter, signInfo);
-                                    if (signHashes.size() > signsBefore) {
-                                        chunkSigns++;
-                                        log("DEBUG", "    -> Sign was unique, added to output");
-                                    } else {
-                                        log("DEBUG", "    -> Sign was duplicate, skipped");
-                                    }
-                                }
-                                //If Sign (new format with front_text/back_text, introduced in 1.20)
-                                else if (hasKey(tileEntity, "front_text")) {
-                                    log("DEBUG", "  Chunk [" + x + "," + z + "] - Found sign (new format) at (" + tileEntity.getInt("x") + " " + tileEntity.getInt("y") + " " + tileEntity.getInt("z") + ")");
-                                    String signInfo = "Chunk [" + x + ", " + z + "]\t(" + tileEntity.getInt("x") + " " + tileEntity.getInt("y") + " " + tileEntity.getInt("z") + ")\t\t";
-                                    int signsBefore = signHashes.size();
-                                    parseSignNew(tileEntity, signWriter, signInfo);
-                                    if (signHashes.size() > signsBefore) {
-                                        chunkSigns++;
-                                        log("DEBUG", "    -> Sign was unique, added to output");
-                                    } else {
-                                        log("DEBUG", "    -> Sign was duplicate, skipped");
-                                    }
-                                }
-                            }
-                        }
-
-                        // Get entities from the chunk
-                        // Note: In 20w45a (1.17), entities were moved to separate entity files (entities/ folder)
-                        // However, for proto-chunks (incomplete generation), entities may still be in chunk data
-                        ListTag<CompoundTag> entities = null;
-                        if (chunkRoot.containsKey("entities")) {
-                            // New format (21w43a+): uses "entities"
-                            entities = getCompoundTagList(chunkRoot, "entities");
-                        } else if (chunkRoot.containsKey("Entities")) {
-                            // Old format (pre-21w43a): uses "Entities"
-                            entities = getCompoundTagList(chunkRoot, "Entities");
-                        }
-                        if (entities == null) {
-                            entities = new ListTag<>(CompoundTag.class);
-                        }
-
-                        for (int i = 0; i < entities.size(); i++) {
-                            CompoundTag entity = entities.get(i);
-                            {
-                                String entityId = entity.getString("id");
-
-                                //Donkey, llama, villagers, zombies, etc.
-                                if (hasKey(entity, "Items")) {
-                                    ListTag<CompoundTag> entityItems = getCompoundTagList(entity, "Items");
-                                    ListTag<?> entityPos = getListTag(entity, "Pos");
-
-                                    int xPos = (int) getDoubleAt(entityPos, 0);
-                                    int yPos = (int) getDoubleAt(entityPos, 1);
-                                    int zPos = (int) getDoubleAt(entityPos, 2);
-
-                                    if (entityItems.size() > 0) {
-                                        log("DEBUG", "  Chunk [" + x + "," + z + "] - Found " + entityId + " with " + entityItems.size() + " items at (" + xPos + "," + yPos + "," + zPos + ")");
-                                    }
-
-                                    for (int n = 0; n < entityItems.size(); n++) {
-                                        CompoundTag item = entityItems.get(n);
-                                        String bookInfo = ("Chunk [" + x + ", " + z + "] In " + entityId + " at (" + xPos + " " + yPos + " " + zPos + ") " + listOfFiles[f].getName());
-                                        int booksBefore = bookCounter;
-                                        parseItem(item, bookInfo);
-                                        if (bookCounter > booksBefore) {
-                                            chunkBooks++;
-                                            incrementBookStats(entityId, "Entity");
-                                        }
-                                    }
-                                }
-                                //Item frame or item on the ground
-                                if (hasKey(entity, "Item")) {
-                                    CompoundTag item = getCompoundTag(entity, "Item");
-                                    ListTag<?> entityPos = getListTag(entity, "Pos");
-
-                                    int xPos = (int) getDoubleAt(entityPos, 0);
-                                    int yPos = (int) getDoubleAt(entityPos, 1);
-                                    int zPos = (int) getDoubleAt(entityPos, 2);
-
-                                    String bookInfo = ("Chunk [" + x + ", " + z + "] In " + entityId + " at (" + xPos + " " + yPos + " " + zPos + ") " + listOfFiles[f].getName());
-                                    int booksBefore = bookCounter;
-                                    parseItem(item, bookInfo);
-                                    if (bookCounter > booksBefore) {
-                                        chunkBooks++;
-                                        incrementBookStats(entityId, "Entity");
-                                    }
-                                }
-                            }
-                        }
-
-                        totalSigns += chunkSigns;
-                        totalBooks += chunkBooks;
-
-                        if (chunkSigns > 0 || chunkBooks > 0) {
-                            log("DEBUG", "  Chunk [" + x + "," + z + "] - Found " + chunkSigns + " signs, " + chunkBooks + " books");
-                        }
-                    }
-                }
-            } catch (IOException e) {
-                log("ERROR", "Failed to read region file " + fileName + ": " + e.getMessage());
-                e.printStackTrace();
-            }
-
-            processedFiles++;
-            log("INFO", "Completed region file [" + processedFiles + "/" + listOfFiles.length + "]: " + fileName);
-        }
-
-        log("INFO", "");
-        log("INFO", "Processing complete!");
-        log("INFO", "Total region files processed: " + processedFiles);
-        log("INFO", "Total chunks processed: " + totalChunks);
-        log("INFO", "Total unique signs found: " + signHashes.size());
-        log("INFO", "Total unique books found: " + bookHashes.size());
-        log("INFO", "Total books extracted (including duplicates): " + bookCounter);
-
-        signWriter.newLine();
-        signWriter.write("Completed.");
-        signWriter.newLine();
-        signWriter.close();
-
-        log("INFO", "Output files written successfully");
-    }
-
-    /**
-     * Read entities from separate entity files (introduced in 20w45a/1.17)
-     * Entities like item frames, minecarts, boats are stored in entities/ folder
-     * Prior to 20w45a, entities were stored within chunk data in region files
-     */
-    public static void readEntities() throws IOException {
-        log("INFO", "Starting readEntities()");
-
-        File folder = new File(baseDirectory, "entities");
-        if (!folder.exists() || !folder.isDirectory()) {
-            log("DEBUG", "Entities folder not found (this is normal for pre-20w45a/1.17 worlds): " + folder.getAbsolutePath());
-            return;
-        }
-
-        File[] listOfFiles = folder.listFiles();
-        if (listOfFiles == null || listOfFiles.length == 0) {
-            log("DEBUG", "No entity files found in: " + folder.getAbsolutePath());
-            return;
-        }
-
-        log("INFO", "Found " + listOfFiles.length + " entity files to process");
-
-        int processedFiles = 0;
-        int totalEntities = 0;
-        int entitiesWithBooks = 0;
-
-        for (int f = 0; f < listOfFiles.length; f++) {
-            if (listOfFiles[f].isFile() && listOfFiles[f].getName().endsWith(".mca")) {
-                processedFiles++;
-                log("DEBUG", "Processing entity file [" + processedFiles + "/" + listOfFiles.length + "]: " + listOfFiles[f].getName());
+                signWriter.newLine();
+                signWriter.write("--------------------------------" + fileName + "--------------------------------");
+                signWriter.newLine();
+                signWriter.newLine();
 
                 try {
                     // Load the entire region file using Querz MCA library
                     // Note: We use RAW mode to avoid chunk format validation (supports both old and new chunk formats)
                     MCAFile mcaFile = MCAUtil.read(listOfFiles[f], LoadFlags.RAW);
 
+                    // Iterate through all chunks in the region (32x32 grid)
                     for (int x = 0; x < 32; x++) {
                         for (int z = 0; z < 32; z++) {
                             Chunk chunk = mcaFile.getChunk(x, z);
                             if (chunk == null) {
                                 continue;
                             }
+
+                            totalChunks++;
 
                             // Get the raw chunk data
                             CompoundTag chunkData = chunk.getHandle();
@@ -631,7 +384,90 @@ public class Main implements Runnable {
                             CompoundTag level = chunkData.getCompoundTag("Level");
                             CompoundTag chunkRoot = (level != null) ? level : chunkData;
 
-                            // Get the entities list from the chunk
+                            // Get tile entities (block entities) from the chunk
+                            ListTag<CompoundTag> tileEntities = null;
+                            if (chunkRoot.containsKey("block_entities")) {
+                                // New format (21w43a+): uses "block_entities"
+                                tileEntities = getCompoundTagList(chunkRoot, "block_entities");
+                            } else if (chunkRoot.containsKey("TileEntities")) {
+                                // Old format (pre-21w43a): uses "TileEntities"
+                                tileEntities = getCompoundTagList(chunkRoot, "TileEntities");
+                            }
+                            if (tileEntities == null) {
+                                tileEntities = new ListTag<>(CompoundTag.class);
+                            }
+
+                            int chunkSigns = 0;
+                            int chunkBooks = 0;
+
+                            for (int i = 0; i < tileEntities.size(); i++) {
+                                CompoundTag tileEntity = tileEntities.get(i);
+                                {
+                                    //If it is an item
+                                    if (hasKey(tileEntity, "id")) {
+                                        String blockId = tileEntity.getString("id");
+                                        logger.debug("  Chunk [{}", x + "," + z + "] - Processing block entity: " + blockId);
+                                        ListTag<CompoundTag> chestItems = getCompoundTagList(tileEntity, "Items");
+                                        if (chestItems.size() > 0) {
+                                            logger.debug("  Chunk [{},{}] - Found container {} with {} items", x, z, tileEntity.getString("id"), chestItems.size());
+                                        }
+                                        for (int n = 0; n < chestItems.size(); n++) {
+                                            CompoundTag item = chestItems.get(n);
+                                            String bookInfo = ("Chunk [" + x + ", " + z + "] Inside " + tileEntity.getString("id") + " at (" + tileEntity.getInt("x") + " " + tileEntity.getInt("y") + " " + tileEntity.getInt("z") + ") " + listOfFiles[f].getName());
+                                            int booksBefore = bookCounter;
+                                            parseItem(item, bookInfo);
+                                            if (bookCounter > booksBefore) {
+                                                chunkBooks++;
+                                                incrementBookStats(blockId, "Block Entity");
+                                            }
+                                        }
+                                    }
+
+                                    //If Lectern (stores single book in "Book" tag, not "Items")
+                                    if (hasKey(tileEntity, "Book")) {
+                                        CompoundTag book = getCompoundTag(tileEntity, "Book");
+                                        logger.debug("  Chunk [{}", x + "," + z + "] - Found lectern with book");
+                                        String bookInfo = ("Chunk [" + x + ", " + z + "] Inside " + tileEntity.getString("id") + " at (" + tileEntity.getInt("x") + " " + tileEntity.getInt("y") + " " + tileEntity.getInt("z") + ") " + listOfFiles[f].getName());
+                                        int booksBefore = bookCounter;
+                                        parseItem(book, bookInfo);
+                                        if (bookCounter > booksBefore) {
+                                            chunkBooks++;
+                                            incrementBookStats("Lectern", "Block Entity");
+                                        }
+                                    }
+
+                                    //If Sign (old format with Text1-Text4, changed in 1.20)
+                                    if (hasKey(tileEntity, "Text1")) {
+                                        logger.debug("  Chunk [{},{}] - Found sign (old format) at ({} {} {})", x, z, tileEntity.getInt("x"), tileEntity.getInt("y"), tileEntity.getInt("z"));
+                                        String signInfo = "Chunk [" + x + ", " + z + "]\t(" + tileEntity.getInt("x") + " " + tileEntity.getInt("y") + " " + tileEntity.getInt("z") + ")\t\t";
+                                        int signsBefore = signHashes.size();
+                                        parseSign(tileEntity, signWriter, signInfo);
+                                        if (signHashes.size() > signsBefore) {
+                                            chunkSigns++;
+                                            logger.debug("    -> Sign was unique, added to output");
+                                        } else {
+                                            logger.debug("    -> Sign was duplicate, skipped");
+                                        }
+                                    }
+                                    //If Sign (new format with front_text/back_text, introduced in 1.20)
+                                    else if (hasKey(tileEntity, "front_text")) {
+                                        logger.debug("  Chunk [{},{}] - Found sign (new format) at ({} {} {})", x, z, tileEntity.getInt("x"), tileEntity.getInt("y"), tileEntity.getInt("z"));
+                                        String signInfo = "Chunk [" + x + ", " + z + "]\t(" + tileEntity.getInt("x") + " " + tileEntity.getInt("y") + " " + tileEntity.getInt("z") + ")\t\t";
+                                        int signsBefore = signHashes.size();
+                                        parseSignNew(tileEntity, signWriter, signInfo);
+                                        if (signHashes.size() > signsBefore) {
+                                            chunkSigns++;
+                                            logger.debug("    -> Sign was unique, added to output");
+                                        } else {
+                                            logger.debug("    -> Sign was duplicate, skipped");
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Get entities from the chunk
+                            // Note: In 20w45a (1.17), entities were moved to separate entity files (entities/ folder)
+                            // However, for proto-chunks (incomplete generation), entities may still be in chunk data
                             ListTag<CompoundTag> entities = null;
                             if (chunkRoot.containsKey("entities")) {
                                 // New format (21w43a+): uses "entities"
@@ -645,73 +481,231 @@ public class Main implements Runnable {
                             }
 
                             for (int i = 0; i < entities.size(); i++) {
-                                totalEntities++;
                                 CompoundTag entity = entities.get(i);
+                                {
+                                    String entityId = entity.getString("id");
 
-                                String entityId = entity.getString("id");
-                                ListTag<?> entityPos = getListTag(entity, "Pos");
+                                    //Donkey, llama, villagers, zombies, etc.
+                                    if (hasKey(entity, "Items")) {
+                                        ListTag<CompoundTag> entityItems = getCompoundTagList(entity, "Items");
+                                        ListTag<?> entityPos = getListTag(entity, "Pos");
 
-                                int xPos = 0, yPos = 0, zPos = 0;
-                                if (entityPos.size() >= 3) {
-                                    xPos = (int) getDoubleAt(entityPos, 0);
-                                    yPos = (int) getDoubleAt(entityPos, 1);
-                                    zPos = (int) getDoubleAt(entityPos, 2);
+                                        int xPos = (int) getDoubleAt(entityPos, 0);
+                                        int yPos = (int) getDoubleAt(entityPos, 1);
+                                        int zPos = (int) getDoubleAt(entityPos, 2);
+
+                                        if (entityItems.size() > 0) {
+                                            logger.debug("  Chunk [{},{}] - Found {} with {} items at ({},{},{})", x, z, entityId, entityItems.size(), xPos, yPos, zPos);
+                                        }
+
+                                        for (int n = 0; n < entityItems.size(); n++) {
+                                            CompoundTag item = entityItems.get(n);
+                                            String bookInfo = ("Chunk [" + x + ", " + z + "] In " + entityId + " at (" + xPos + " " + yPos + " " + zPos + ") " + listOfFiles[f].getName());
+                                            int booksBefore = bookCounter;
+                                            parseItem(item, bookInfo);
+                                            if (bookCounter > booksBefore) {
+                                                chunkBooks++;
+                                                incrementBookStats(entityId, "Entity");
+                                            }
+                                        }
+                                    }
+                                    //Item frame or item on the ground
+                                    if (hasKey(entity, "Item")) {
+                                        CompoundTag item = getCompoundTag(entity, "Item");
+                                        ListTag<?> entityPos = getListTag(entity, "Pos");
+
+                                        int xPos = (int) getDoubleAt(entityPos, 0);
+                                        int yPos = (int) getDoubleAt(entityPos, 1);
+                                        int zPos = (int) getDoubleAt(entityPos, 2);
+
+                                        String bookInfo = ("Chunk [" + x + ", " + z + "] In " + entityId + " at (" + xPos + " " + yPos + " " + zPos + ") " + listOfFiles[f].getName());
+                                        int booksBefore = bookCounter;
+                                        parseItem(item, bookInfo);
+                                        if (bookCounter > booksBefore) {
+                                            chunkBooks++;
+                                            incrementBookStats(entityId, "Entity");
+                                        }
+                                    }
+                                }
+                            }
+
+                            totalSigns += chunkSigns;
+                            totalBooks += chunkBooks;
+
+                            if (chunkSigns > 0 || chunkBooks > 0) {
+                                logger.debug("  Chunk [{}", x + "," + z + "] - Found " + chunkSigns + " signs, " + chunkBooks + " books");
+                            }
+                        }
+                    }
+                } catch (IOException e) {
+                    logger.error("Failed to read region file {}: {}", fileName, e.getMessage());
+                    e.printStackTrace();
+                }
+
+                processedFiles++;
+                logger.info("Completed region file [{}", processedFiles + "/" + listOfFiles.length + "]: " + fileName);
+                pb.step();
+            }
+        }
+
+        logger.info("");
+        logger.info("Processing complete!");
+        logger.info("Total region files processed: {}", processedFiles);
+        logger.info("Total chunks processed: {}", totalChunks);
+        logger.info("Total unique signs found: {}", signHashes.size());
+        logger.info("Total unique books found: {}", bookHashes.size());
+        logger.info("Total books extracted (including duplicates): {}", bookCounter);
+
+        signWriter.newLine();
+        signWriter.write("Completed.");
+        signWriter.newLine();
+        signWriter.close();
+
+        logger.info("Output files written successfully");
+    }
+
+    /**
+     * Read entities from separate entity files (introduced in 20w45a/1.17)
+     * Entities like item frames, minecarts, boats are stored in entities/ folder
+     * Prior to 20w45a, entities were stored within chunk data in region files
+     */
+    public static void readEntities() throws IOException {
+        logger.info("Starting readEntities()");
+
+        File folder = new File(baseDirectory, "entities");
+        if (!folder.exists() || !folder.isDirectory()) {
+            logger.debug("Entities folder not found (this is normal for pre-20w45a/1.17 worlds): {}", folder.getAbsolutePath());
+            return;
+        }
+
+        File[] listOfFiles = folder.listFiles();
+        if (listOfFiles == null || listOfFiles.length == 0) {
+            logger.debug("No entity files found in: {}", folder.getAbsolutePath());
+            return;
+        }
+
+        logger.info("Found {}", listOfFiles.length + " entity files to process");
+
+        int processedFiles = 0;
+        int totalEntities = 0;
+        int entitiesWithBooks = 0;
+
+        try (ProgressBar pb = new ProgressBarBuilder()
+                .setTaskName("Entity files")
+                .setInitialMax(listOfFiles.length)
+                .setStyle(ProgressBarStyle.ASCII)
+                .build()) {
+
+            for (int f = 0; f < listOfFiles.length; f++) {
+                if (listOfFiles[f].isFile() && listOfFiles[f].getName().endsWith(".mca")) {
+                    processedFiles++;
+                    logger.debug("Processing entity file [{}/{}]: {}", processedFiles, listOfFiles.length, listOfFiles[f].getName());
+
+                    try {
+                        // Load the entire region file using Querz MCA library
+                        // Note: We use RAW mode to avoid chunk format validation (supports both old and new chunk formats)
+                        MCAFile mcaFile = MCAUtil.read(listOfFiles[f], LoadFlags.RAW);
+
+                        for (int x = 0; x < 32; x++) {
+                            for (int z = 0; z < 32; z++) {
+                                Chunk chunk = mcaFile.getChunk(x, z);
+                                if (chunk == null) {
+                                    continue;
                                 }
 
-                                int booksBefore = bookCounter;
+                                // Get the raw chunk data
+                                CompoundTag chunkData = chunk.getHandle();
+                                if (chunkData == null) {
+                                    continue;
+                                }
 
+                                // Handle both old format (with "Level" tag, removed in 21w43a/1.18) and new format (without "Level" tag)
+                                CompoundTag level = chunkData.getCompoundTag("Level");
+                                CompoundTag chunkRoot = (level != null) ? level : chunkData;
 
-                                // Entities with inventory (minecarts, boats, donkeys, llamas, villagers, zombies, etc.)
-                                if (hasKey(entity, "Items")) {
-                                    ListTag<CompoundTag> entityItems = getCompoundTagList(entity, "Items");
+                                // Get the entities list from the chunk
+                                ListTag<CompoundTag> entities = null;
+                                if (chunkRoot.containsKey("entities")) {
+                                    // New format (21w43a+): uses "entities"
+                                    entities = getCompoundTagList(chunkRoot, "entities");
+                                } else if (chunkRoot.containsKey("Entities")) {
+                                    // Old format (pre-21w43a): uses "Entities"
+                                    entities = getCompoundTagList(chunkRoot, "Entities");
+                                }
+                                if (entities == null) {
+                                    entities = new ListTag<>(CompoundTag.class);
+                                }
 
-                                    if (entityItems.size() > 0) {
-                                        log("DEBUG", "  Chunk [" + x + "," + z + "] - Found " + entityId + " with " + entityItems.size() + " items at (" + xPos + "," + yPos + "," + zPos + ")");
+                                for (int i = 0; i < entities.size(); i++) {
+                                    totalEntities++;
+                                    CompoundTag entity = entities.get(i);
+
+                                    String entityId = entity.getString("id");
+                                    ListTag<?> entityPos = getListTag(entity, "Pos");
+
+                                    int xPos = 0, yPos = 0, zPos = 0;
+                                    if (entityPos.size() >= 3) {
+                                        xPos = (int) getDoubleAt(entityPos, 0);
+                                        yPos = (int) getDoubleAt(entityPos, 1);
+                                        zPos = (int) getDoubleAt(entityPos, 2);
                                     }
 
-                                    for (int n = 0; n < entityItems.size(); n++) {
-                                        CompoundTag item = entityItems.get(n);
+                                    int booksBefore = bookCounter;
+
+
+                                    // Entities with inventory (minecarts, boats, donkeys, llamas, villagers, zombies, etc.)
+                                    if (hasKey(entity, "Items")) {
+                                        ListTag<CompoundTag> entityItems = getCompoundTagList(entity, "Items");
+
+                                        if (entityItems.size() > 0) {
+                                            logger.debug("  Chunk [{},{}] - Found {} with {} items at ({},{},{})", x, z, entityId, entityItems.size(), xPos, yPos, zPos);
+                                        }
+
+                                        for (int n = 0; n < entityItems.size(); n++) {
+                                            CompoundTag item = entityItems.get(n);
+                                            String bookInfo = ("Chunk [" + x + ", " + z + "] In " + entityId + " at (" + xPos + " " + yPos + " " + zPos + ") " + listOfFiles[f].getName());
+                                            int booksBeforeItem = bookCounter;
+                                            parseItem(item, bookInfo);
+                                            if (bookCounter > booksBeforeItem) {
+                                                incrementBookStats(entityId, "Entity");
+                                            }
+                                        }
+                                    }
+
+                                    // Item frames and items on ground (single item)
+                                    if (hasKey(entity, "Item")) {
+                                        CompoundTag item = getCompoundTag(entity, "Item");
                                         String bookInfo = ("Chunk [" + x + ", " + z + "] In " + entityId + " at (" + xPos + " " + yPos + " " + zPos + ") " + listOfFiles[f].getName());
+                                        logger.debug("  Chunk [{},{}] - Found {} with item at ({},{},{})", x, z, entityId, xPos, yPos, zPos);
                                         int booksBeforeItem = bookCounter;
                                         parseItem(item, bookInfo);
                                         if (bookCounter > booksBeforeItem) {
                                             incrementBookStats(entityId, "Entity");
                                         }
                                     }
-                                }
 
-                                // Item frames and items on ground (single item)
-                                if (hasKey(entity, "Item")) {
-                                    CompoundTag item = getCompoundTag(entity, "Item");
-                                    String bookInfo = ("Chunk [" + x + ", " + z + "] In " + entityId + " at (" + xPos + " " + yPos + " " + zPos + ") " + listOfFiles[f].getName());
-                                    log("DEBUG", "  Chunk [" + x + "," + z + "] - Found " + entityId + " with item at (" + xPos + "," + yPos + "," + zPos + ")");
-                                    int booksBeforeItem = bookCounter;
-                                    parseItem(item, bookInfo);
-                                    if (bookCounter > booksBeforeItem) {
-                                        incrementBookStats(entityId, "Entity");
+                                    if (bookCounter > booksBefore) {
+                                        entitiesWithBooks++;
                                     }
-                                }
-
-                                if (bookCounter > booksBefore) {
-                                    entitiesWithBooks++;
                                 }
                             }
                         }
+
+                        logger.info("Completed entity file [{}/{}]: {}", processedFiles, listOfFiles.length, listOfFiles[f].getName());
+
+                    } catch (Exception e) {
+                        logger.error("Error processing entity file {}: {}", listOfFiles[f].getName(), e.getMessage());
+                        // Exception already logged above
                     }
-
-                    log("INFO", "Completed entity file [" + processedFiles + "/" + listOfFiles.length + "]: " + listOfFiles[f].getName());
-
-                } catch (Exception e) {
-                    log("ERROR", "Error processing entity file " + listOfFiles[f].getName() + ": " + e.getMessage());
-                    logException(e);
+                    pb.step();
                 }
             }
         }
 
-        log("INFO", "Entity processing complete!");
-        log("INFO", "Total entity files processed: " + processedFiles);
-        log("INFO", "Total entities scanned: " + totalEntities);
-        log("INFO", "Entities with books: " + entitiesWithBooks);
+        logger.info("Entity processing complete!");
+        logger.info("Total entity files processed: {}", processedFiles);
+        logger.info("Total entities scanned: {}", totalEntities);
+        logger.info("Entities with books: {}", entitiesWithBooks);
     }
 
     public static void readSignsAnvil() throws IOException {
@@ -778,7 +772,7 @@ public class Main implements Runnable {
                     }
                 }
             } catch (IOException e) {
-                log("ERROR", "Failed to read region file " + listOfFiles[f].getName() + ": " + e.getMessage());
+                logger.error("Failed to read region file {}: {}", listOfFiles[f].getName(), e.getMessage());
                 e.printStackTrace();
             }
         }
@@ -789,67 +783,75 @@ public class Main implements Runnable {
     }
 
     public static void readPlayerData() throws IOException {
-        log("INFO", "Starting readPlayerData()");
+        logger.info("Starting readPlayerData()");
 
         File folder = new File(baseDirectory, "playerdata");
         if (!folder.exists() || !folder.isDirectory()) {
-            log("WARN", "No player data files found in: " + folder.getAbsolutePath());
+            logger.warn("No player data files found in: {}", folder.getAbsolutePath());
             return;
         }
 
         File[] listOfFiles = folder.listFiles();
         if (listOfFiles == null || listOfFiles.length == 0) {
-            log("WARN", "No player data files found in: " + folder.getAbsolutePath());
+            logger.warn("No player data files found in: {}", folder.getAbsolutePath());
             return;
         }
 
-        log("INFO", "Found " + listOfFiles.length + " player data files to process");
+        logger.info("Found {}", listOfFiles.length + " player data files to process");
 
         int totalPlayerBooks = 0;
 
         //Loop through player .dat files
-        for (int i = 0; i < listOfFiles.length; i++) {
-            log("DEBUG", "Processing player data [" + (i + 1) + "/" + listOfFiles.length + "]: " + listOfFiles[i].getName());
+        try (ProgressBar pb = new ProgressBarBuilder()
+                .setTaskName("Player data")
+                .setInitialMax(listOfFiles.length)
+                .setStyle(ProgressBarStyle.ASCII)
+                .build()) {
 
-            CompoundTag playerCompound = readCompressedNBT(listOfFiles[i]);
-            ListTag<CompoundTag> playerInventory = getCompoundTagList(playerCompound, "Inventory");
+            for (int i = 0; i < listOfFiles.length; i++) {
+                logger.debug("Processing player data [{}/{}]: {}", (i + 1), listOfFiles.length, listOfFiles[i].getName());
 
-            int playerBooks = 0;
+                CompoundTag playerCompound = readCompressedNBT(listOfFiles[i]);
+                ListTag<CompoundTag> playerInventory = getCompoundTagList(playerCompound, "Inventory");
 
-            for (int n = 0; n < playerInventory.size(); n++) {
-                CompoundTag item = playerInventory.get(n);
-                String bookInfo = ("Inventory of player " + listOfFiles[i].getName());
-                int booksBefore = bookCounter;
-                parseItem(item, bookInfo);
-                if (bookCounter > booksBefore) {
-                    playerBooks++;
-                    incrementBookStats("Player Inventory", "Player");
+                int playerBooks = 0;
+
+                for (int n = 0; n < playerInventory.size(); n++) {
+                    CompoundTag item = playerInventory.get(n);
+                    String bookInfo = ("Inventory of player " + listOfFiles[i].getName());
+                    int booksBefore = bookCounter;
+                    parseItem(item, bookInfo);
+                    if (bookCounter > booksBefore) {
+                        playerBooks++;
+                        incrementBookStats("Player Inventory", "Player");
+                    }
                 }
-            }
 
-            ListTag<CompoundTag> enderInventory = getCompoundTagList(playerCompound, "EnderItems");
+                ListTag<CompoundTag> enderInventory = getCompoundTagList(playerCompound, "EnderItems");
 
-            for (int e = 0; e < enderInventory.size(); e++) {
-                CompoundTag item = enderInventory.get(e);
-                String bookInfo = ("Ender Chest of player " + listOfFiles[i].getName());
-                int booksBefore = bookCounter;
-                parseItem(item, bookInfo);
-                if (bookCounter > booksBefore) {
-                    playerBooks++;
-                    incrementBookStats("Ender Chest", "Player");
+                for (int e = 0; e < enderInventory.size(); e++) {
+                    CompoundTag item = enderInventory.get(e);
+                    String bookInfo = ("Ender Chest of player " + listOfFiles[i].getName());
+                    int booksBefore = bookCounter;
+                    parseItem(item, bookInfo);
+                    if (bookCounter > booksBefore) {
+                        playerBooks++;
+                        incrementBookStats("Ender Chest", "Player");
+                    }
                 }
-            }
 
-            if (playerBooks > 0) {
-                log("DEBUG", "  Found " + playerBooks + " books in player inventory/ender chest");
-            }
-            totalPlayerBooks += playerBooks;
+                if (playerBooks > 0) {
+                    logger.debug("  Found {}", playerBooks + " books in player inventory/ender chest");
+                }
+                totalPlayerBooks += playerBooks;
 
-            //MCR.CompoundTag nbttagcompound = MCR.CompressedStreamTools.func_1138_a(fileinputstream);
+                pb.step();
+                //MCR.CompoundTag nbttagcompound = MCR.CompressedStreamTools.func_1138_a(fileinputstream);
+            }
         }
 
-        log("INFO", "Player data processing complete!");
-        log("INFO", "Total books found in player inventories: " + totalPlayerBooks);
+        logger.info("Player data processing complete!");
+        logger.info("Total books found in player inventories: {}", totalPlayerBooks);
     }
 
     public static void readBooksAnvil() throws IOException {
@@ -961,7 +963,7 @@ public class Main implements Runnable {
                     }
                 }
             } catch (IOException e) {
-                log("ERROR", "Failed to read region file " + listOfFiles[f].getName() + ": " + e.getMessage());
+                logger.error("Failed to read region file {}: {}", listOfFiles[f].getName(), e.getMessage());
                 e.printStackTrace();
             }
         }
@@ -1020,22 +1022,22 @@ public class Main implements Runnable {
         String itemId = item.getString("id");
 
         if (itemId.equals("minecraft:written_book")) {
-            log("DEBUG", "    Found written book: " + bookInfo.substring(0, Math.min(80, bookInfo.length())) + "...");
+            logger.debug("    Found written book: {}...", bookInfo.substring(0, Math.min(80, bookInfo.length())));
             readWrittenBook(item, bookInfo);
         }
         if (itemId.equals("minecraft:writable_book")) {
-            log("DEBUG", "    Found writable book: " + bookInfo.substring(0, Math.min(80, bookInfo.length())) + "...");
+            logger.debug("    Found writable book: {}...", bookInfo.substring(0, Math.min(80, bookInfo.length())));
             readWritableBook(item, bookInfo);
         }
         if (itemId.contains("shulker_box")) {
-            log("DEBUG", "    Found shulker box, scanning contents...");
+            logger.debug("    Found shulker box, scanning contents...");
 
             // Try new format first (1.20.5+ with components)
             if (hasKey(item, "components")) {
                 CompoundTag components = getCompoundTag(item, "components");
                 if (hasKey(components, "minecraft:container")) {
                     ListTag<CompoundTag> shelkerContents = getCompoundTagList(components, "minecraft:container");
-                    log("DEBUG", "      Shulker box contains " + shelkerContents.size() + " items (1.20.5+ format)");
+                    logger.debug("      Shulker box contains {} items (1.20.5+ format)", shelkerContents.size());
                     for (int i = 0; i < shelkerContents.size(); i++) {
                         CompoundTag containerEntry = shelkerContents.get(i);
                         CompoundTag shelkerItem = getCompoundTag(containerEntry, "item");
@@ -1047,7 +1049,7 @@ public class Main implements Runnable {
                 CompoundTag shelkerCompound = getCompoundTag(item, "tag");
                 CompoundTag shelkerCompound2 = getCompoundTag(shelkerCompound, "BlockEntityTag");
                 ListTag<CompoundTag> shelkerContents = getCompoundTagList(shelkerCompound2, "Items");
-                log("DEBUG", "      Shulker box contains " + shelkerContents.size() + " items (pre-1.20.5 format)");
+                logger.debug("      Shulker box contains {} items (pre-1.20.5 format)", shelkerContents.size());
                 for (int i = 0; i < shelkerContents.size(); i++) {
                     CompoundTag shelkerItem = shelkerContents.get(i);
                     parseItem(shelkerItem, bookInfo + " > shulker_box");
@@ -1058,13 +1060,13 @@ public class Main implements Runnable {
         // Bundle support (1.20.5+)
         // Matches: minecraft:bundle, minecraft:white_bundle, minecraft:orange_bundle, etc.
         if (itemId.contains("bundle")) {
-            log("DEBUG", "    Found bundle, scanning contents...");
+            logger.debug("    Found bundle, scanning contents...");
 
             if (hasKey(item, "components")) {
                 CompoundTag components = getCompoundTag(item, "components");
                 if (hasKey(components, "minecraft:bundle_contents")) {
                     ListTag<CompoundTag> bundleContents = getCompoundTagList(components, "minecraft:bundle_contents");
-                    log("DEBUG", "      Bundle contains " + bundleContents.size() + " items");
+                    logger.debug("      Bundle contains {} items", bundleContents.size());
                     for (int i = 0; i < bundleContents.size(); i++) {
                         CompoundTag bundleItem = bundleContents.get(i);
                         parseItem(bundleItem, bookInfo + " > bundle");
@@ -1077,13 +1079,13 @@ public class Main implements Runnable {
         // Matches: minecraft:copper_chest, minecraft:exposed_copper_chest, minecraft:weathered_copper_chest,
         //          minecraft:oxidized_copper_chest, and waxed variants
         if (itemId.contains("copper_chest")) {
-            log("DEBUG", "    Found copper chest, scanning contents...");
+            logger.debug("    Found copper chest, scanning contents...");
 
             if (hasKey(item, "components")) {
                 CompoundTag components = getCompoundTag(item, "components");
                 if (hasKey(components, "minecraft:container")) {
                     ListTag<CompoundTag> chestContents = getCompoundTagList(components, "minecraft:container");
-                    log("DEBUG", "      Copper chest contains " + chestContents.size() + " items");
+                    logger.debug("      Copper chest contains {} items", chestContents.size());
                     for (int i = 0; i < chestContents.size(); i++) {
                         CompoundTag containerEntry = chestContents.get(i);
                         CompoundTag chestItem = getCompoundTag(containerEntry, "item");
@@ -1095,7 +1097,7 @@ public class Main implements Runnable {
                 CompoundTag chestCompound = getCompoundTag(item, "tag");
                 CompoundTag chestCompound2 = getCompoundTag(chestCompound, "BlockEntityTag");
                 ListTag<CompoundTag> chestContents = getCompoundTagList(chestCompound2, "Items");
-                log("DEBUG", "      Copper chest contains " + chestContents.size() + " items (pre-1.20.5 format)");
+                logger.debug("      Copper chest contains {} items (pre-1.20.5 format)", chestContents.size());
                 for (int i = 0; i < chestContents.size(); i++) {
                     CompoundTag chestItem = chestContents.get(i);
                     parseItem(chestItem, bookInfo + " > copper_chest");
@@ -1147,14 +1149,14 @@ public class Main implements Runnable {
         }
 
         if (pages == null || pages.size() == 0) {
-            log("DEBUG", "      Written book has no pages (format: " + format + ")");
+            logger.debug("      Written book has no pages (format: {})", format);
             return;
         }
 
         // Check if this is a duplicate
         boolean isDuplicate = bookHashes.contains(pages.hashCode());
         if (isDuplicate) {
-            log("DEBUG", "      Written book is a duplicate - saving to .duplicates folder");
+            logger.debug("      Written book is a duplicate - saving to .duplicates folder");
         } else {
             bookHashes.add(pages.hashCode());
         }
@@ -1167,9 +1169,8 @@ public class Main implements Runnable {
         // In pre-1.20.5, they're stored as strings
         if (tag.containsKey("author")) {
             Tag<?> authorTag = tag.get("author");
-            if (authorTag instanceof CompoundTag) {
+            if (authorTag instanceof CompoundTag authorComp) {
                 // 1.20.5+ format: text component
-                CompoundTag authorComp = (CompoundTag) authorTag;
                 if (authorComp.containsKey("raw")) {
                     author = authorComp.getString("raw");
                 } else if (authorComp.containsKey("text")) {
@@ -1183,9 +1184,8 @@ public class Main implements Runnable {
 
         if (tag.containsKey("title")) {
             Tag<?> titleTag = tag.get("title");
-            if (titleTag instanceof CompoundTag) {
+            if (titleTag instanceof CompoundTag titleComp) {
                 // 1.20.5+ format: text component
-                CompoundTag titleComp = (CompoundTag) titleTag;
                 if (titleComp.containsKey("raw")) {
                     title = titleComp.getString("raw");
                 } else if (titleComp.containsKey("text")) {
@@ -1197,7 +1197,7 @@ public class Main implements Runnable {
             }
         }
 
-        log("DEBUG", "      Extracted written book: \"" + title + "\" by " + author + " (" + pages.size() + " pages, format: " + format + ")");
+        logger.debug("      Extracted written book: \"{}\" by {} ({} pages, format: {})", title, author, pages.size(), format);
 
         // Create individual file for this book
         bookCounter++;
@@ -1208,7 +1208,7 @@ public class Main implements Runnable {
         File bookFile = new File(baseDirectory, targetFolder + File.separator + filename);
         BufferedWriter writer = new BufferedWriter(new FileWriter(bookFile));
 
-        log("DEBUG", "      Writing book to: " + (isDuplicate ? ".duplicates/" : "") + filename);
+        logger.debug("      Writing book to: {}{}", (isDuplicate ? ".duplicates/" : ""), filename);
 
         writer.write("=".repeat(80));
         writer.newLine();
@@ -1306,19 +1306,19 @@ public class Main implements Runnable {
         }
 
         if (pages == null || pages.size() == 0) {
-            log("DEBUG", "      Writable book has no pages (format: " + format + ")");
+            logger.debug("      Writable book has no pages (format: {})", format);
             return;
         }
 
         // Check if this is a duplicate
         boolean isDuplicate = bookHashes.contains(pages.hashCode());
         if (isDuplicate) {
-            log("DEBUG", "      Writable book is a duplicate - saving to .duplicates folder");
+            logger.debug("      Writable book is a duplicate - saving to .duplicates folder");
         } else {
             bookHashes.add(pages.hashCode());
         }
 
-        log("DEBUG", "      Extracted writable book (" + pages.size() + " pages, format: " + format + ")");
+        logger.debug("      Extracted writable book ({} pages, format: {})", pages.size(), format);
 
         // Create individual file for this book
         bookCounter++;
@@ -1329,7 +1329,7 @@ public class Main implements Runnable {
         File bookFile = new File(baseDirectory, targetFolder + File.separator + filename);
         BufferedWriter writer = new BufferedWriter(new FileWriter(bookFile));
 
-        log("DEBUG", "      Writing book to: " + (isDuplicate ? ".duplicates/" : "") + filename);
+        logger.debug("      Writing book to: {}{}", (isDuplicate ? ".duplicates/" : ""), filename);
 
         writer.write("=".repeat(80));
         writer.newLine();
@@ -1382,12 +1382,12 @@ public class Main implements Runnable {
      * Parse sign in old format (Text1-Text4 fields, used before 1.20)
      */
     private static void parseSign(CompoundTag tileEntity, BufferedWriter signWriter, String signInfo) throws IOException {
-        log("DEBUG", "    parseSign() - Extracting text from old format sign");
+        logger.debug("    parseSign() - Extracting text from old format sign");
         String text1 = tileEntity.getString("Text1");
         String text2 = tileEntity.getString("Text2");
         String text3 = tileEntity.getString("Text3");
         String text4 = tileEntity.getString("Text4");
-        log("DEBUG", "    parseSign() - Raw text: [" + text1 + "] [" + text2 + "] [" + text3 + "] [" + text4 + "]");
+        logger.debug("    parseSign() - Raw text: [{}", text1 + "] [" + text2 + "] [" + text3 + "] [" + text4 + "]");
 
         JSONObject json1 = null;
         JSONObject json2 = null;
@@ -1399,14 +1399,14 @@ public class Main implements Runnable {
         // Create hash based on LOCATION + TEXT to count all physical signs
         // (not just unique text content like we did before)
         String hash = signInfo + text1 + text2 + text3 + text4;
-        log("DEBUG", "    parseSign() - Sign hash (location+text): [" + hash + "]");
-        log("DEBUG", "    parseSign() - Current signHashes size: " + signHashes.size());
+        logger.debug("    parseSign() - Sign hash (location+text): [{}", hash + "]");
+        logger.debug("    parseSign() - Current signHashes size: {}", signHashes.size());
         if (signHashes.contains(hash)) {
-            log("DEBUG", "    parseSign() - Sign is duplicate (same location+text), returning early");
+            logger.debug("    parseSign() - Sign is duplicate (same location+text), returning early");
             return;
         } else {
             signHashes.add(hash);
-            log("DEBUG", "    parseSign() - Sign is unique, added to hash list");
+            logger.debug("    parseSign() - Sign is unique, added to hash list");
         }
 
         JSONObject[] objects = {json1, json2, json3, json4};
@@ -1448,7 +1448,7 @@ public class Main implements Runnable {
      * Parse sign in new format (front_text/back_text fields, introduced in 1.20)
      */
     private static void parseSignNew(CompoundTag tileEntity, BufferedWriter signWriter, String signInfo) throws IOException {
-        log("DEBUG", "    parseSignNew() - Extracting text from new format sign");
+        logger.debug("    parseSignNew() - Extracting text from new format sign");
         // Get front_text compound
         CompoundTag frontText = getCompoundTag(tileEntity, "front_text");
 
@@ -1456,7 +1456,7 @@ public class Main implements Runnable {
         ListTag<?> messages = getListTag(frontText, "messages");
 
         if (messages.size() == 0) {
-            log("DEBUG", "    parseSignNew() - No messages found, returning");
+            logger.debug("    parseSignNew() - No messages found, returning");
             return;
         }
 
@@ -1464,7 +1464,7 @@ public class Main implements Runnable {
         String text2 = getStringAt(messages, 1);
         String text3 = getStringAt(messages, 2);
         String text4 = getStringAt(messages, 3);
-        log("DEBUG", "    parseSignNew() - Raw text: [" + text1 + "] [" + text2 + "] [" + text3 + "] [" + text4 + "]");
+        logger.debug("    parseSignNew() - Raw text: [{}", text1 + "] [" + text2 + "] [" + text3 + "] [" + text4 + "]");
 
         JSONObject json1 = null;
         JSONObject json2 = null;
@@ -1476,14 +1476,14 @@ public class Main implements Runnable {
         // Create hash based on LOCATION + TEXT to count all physical signs
         // (not just unique text content like we did before)
         String hash = signInfo + text1 + text2 + text3 + text4;
-        log("DEBUG", "    parseSignNew() - Sign hash (location+text): [" + hash + "]");
-        log("DEBUG", "    parseSignNew() - Current signHashes size: " + signHashes.size());
+        logger.debug("    parseSignNew() - Sign hash (location+text): [{}", hash + "]");
+        logger.debug("    parseSignNew() - Current signHashes size: {}", signHashes.size());
         if (signHashes.contains(hash)) {
-            log("DEBUG", "    parseSignNew() - Sign is duplicate (same location+text), returning early");
+            logger.debug("    parseSignNew() - Sign is duplicate (same location+text), returning early");
             return;
         } else {
             signHashes.add(hash);
-            log("DEBUG", "    parseSignNew() - Sign is unique, added to hash list");
+            logger.debug("    parseSignNew() - Sign is unique, added to hash list");
         }
 
         JSONObject[] objects = {json1, json2, json3, json4};
@@ -1677,59 +1677,6 @@ public class Main implements Runnable {
             e.printStackTrace();
             System.exit(1);
         }
-    }
-
-    public void displayGUI() {
-
-        /**
-         * add nether support
-         * GUI TO-DO
-         * Read saves folder, dropdown menu for each world
-         * books + signs in one app
-         * sign filter option. Lifts, [private], empty etc.
-         * Book author / title filter
-         * progress bar
-         * SCAN ITEM FRAME AND FURNACES
-         * ender chests
-         * shulker chests
-         * item frames
-         * remove colour tags and such
-         * multithreading
-         */
-
-        File minecraftDir = new File(System.getenv("APPDATA") + "\\.minecraft\\saves");
-
-        Choice test = new Choice();
-
-        for (int i = 0; i < minecraftDir.listFiles().length; i++) {
-            if (minecraftDir.listFiles()[i].isDirectory()) {
-                File worldFolder = minecraftDir.listFiles()[i];
-                Path leveldat = Paths.get(worldFolder.getAbsolutePath() + "\\level.dat");
-
-
-                if (Files.exists(leveldat))
-                    test.add(worldFolder.getName());
-            }
-        }
-
-        Frame frame = new Frame();
-        frame.setSize(new Dimension(500, 400));
-        frame.setLayout(new FlowLayout());
-        frame.setTitle("Test");
-        frame.setResizable(false);
-        frame.setVisible(true);
-
-        Button btn = new Button("Output Signs");
-        btn.setLocation(1, 10);
-        btn.setSize(50, 50);
-
-        Button btn2 = new Button("Output books");
-        btn.setLocation(1, 10);
-        btn.setSize(50, 50);
-
-        frame.add(btn);
-        frame.add(btn2);
-        frame.add(test);
     }
 
 }
