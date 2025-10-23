@@ -6,6 +6,9 @@ import net.querz.nbt.io.NBTUtil;
 import net.querz.nbt.io.NamedTag;
 import net.querz.nbt.tag.CompoundTag;
 import net.querz.nbt.tag.ListTag;
+import net.querz.nbt.tag.NumberTag;
+import net.querz.nbt.tag.StringTag;
+import net.querz.nbt.tag.Tag;
 import org.json.JSONException;
 import org.json.JSONObject;
 import picocli.CommandLine;
@@ -374,7 +377,7 @@ public class Main implements Runnable {
 
             try {
                 // Load the entire region file using Querz MCA library
-                // Note: We use RAW mode to avoid chunk format validation (supports both pre-1.18 and 1.18+ formats)
+                // Note: We use RAW mode to avoid chunk format validation (supports both old and new chunk formats)
                 MCAFile mcaFile = MCAUtil.read(listOfFiles[f], LoadFlags.RAW);
 
                 // Iterate through all chunks in the region (32x32 grid)
@@ -393,18 +396,18 @@ public class Main implements Runnable {
                             continue;
                         }
 
-                        // Handle both pre-1.18 (with "Level" tag) and 1.18+ (without "Level" tag) formats
+                        // Handle both old format (with "Level" tag, removed in 21w43a/1.18) and new format (without "Level" tag)
                         CompoundTag level = chunkData.getCompoundTag("Level");
                         CompoundTag chunkRoot = (level != null) ? level : chunkData;
 
-                        // Get tile entities from the chunk
+                        // Get tile entities (block entities) from the chunk
                         ListTag<CompoundTag> tileEntities = null;
                         if (chunkRoot.containsKey("block_entities")) {
-                            // 1.18+ format uses "block_entities"
-                            tileEntities = getTagList(chunkRoot, "block_entities", 10);
+                            // New format (21w43a+): uses "block_entities"
+                            tileEntities = getCompoundTagList(chunkRoot, "block_entities");
                         } else if (chunkRoot.containsKey("TileEntities")) {
-                            // Pre-1.18 format uses "TileEntities"
-                            tileEntities = getTagList(chunkRoot, "TileEntities", 10);
+                            // Old format (pre-21w43a): uses "TileEntities"
+                            tileEntities = getCompoundTagList(chunkRoot, "TileEntities");
                         }
                         if (tileEntities == null) {
                             tileEntities = new ListTag<>(CompoundTag.class);
@@ -413,20 +416,20 @@ public class Main implements Runnable {
                         int chunkSigns = 0;
                         int chunkBooks = 0;
 
-                        for (int i = 0; i < tagCount(tileEntities); i++) {
-                            CompoundTag tileEntity = getCompoundTagAt(tileEntities, i);
+                        for (int i = 0; i < tileEntities.size(); i++) {
+                            CompoundTag tileEntity = tileEntities.get(i);
                             {
                                 //If it is an item
                                 if (hasKey(tileEntity, "id")) {
-                                    String blockId = getString(tileEntity, "id");
+                                    String blockId = tileEntity.getString("id");
                                     log("DEBUG", "  Chunk [" + x + "," + z + "] - Processing block entity: " + blockId);
-                                    ListTag<CompoundTag> chestItems = getTagList(tileEntity, "Items", 10);
-                                    if (tagCount(chestItems) > 0) {
-                                        log("DEBUG", "  Chunk [" + x + "," + z + "] - Found container " + getString(tileEntity, "id") + " with " + tagCount(chestItems) + " items");
+                                    ListTag<CompoundTag> chestItems = getCompoundTagList(tileEntity, "Items");
+                                    if (chestItems.size() > 0) {
+                                        log("DEBUG", "  Chunk [" + x + "," + z + "] - Found container " + tileEntity.getString("id") + " with " + chestItems.size() + " items");
                                     }
-                                    for (int n = 0; n < tagCount(chestItems); n++) {
-                                        CompoundTag item = getCompoundTagAt(chestItems, n);
-                                        String bookInfo = ("Chunk [" + x + ", " + z + "] Inside " + getString(tileEntity, "id") + " at (" + getInteger(tileEntity, "x") + " " + getInteger(tileEntity, "y") + " " + getInteger(tileEntity, "z") + ") " + listOfFiles[f].getName());
+                                    for (int n = 0; n < chestItems.size(); n++) {
+                                        CompoundTag item = chestItems.get(n);
+                                        String bookInfo = ("Chunk [" + x + ", " + z + "] Inside " + tileEntity.getString("id") + " at (" + tileEntity.getInt("x") + " " + tileEntity.getInt("y") + " " + tileEntity.getInt("z") + ") " + listOfFiles[f].getName());
                                         int booksBefore = bookCounter;
                                         parseItem(item, bookInfo);
                                         if (bookCounter > booksBefore) {
@@ -440,7 +443,7 @@ public class Main implements Runnable {
                                 if (hasKey(tileEntity, "Book")) {
                                     CompoundTag book = getCompoundTag(tileEntity, "Book");
                                     log("DEBUG", "  Chunk [" + x + "," + z + "] - Found lectern with book");
-                                    String bookInfo = ("Chunk [" + x + ", " + z + "] Inside " + getString(tileEntity, "id") + " at (" + getInteger(tileEntity, "x") + " " + getInteger(tileEntity, "y") + " " + getInteger(tileEntity, "z") + ") " + listOfFiles[f].getName());
+                                    String bookInfo = ("Chunk [" + x + ", " + z + "] Inside " + tileEntity.getString("id") + " at (" + tileEntity.getInt("x") + " " + tileEntity.getInt("y") + " " + tileEntity.getInt("z") + ") " + listOfFiles[f].getName());
                                     int booksBefore = bookCounter;
                                     parseItem(book, bookInfo);
                                     if (bookCounter > booksBefore) {
@@ -449,10 +452,10 @@ public class Main implements Runnable {
                                     }
                                 }
 
-                                //If Sign (pre-1.20 format with Text1-Text4)
+                                //If Sign (old format with Text1-Text4, changed in 1.20)
                                 if (hasKey(tileEntity, "Text1")) {
-                                    log("DEBUG", "  Chunk [" + x + "," + z + "] - Found sign (pre-1.20 format) at (" + getInteger(tileEntity, "x") + " " + getInteger(tileEntity, "y") + " " + getInteger(tileEntity, "z") + ")");
-                                    String signInfo = "Chunk [" + x + ", " + z + "]\t(" + getInteger(tileEntity, "x") + " " + getInteger(tileEntity, "y") + " " + getInteger(tileEntity, "z") + ")\t\t";
+                                    log("DEBUG", "  Chunk [" + x + "," + z + "] - Found sign (old format) at (" + tileEntity.getInt("x") + " " + tileEntity.getInt("y") + " " + tileEntity.getInt("z") + ")");
+                                    String signInfo = "Chunk [" + x + ", " + z + "]\t(" + tileEntity.getInt("x") + " " + tileEntity.getInt("y") + " " + tileEntity.getInt("z") + ")\t\t";
                                     int signsBefore = signHashes.size();
                                     parseSign(tileEntity, signWriter, signInfo);
                                     if (signHashes.size() > signsBefore) {
@@ -462,10 +465,10 @@ public class Main implements Runnable {
                                         log("DEBUG", "    -> Sign was duplicate, skipped");
                                     }
                                 }
-                                //If Sign (1.20+ format with front_text/back_text)
+                                //If Sign (new format with front_text/back_text, introduced in 1.20)
                                 else if (hasKey(tileEntity, "front_text")) {
-                                    log("DEBUG", "  Chunk [" + x + "," + z + "] - Found sign (1.20+ format) at (" + getInteger(tileEntity, "x") + " " + getInteger(tileEntity, "y") + " " + getInteger(tileEntity, "z") + ")");
-                                    String signInfo = "Chunk [" + x + ", " + z + "]\t(" + getInteger(tileEntity, "x") + " " + getInteger(tileEntity, "y") + " " + getInteger(tileEntity, "z") + ")\t\t";
+                                    log("DEBUG", "  Chunk [" + x + "," + z + "] - Found sign (new format) at (" + tileEntity.getInt("x") + " " + tileEntity.getInt("y") + " " + tileEntity.getInt("z") + ")");
+                                    String signInfo = "Chunk [" + x + ", " + z + "]\t(" + tileEntity.getInt("x") + " " + tileEntity.getInt("y") + " " + tileEntity.getInt("z") + ")\t\t";
                                     int signsBefore = signHashes.size();
                                     parseSignNew(tileEntity, signWriter, signInfo);
                                     if (signHashes.size() > signsBefore) {
@@ -479,38 +482,40 @@ public class Main implements Runnable {
                         }
 
                         // Get entities from the chunk
+                        // Note: In 20w45a (1.17), entities were moved to separate entity files (entities/ folder)
+                        // However, for proto-chunks (incomplete generation), entities may still be in chunk data
                         ListTag<CompoundTag> entities = null;
                         if (chunkRoot.containsKey("entities")) {
-                            // 1.18+ format uses "entities"
-                            entities = getTagList(chunkRoot, "entities", 10);
+                            // New format (21w43a+): uses "entities"
+                            entities = getCompoundTagList(chunkRoot, "entities");
                         } else if (chunkRoot.containsKey("Entities")) {
-                            // Pre-1.18 format uses "Entities"
-                            entities = getTagList(chunkRoot, "Entities", 10);
+                            // Old format (pre-21w43a): uses "Entities"
+                            entities = getCompoundTagList(chunkRoot, "Entities");
                         }
                         if (entities == null) {
                             entities = new ListTag<>(CompoundTag.class);
                         }
 
-                        for (int i = 0; i < tagCount(entities); i++) {
-                            CompoundTag entity = getCompoundTagAt(entities, i);
+                        for (int i = 0; i < entities.size(); i++) {
+                            CompoundTag entity = entities.get(i);
                             {
-                                String entityId = getString(entity, "id");
+                                String entityId = entity.getString("id");
 
                                 //Donkey, llama, villagers, zombies, etc.
                                 if (hasKey(entity, "Items")) {
-                                    ListTag<CompoundTag> entityItems = getTagList(entity, "Items", 10);
-                                    ListTag<?> entityPos = getTagList(entity, "Pos", 6);
+                                    ListTag<CompoundTag> entityItems = getCompoundTagList(entity, "Items");
+                                    ListTag<?> entityPos = getListTag(entity, "Pos");
 
-                                    int xPos = (int) Double.parseDouble(getStringTagAt(entityPos, 0));
-                                    int yPos = (int) Double.parseDouble(getStringTagAt(entityPos, 1));
-                                    int zPos = (int) Double.parseDouble(getStringTagAt(entityPos, 2));
+                                    int xPos = (int) getDoubleAt(entityPos, 0);
+                                    int yPos = (int) getDoubleAt(entityPos, 1);
+                                    int zPos = (int) getDoubleAt(entityPos, 2);
 
-                                    if (tagCount(entityItems) > 0) {
-                                        log("DEBUG", "  Chunk [" + x + "," + z + "] - Found " + entityId + " with " + tagCount(entityItems) + " items at (" + xPos + "," + yPos + "," + zPos + ")");
+                                    if (entityItems.size() > 0) {
+                                        log("DEBUG", "  Chunk [" + x + "," + z + "] - Found " + entityId + " with " + entityItems.size() + " items at (" + xPos + "," + yPos + "," + zPos + ")");
                                     }
 
-                                    for (int n = 0; n < tagCount(entityItems); n++) {
-                                        CompoundTag item = getCompoundTagAt(entityItems, n);
+                                    for (int n = 0; n < entityItems.size(); n++) {
+                                        CompoundTag item = entityItems.get(n);
                                         String bookInfo = ("Chunk [" + x + ", " + z + "] In " + entityId + " at (" + xPos + " " + yPos + " " + zPos + ") " + listOfFiles[f].getName());
                                         int booksBefore = bookCounter;
                                         parseItem(item, bookInfo);
@@ -523,11 +528,11 @@ public class Main implements Runnable {
                                 //Item frame or item on the ground
                                 if (hasKey(entity, "Item")) {
                                     CompoundTag item = getCompoundTag(entity, "Item");
-                                    ListTag<?> entityPos = getTagList(entity, "Pos", 6);
+                                    ListTag<?> entityPos = getListTag(entity, "Pos");
 
-                                    int xPos = (int) Double.parseDouble(getStringTagAt(entityPos, 0));
-                                    int yPos = (int) Double.parseDouble(getStringTagAt(entityPos, 1));
-                                    int zPos = (int) Double.parseDouble(getStringTagAt(entityPos, 2));
+                                    int xPos = (int) getDoubleAt(entityPos, 0);
+                                    int yPos = (int) getDoubleAt(entityPos, 1);
+                                    int zPos = (int) getDoubleAt(entityPos, 2);
 
                                     String bookInfo = ("Chunk [" + x + ", " + z + "] In " + entityId + " at (" + xPos + " " + yPos + " " + zPos + ") " + listOfFiles[f].getName());
                                     int booksBefore = bookCounter;
@@ -574,15 +579,16 @@ public class Main implements Runnable {
     }
 
     /**
-     * Read entities from separate entity files (Minecraft 1.17+)
+     * Read entities from separate entity files (introduced in 20w45a/1.17)
      * Entities like item frames, minecarts, boats are stored in entities/ folder
+     * Prior to 20w45a, entities were stored within chunk data in region files
      */
     public static void readEntities() throws IOException {
         log("INFO", "Starting readEntities()");
 
         File folder = new File(baseDirectory, "entities");
         if (!folder.exists() || !folder.isDirectory()) {
-            log("DEBUG", "Entities folder not found (this is normal for pre-1.17 worlds): " + folder.getAbsolutePath());
+            log("DEBUG", "Entities folder not found (this is normal for pre-20w45a/1.17 worlds): " + folder.getAbsolutePath());
             return;
         }
 
@@ -605,7 +611,7 @@ public class Main implements Runnable {
 
                 try {
                     // Load the entire region file using Querz MCA library
-                    // Note: We use RAW mode to avoid chunk format validation (supports both pre-1.18 and 1.18+ formats)
+                    // Note: We use RAW mode to avoid chunk format validation (supports both old and new chunk formats)
                     MCAFile mcaFile = MCAUtil.read(listOfFiles[f], LoadFlags.RAW);
 
                     for (int x = 0; x < 32; x++) {
@@ -621,35 +627,35 @@ public class Main implements Runnable {
                                 continue;
                             }
 
-                            // Handle both pre-1.18 (with "Level" tag) and 1.18+ (without "Level" tag) formats
+                            // Handle both old format (with "Level" tag, removed in 21w43a/1.18) and new format (without "Level" tag)
                             CompoundTag level = chunkData.getCompoundTag("Level");
                             CompoundTag chunkRoot = (level != null) ? level : chunkData;
 
                             // Get the entities list from the chunk
                             ListTag<CompoundTag> entities = null;
                             if (chunkRoot.containsKey("entities")) {
-                                // 1.18+ format uses "entities"
-                                entities = getTagList(chunkRoot, "entities", 10);
+                                // New format (21w43a+): uses "entities"
+                                entities = getCompoundTagList(chunkRoot, "entities");
                             } else if (chunkRoot.containsKey("Entities")) {
-                                // Pre-1.18 format uses "Entities"
-                                entities = getTagList(chunkRoot, "Entities", 10);
+                                // Old format (pre-21w43a): uses "Entities"
+                                entities = getCompoundTagList(chunkRoot, "Entities");
                             }
                             if (entities == null) {
                                 entities = new ListTag<>(CompoundTag.class);
                             }
 
-                            for (int i = 0; i < tagCount(entities); i++) {
+                            for (int i = 0; i < entities.size(); i++) {
                                 totalEntities++;
-                                CompoundTag entity = getCompoundTagAt(entities, i);
+                                CompoundTag entity = entities.get(i);
 
-                                String entityId = getString(entity, "id");
-                                ListTag<?> entityPos = getTagList(entity, "Pos", 6);
+                                String entityId = entity.getString("id");
+                                ListTag<?> entityPos = getListTag(entity, "Pos");
 
                                 int xPos = 0, yPos = 0, zPos = 0;
-                                if (tagCount(entityPos) >= 3) {
-                                    xPos = (int) Double.parseDouble(getStringTagAt(entityPos, 0));
-                                    yPos = (int) Double.parseDouble(getStringTagAt(entityPos, 1));
-                                    zPos = (int) Double.parseDouble(getStringTagAt(entityPos, 2));
+                                if (entityPos.size() >= 3) {
+                                    xPos = (int) getDoubleAt(entityPos, 0);
+                                    yPos = (int) getDoubleAt(entityPos, 1);
+                                    zPos = (int) getDoubleAt(entityPos, 2);
                                 }
 
                                 int booksBefore = bookCounter;
@@ -657,14 +663,14 @@ public class Main implements Runnable {
 
                                 // Entities with inventory (minecarts, boats, donkeys, llamas, villagers, zombies, etc.)
                                 if (hasKey(entity, "Items")) {
-                                    ListTag<?> entityItems = getTagList(entity, "Items", 10);
+                                    ListTag<CompoundTag> entityItems = getCompoundTagList(entity, "Items");
 
-                                    if (tagCount(entityItems) > 0) {
-                                        log("DEBUG", "  Chunk [" + x + "," + z + "] - Found " + entityId + " with " + tagCount(entityItems) + " items at (" + xPos + "," + yPos + "," + zPos + ")");
+                                    if (entityItems.size() > 0) {
+                                        log("DEBUG", "  Chunk [" + x + "," + z + "] - Found " + entityId + " with " + entityItems.size() + " items at (" + xPos + "," + yPos + "," + zPos + ")");
                                     }
 
-                                    for (int n = 0; n < tagCount(entityItems); n++) {
-                                        CompoundTag item = getCompoundTagAt(entityItems, n);
+                                    for (int n = 0; n < entityItems.size(); n++) {
+                                        CompoundTag item = entityItems.get(n);
                                         String bookInfo = ("Chunk [" + x + ", " + z + "] In " + entityId + " at (" + xPos + " " + yPos + " " + zPos + ") " + listOfFiles[f].getName());
                                         int booksBeforeItem = bookCounter;
                                         parseItem(item, bookInfo);
@@ -722,7 +728,7 @@ public class Main implements Runnable {
 
             try {
                 // Load the entire region file using Querz MCA library
-                // Note: We use RAW mode to avoid chunk format validation (supports both pre-1.18 and 1.18+ formats)
+                // Note: We use RAW mode to avoid chunk format validation (supports both old and new chunk formats)
                 MCAFile mcaFile = MCAUtil.read(listOfFiles[f], LoadFlags.RAW);
 
                 for (int x = 0; x < 32; x++) {
@@ -738,34 +744,34 @@ public class Main implements Runnable {
                             continue;
                         }
 
-                        // Handle both pre-1.18 (with "Level" tag) and 1.18+ (without "Level" tag) formats
+                        // Handle both old format (with "Level" tag, removed in 21w43a/1.18) and new format (without "Level" tag)
                         CompoundTag level = chunkData.getCompoundTag("Level");
                         CompoundTag chunkRoot = (level != null) ? level : chunkData;
 
-                        // Get tile entities from the chunk
+                        // Get tile entities (block entities) from the chunk
                         ListTag<CompoundTag> tileEntities = null;
                         if (chunkRoot.containsKey("block_entities")) {
-                            // 1.18+ format uses "block_entities"
-                            tileEntities = getTagList(chunkRoot, "block_entities", 10);
+                            // New format (21w43a+): uses "block_entities"
+                            tileEntities = getCompoundTagList(chunkRoot, "block_entities");
                         } else if (chunkRoot.containsKey("TileEntities")) {
-                            // Pre-1.18 format uses "TileEntities"
-                            tileEntities = getTagList(chunkRoot, "TileEntities", 10);
+                            // Old format (pre-21w43a): uses "TileEntities"
+                            tileEntities = getCompoundTagList(chunkRoot, "TileEntities");
                         }
                         if (tileEntities == null) {
                             tileEntities = new ListTag<>(CompoundTag.class);
                         }
 
-                        for (int i = 0; i < tagCount(tileEntities); i++) {
-                            CompoundTag entity = getCompoundTagAt(tileEntities, i);
+                        for (int i = 0; i < tileEntities.size(); i++) {
+                            CompoundTag entity = tileEntities.get(i);
 
-                            //If Sign (pre-1.20 format)
+                            //If Sign (old format, changed in 1.20)
                             if (hasKey(entity, "Text1")) {
-                                String signInfo = "Chunk [" + x + ", " + z + "]\t(" + getInteger(entity, "x") + " " + getInteger(entity, "y") + " " + getInteger(entity, "z") + ")\t\t";
+                                String signInfo = "Chunk [" + x + ", " + z + "]\t(" + entity.getInt("x") + " " + entity.getInt("y") + " " + entity.getInt("z") + ")\t\t";
                                 parseSign(entity, writer, signInfo);
                             }
-                            //If Sign (1.20+ format)
+                            //If Sign (new format, introduced in 1.20)
                             else if (hasKey(entity, "front_text")) {
-                                String signInfo = "Chunk [" + x + ", " + z + "]\t(" + getInteger(entity, "x") + " " + getInteger(entity, "y") + " " + getInteger(entity, "z") + ")\t\t";
+                                String signInfo = "Chunk [" + x + ", " + z + "]\t(" + entity.getInt("x") + " " + entity.getInt("y") + " " + entity.getInt("z") + ")\t\t";
                                 parseSignNew(entity, writer, signInfo);
                             }
                         }
@@ -806,12 +812,12 @@ public class Main implements Runnable {
             log("DEBUG", "Processing player data [" + (i + 1) + "/" + listOfFiles.length + "]: " + listOfFiles[i].getName());
 
             CompoundTag playerCompound = readCompressedNBT(listOfFiles[i]);
-            ListTag<CompoundTag> playerInventory = getTagList(playerCompound, "Inventory", 10);
+            ListTag<CompoundTag> playerInventory = getCompoundTagList(playerCompound, "Inventory");
 
             int playerBooks = 0;
 
-            for (int n = 0; n < tagCount(playerInventory); n++) {
-                CompoundTag item = getCompoundTagAt(playerInventory, n);
+            for (int n = 0; n < playerInventory.size(); n++) {
+                CompoundTag item = playerInventory.get(n);
                 String bookInfo = ("Inventory of player " + listOfFiles[i].getName());
                 int booksBefore = bookCounter;
                 parseItem(item, bookInfo);
@@ -821,10 +827,10 @@ public class Main implements Runnable {
                 }
             }
 
-            ListTag<?> enderInventory = getTagList(playerCompound, "EnderItems", 10);
+            ListTag<CompoundTag> enderInventory = getCompoundTagList(playerCompound, "EnderItems");
 
-            for (int e = 0; e < tagCount(enderInventory); e++) {
-                CompoundTag item = getCompoundTagAt(playerInventory, e);
+            for (int e = 0; e < enderInventory.size(); e++) {
+                CompoundTag item = enderInventory.get(e);
                 String bookInfo = ("Ender Chest of player " + listOfFiles[i].getName());
                 int booksBefore = bookCounter;
                 parseItem(item, bookInfo);
@@ -855,7 +861,7 @@ public class Main implements Runnable {
         for (int f = 0; f < listOfFiles.length; f++) {
             try {
                 // Load the entire region file using Querz MCA library
-                // Note: We use RAW mode to avoid chunk format validation (supports both pre-1.18 and 1.18+ formats)
+                // Note: We use RAW mode to avoid chunk format validation (supports both old and new chunk formats)
                 MCAFile mcaFile = MCAUtil.read(listOfFiles[f], LoadFlags.RAW);
 
                 for (int x = 0; x < 32; x++) {
@@ -871,32 +877,32 @@ public class Main implements Runnable {
                             continue;
                         }
 
-                        // Handle both pre-1.18 (with "Level" tag) and 1.18+ (without "Level" tag) formats
+                        // Handle both old format (with "Level" tag, removed in 21w43a/1.18) and new format (without "Level" tag)
                         CompoundTag level = chunkData.getCompoundTag("Level");
                         CompoundTag chunkRoot = (level != null) ? level : chunkData;
 
-                        // Get tile entities from the chunk
+                        // Get tile entities (block entities) from the chunk
                         ListTag<CompoundTag> tileEntities = null;
                         if (chunkRoot.containsKey("block_entities")) {
-                            // 1.18+ format uses "block_entities"
-                            tileEntities = getTagList(chunkRoot, "block_entities", 10);
+                            // New format (21w43a+): uses "block_entities"
+                            tileEntities = getCompoundTagList(chunkRoot, "block_entities");
                         } else if (chunkRoot.containsKey("TileEntities")) {
-                            // Pre-1.18 format uses "TileEntities"
-                            tileEntities = getTagList(chunkRoot, "TileEntities", 10);
+                            // Old format (pre-21w43a): uses "TileEntities"
+                            tileEntities = getCompoundTagList(chunkRoot, "TileEntities");
                         }
                         if (tileEntities == null) {
                             tileEntities = new ListTag<>(CompoundTag.class);
                         }
 
-                        for (int i = 0; i < tagCount(tileEntities); i++) {
-                            CompoundTag tileEntity = getCompoundTagAt(tileEntities, i);
+                        for (int i = 0; i < tileEntities.size(); i++) {
+                            CompoundTag tileEntity = tileEntities.get(i);
                             {
                                 if (hasKey(tileEntity, "id")) //If it is an item
                                 {
-                                    ListTag<CompoundTag> chestItems = getTagList(tileEntity, "Items", 10);
-                                    for (int n = 0; n < tagCount(chestItems); n++) {
-                                        CompoundTag item = getCompoundTagAt(chestItems, n);
-                                        String bookInfo = ("Chunk [" + x + ", " + z + "] Inside " + tileEntity.getString("id") + " at (" + getInteger(tileEntity, "x") + " " + getInteger(tileEntity, "y") + " " + getInteger(tileEntity, "z") + ") " + listOfFiles[f].getName());
+                                    ListTag<CompoundTag> chestItems = getCompoundTagList(tileEntity, "Items");
+                                    for (int n = 0; n < chestItems.size(); n++) {
+                                        CompoundTag item = chestItems.get(n);
+                                        String bookInfo = ("Chunk [" + x + ", " + z + "] Inside " + tileEntity.getString("id") + " at (" + tileEntity.getInt("x") + " " + tileEntity.getInt("y") + " " + tileEntity.getInt("z") + ") " + listOfFiles[f].getName());
                                         parseItem(item, bookInfo);
                                     }
                                 }
@@ -904,32 +910,34 @@ public class Main implements Runnable {
                         }
 
                         // Get entities from the chunk
+                        // Note: In 20w45a (1.17), entities were moved to separate entity files (entities/ folder)
+                        // However, for proto-chunks (incomplete generation), entities may still be in chunk data
                         ListTag<CompoundTag> entities = null;
                         if (chunkRoot.containsKey("entities")) {
-                            // 1.18+ format uses "entities"
-                            entities = getTagList(chunkRoot, "entities", 10);
+                            // New format (21w43a+): uses "entities"
+                            entities = getCompoundTagList(chunkRoot, "entities");
                         } else if (chunkRoot.containsKey("Entities")) {
-                            // Pre-1.18 format uses "Entities"
-                            entities = getTagList(chunkRoot, "Entities", 10);
+                            // Old format (pre-21w43a): uses "Entities"
+                            entities = getCompoundTagList(chunkRoot, "Entities");
                         }
                         if (entities == null) {
                             entities = new ListTag<>(CompoundTag.class);
                         }
 
-                        for (int i = 0; i < tagCount(entities); i++) {
-                            CompoundTag entity = getCompoundTagAt(entities, i);
+                        for (int i = 0; i < entities.size(); i++) {
+                            CompoundTag entity = entities.get(i);
                             {
                                 //Donkey, llama etc.
                                 if (hasKey(entity, "Items")) {
-                                    ListTag<CompoundTag> entityItems = getTagList(entity, "Items", 10);
-                                    ListTag<?> entityPos = getTagList(entity, "Pos", 6);
+                                    ListTag<CompoundTag> entityItems = getCompoundTagList(entity, "Items");
+                                    ListTag<?> entityPos = getListTag(entity, "Pos");
 
-                                    int xPos = (int) Double.parseDouble(getStringTagAt(entityPos, 0));
-                                    int yPos = (int) Double.parseDouble(getStringTagAt(entityPos, 1));
-                                    int zPos = (int) Double.parseDouble(getStringTagAt(entityPos, 2));
+                                    int xPos = (int) getDoubleAt(entityPos, 0);
+                                    int yPos = (int) getDoubleAt(entityPos, 1);
+                                    int zPos = (int) getDoubleAt(entityPos, 2);
 
-                                    for (int n = 0; n < tagCount(entityItems); n++) {
-                                        CompoundTag item = getCompoundTagAt(entityItems, n);
+                                    for (int n = 0; n < entityItems.size(); n++) {
+                                        CompoundTag item = entityItems.get(n);
                                         String bookInfo = ("Chunk [" + x + ", " + z + "] On entity at (" + xPos + " " + yPos + " " + zPos + ") " + listOfFiles[f].getName());
                                         parseItem(item, bookInfo);
                                     }
@@ -937,11 +945,11 @@ public class Main implements Runnable {
                                 //Item frame or item on the ground
                                 if (hasKey(entity, "Item")) {
                                     CompoundTag item = getCompoundTag(entity, "Item");
-                                    ListTag<?> entityPos = getTagList(entity, "Pos", 6);
+                                    ListTag<?> entityPos = getListTag(entity, "Pos");
 
-                                    int xPos = (int) Double.parseDouble(getStringTagAt(entityPos, 0));
-                                    int yPos = (int) Double.parseDouble(getStringTagAt(entityPos, 1));
-                                    int zPos = (int) Double.parseDouble(getStringTagAt(entityPos, 2));
+                                    int xPos = (int) getDoubleAt(entityPos, 0);
+                                    int yPos = (int) getDoubleAt(entityPos, 1);
+                                    int zPos = (int) getDoubleAt(entityPos, 2);
 
                                     String bookInfo = ("Chunk [" + x + ", " + z + "] On ground or item frame at at (" + xPos + " " + yPos + " " + zPos + ") " + listOfFiles[f].getName());
 
@@ -1009,27 +1017,27 @@ public class Main implements Runnable {
      * 4. Player inventory: Detected by scanning player data files
      */
     public static void parseItem(CompoundTag item, String bookInfo) throws IOException {
-        String itemId = getString(item, "id");
+        String itemId = item.getString("id");
 
-        if (itemId.equals("minecraft:written_book") || getShort(item, "id") == 387) {
+        if (itemId.equals("minecraft:written_book")) {
             log("DEBUG", "    Found written book: " + bookInfo.substring(0, Math.min(80, bookInfo.length())) + "...");
             readWrittenBook(item, bookInfo);
         }
-        if (itemId.equals("minecraft:writable_book") || getShort(item, "id") == 386) {
+        if (itemId.equals("minecraft:writable_book")) {
             log("DEBUG", "    Found writable book: " + bookInfo.substring(0, Math.min(80, bookInfo.length())) + "...");
             readWritableBook(item, bookInfo);
         }
-        if (itemId.contains("shulker_box") || (getShort(item, "id") >= 219 && getShort(item, "id") <= 234)) {
+        if (itemId.contains("shulker_box")) {
             log("DEBUG", "    Found shulker box, scanning contents...");
 
             // Try new format first (1.20.5+ with components)
             if (hasKey(item, "components")) {
                 CompoundTag components = getCompoundTag(item, "components");
                 if (hasKey(components, "minecraft:container")) {
-                    ListTag<?> shelkerContents = getTagList(components, "minecraft:container", 10);
-                    log("DEBUG", "      Shulker box contains " + tagCount(shelkerContents) + " items (1.20.5+ format)");
-                    for (int i = 0; i < tagCount(shelkerContents); i++) {
-                        CompoundTag containerEntry = getCompoundTagAt(shelkerContents, i);
+                    ListTag<CompoundTag> shelkerContents = getCompoundTagList(components, "minecraft:container");
+                    log("DEBUG", "      Shulker box contains " + shelkerContents.size() + " items (1.20.5+ format)");
+                    for (int i = 0; i < shelkerContents.size(); i++) {
+                        CompoundTag containerEntry = shelkerContents.get(i);
                         CompoundTag shelkerItem = getCompoundTag(containerEntry, "item");
                         parseItem(shelkerItem, bookInfo + " > shulker_box");
                     }
@@ -1038,10 +1046,10 @@ public class Main implements Runnable {
                 // Old format (pre-1.20.5)
                 CompoundTag shelkerCompound = getCompoundTag(item, "tag");
                 CompoundTag shelkerCompound2 = getCompoundTag(shelkerCompound, "BlockEntityTag");
-                ListTag<?> shelkerContents = getTagList(shelkerCompound2, "Items", 10);
-                log("DEBUG", "      Shulker box contains " + tagCount(shelkerContents) + " items (pre-1.20.5 format)");
-                for (int i = 0; i < tagCount(shelkerContents); i++) {
-                    CompoundTag shelkerItem = getCompoundTagAt(shelkerContents, i);
+                ListTag<CompoundTag> shelkerContents = getCompoundTagList(shelkerCompound2, "Items");
+                log("DEBUG", "      Shulker box contains " + shelkerContents.size() + " items (pre-1.20.5 format)");
+                for (int i = 0; i < shelkerContents.size(); i++) {
+                    CompoundTag shelkerItem = shelkerContents.get(i);
                     parseItem(shelkerItem, bookInfo + " > shulker_box");
                 }
             }
@@ -1055,10 +1063,10 @@ public class Main implements Runnable {
             if (hasKey(item, "components")) {
                 CompoundTag components = getCompoundTag(item, "components");
                 if (hasKey(components, "minecraft:bundle_contents")) {
-                    ListTag<?> bundleContents = getTagList(components, "minecraft:bundle_contents", 10);
-                    log("DEBUG", "      Bundle contains " + tagCount(bundleContents) + " items");
-                    for (int i = 0; i < tagCount(bundleContents); i++) {
-                        CompoundTag bundleItem = getCompoundTagAt(bundleContents, i);
+                    ListTag<CompoundTag> bundleContents = getCompoundTagList(components, "minecraft:bundle_contents");
+                    log("DEBUG", "      Bundle contains " + bundleContents.size() + " items");
+                    for (int i = 0; i < bundleContents.size(); i++) {
+                        CompoundTag bundleItem = bundleContents.get(i);
                         parseItem(bundleItem, bookInfo + " > bundle");
                     }
                 }
@@ -1074,10 +1082,10 @@ public class Main implements Runnable {
             if (hasKey(item, "components")) {
                 CompoundTag components = getCompoundTag(item, "components");
                 if (hasKey(components, "minecraft:container")) {
-                    ListTag<?> chestContents = getTagList(components, "minecraft:container", 10);
-                    log("DEBUG", "      Copper chest contains " + tagCount(chestContents) + " items");
-                    for (int i = 0; i < tagCount(chestContents); i++) {
-                        CompoundTag containerEntry = getCompoundTagAt(chestContents, i);
+                    ListTag<CompoundTag> chestContents = getCompoundTagList(components, "minecraft:container");
+                    log("DEBUG", "      Copper chest contains " + chestContents.size() + " items");
+                    for (int i = 0; i < chestContents.size(); i++) {
+                        CompoundTag containerEntry = chestContents.get(i);
                         CompoundTag chestItem = getCompoundTag(containerEntry, "item");
                         parseItem(chestItem, bookInfo + " > copper_chest");
                     }
@@ -1086,10 +1094,10 @@ public class Main implements Runnable {
                 // Old format (if copper chests existed in pre-1.20.5)
                 CompoundTag chestCompound = getCompoundTag(item, "tag");
                 CompoundTag chestCompound2 = getCompoundTag(chestCompound, "BlockEntityTag");
-                ListTag<?> chestContents = getTagList(chestCompound2, "Items", 10);
-                log("DEBUG", "      Copper chest contains " + tagCount(chestContents) + " items (pre-1.20.5 format)");
-                for (int i = 0; i < tagCount(chestContents); i++) {
-                    CompoundTag chestItem = getCompoundTagAt(chestContents, i);
+                ListTag<CompoundTag> chestContents = getCompoundTagList(chestCompound2, "Items");
+                log("DEBUG", "      Copper chest contains " + chestContents.size() + " items (pre-1.20.5 format)");
+                for (int i = 0; i < chestContents.size(); i++) {
+                    CompoundTag chestItem = chestContents.get(i);
                     parseItem(chestItem, bookInfo + " > copper_chest");
                 }
             }
@@ -1125,20 +1133,20 @@ public class Main implements Runnable {
         if (hasKey(item, "tag")) {
             // Pre-1.20.5 format
             tag = getCompoundTag(item, "tag");
-            pages = getTagList(tag, "pages", 8);
+            pages = getListTag(tag, "pages");
             format = "pre-1.20.5";
         } else if (hasKey(item, "components")) {
             // 1.20.5+ format
             CompoundTag components = getCompoundTag(item, "components");
             if (hasKey(components, "minecraft:written_book_content")) {
                 CompoundTag bookContent = getCompoundTag(components, "minecraft:written_book_content");
-                pages = getTagList(bookContent, "pages", 10); // In 1.20.5+, pages are compounds, not strings
+                pages = getListTag(bookContent, "pages"); // In 1.20.5+, pages are compounds, not strings
                 tag = bookContent; // Use bookContent as tag for author/title
                 format = "1.20.5+";
             }
         }
 
-        if (pages == null || tagCount(pages) == 0) {
+        if (pages == null || pages.size() == 0) {
             log("DEBUG", "      Written book has no pages (format: " + format + ")");
             return;
         }
@@ -1152,33 +1160,44 @@ public class Main implements Runnable {
         }
 
         // Extract author and title - handle both old format (plain string) and new format (text component)
-        String author = getString(tag, "author");
-        String title = getString(tag, "title");
+        String author = "";
+        String title = "";
 
-        // In 1.20.5+, author and title might be stored as text components like {raw:"text",}
-        // Extract the actual text from the component if needed
-        if (author.startsWith("{") && author.contains("raw:")) {
-            try {
-                JSONObject authorJSON = new JSONObject(author);
-                if (authorJSON.has("raw")) {
-                    author = authorJSON.getString("raw");
+        // In 1.20.5+, author and title are stored as CompoundTags (text components)
+        // In pre-1.20.5, they're stored as strings
+        if (tag.containsKey("author")) {
+            Tag<?> authorTag = tag.get("author");
+            if (authorTag instanceof CompoundTag) {
+                // 1.20.5+ format: text component
+                CompoundTag authorComp = (CompoundTag) authorTag;
+                if (authorComp.containsKey("raw")) {
+                    author = authorComp.getString("raw");
+                } else if (authorComp.containsKey("text")) {
+                    author = authorComp.getString("text");
                 }
-            } catch (JSONException e) {
-                log("WARN", "      Failed to parse author JSON: " + e.getMessage());
-            }
-        }
-        if (title.startsWith("{") && title.contains("raw:")) {
-            try {
-                JSONObject titleJSON = new JSONObject(title);
-                if (titleJSON.has("raw")) {
-                    title = titleJSON.getString("raw");
-                }
-            } catch (JSONException e) {
-                log("WARN", "      Failed to parse title JSON: " + e.getMessage());
+            } else if (authorTag instanceof StringTag) {
+                // Pre-1.20.5 format: plain string
+                author = tag.getString("author");
             }
         }
 
-        log("DEBUG", "      Extracted written book: \"" + title + "\" by " + author + " (" + tagCount(pages) + " pages, format: " + format + ")");
+        if (tag.containsKey("title")) {
+            Tag<?> titleTag = tag.get("title");
+            if (titleTag instanceof CompoundTag) {
+                // 1.20.5+ format: text component
+                CompoundTag titleComp = (CompoundTag) titleTag;
+                if (titleComp.containsKey("raw")) {
+                    title = titleComp.getString("raw");
+                } else if (titleComp.containsKey("text")) {
+                    title = titleComp.getString("text");
+                }
+            } else if (titleTag instanceof StringTag) {
+                // Pre-1.20.5 format: plain string
+                title = tag.getString("title");
+            }
+        }
+
+        log("DEBUG", "      Extracted written book: \"" + title + "\" by " + author + " (" + pages.size() + " pages, format: " + format + ")");
 
         // Create individual file for this book
         bookCounter++;
@@ -1201,7 +1220,7 @@ public class Main implements Runnable {
         writer.newLine();
         writer.write("Author: " + author);
         writer.newLine();
-        writer.write("Pages: " + tagCount(pages));
+        writer.write("Pages: " + pages.size());
         writer.newLine();
         writer.write("Format: " + format);
         writer.newLine();
@@ -1210,20 +1229,20 @@ public class Main implements Runnable {
         writer.write("=".repeat(80));
         writer.newLine();
         writer.newLine();
-        for (int pc = 0; pc < tagCount(pages); pc++) {
+        for (int pc = 0; pc < pages.size(); pc++) {
             String pageText = null;
 
             // Check if pages are stored as strings (pre-1.20.5) or compounds (1.20.5+)
-            if (getListType(pages) == 8) {
+            if (isStringList(pages)) {
                 // String list (pre-1.20.5)
-                pageText = getStringTagAt(pages, pc);
-            } else if (getListType(pages) == 10) {
+                pageText = getStringAt(pages, pc);
+            } else if (isCompoundList(pages)) {
                 // Compound list (1.20.5+)
-                CompoundTag pageCompound = getCompoundTagAt(pages, pc);
+                CompoundTag pageCompound = getCompoundAt(pages, pc);
                 if (hasKey(pageCompound, "raw")) {
-                    pageText = getString(pageCompound, "raw");
+                    pageText = pageCompound.getString("raw");
                 } else if (hasKey(pageCompound, "filtered")) {
-                    pageText = getString(pageCompound, "filtered");
+                    pageText = pageCompound.getString("filtered");
                 }
             }
 
@@ -1274,19 +1293,19 @@ public class Main implements Runnable {
         if (hasKey(item, "tag")) {
             // Pre-1.20.5 format
             CompoundTag tag = getCompoundTag(item, "tag");
-            pages = getTagList(tag, "pages", 8);
+            pages = getListTag(tag, "pages");
             format = "pre-1.20.5";
         } else if (hasKey(item, "components")) {
             // 1.20.5+ format
             CompoundTag components = getCompoundTag(item, "components");
             if (hasKey(components, "minecraft:writable_book_content")) {
                 CompoundTag bookContent = getCompoundTag(components, "minecraft:writable_book_content");
-                pages = getTagList(bookContent, "pages", 10); // In 1.20.5+, pages are compounds
+                pages = getListTag(bookContent, "pages"); // In 1.20.5+, pages are compounds
                 format = "1.20.5+";
             }
         }
 
-        if (pages == null || tagCount(pages) == 0) {
+        if (pages == null || pages.size() == 0) {
             log("DEBUG", "      Writable book has no pages (format: " + format + ")");
             return;
         }
@@ -1299,7 +1318,7 @@ public class Main implements Runnable {
             bookHashes.add(pages.hashCode());
         }
 
-        log("DEBUG", "      Extracted writable book (" + tagCount(pages) + " pages, format: " + format + ")");
+        log("DEBUG", "      Extracted writable book (" + pages.size() + " pages, format: " + format + ")");
 
         // Create individual file for this book
         bookCounter++;
@@ -1318,7 +1337,7 @@ public class Main implements Runnable {
         writer.newLine();
         writer.write("=".repeat(80));
         writer.newLine();
-        writer.write("Pages: " + tagCount(pages));
+        writer.write("Pages: " + pages.size());
         writer.newLine();
         writer.write("Format: " + format);
         writer.newLine();
@@ -1328,20 +1347,20 @@ public class Main implements Runnable {
         writer.newLine();
         writer.newLine();
 
-        for (int pc = 0; pc < tagCount(pages); pc++) {
+        for (int pc = 0; pc < pages.size(); pc++) {
             String pageText = null;
 
             // Check if pages are stored as strings (pre-1.20.5) or compounds (1.20.5+)
-            if (getListType(pages) == 8) {
+            if (isStringList(pages)) {
                 // String list (pre-1.20.5)
-                pageText = getStringTagAt(pages, pc);
-            } else if (getListType(pages) == 10) {
+                pageText = getStringAt(pages, pc);
+            } else if (isCompoundList(pages)) {
                 // Compound list (1.20.5+)
-                CompoundTag pageCompound = getCompoundTagAt(pages, pc);
+                CompoundTag pageCompound = getCompoundAt(pages, pc);
                 if (hasKey(pageCompound, "raw")) {
-                    pageText = getString(pageCompound, "raw");
+                    pageText = pageCompound.getString("raw");
                 } else if (hasKey(pageCompound, "filtered")) {
-                    pageText = getString(pageCompound, "filtered");
+                    pageText = pageCompound.getString("filtered");
                 }
             }
 
@@ -1359,12 +1378,15 @@ public class Main implements Runnable {
         writer.close();
     }
 
+    /**
+     * Parse sign in old format (Text1-Text4 fields, used before 1.20)
+     */
     private static void parseSign(CompoundTag tileEntity, BufferedWriter signWriter, String signInfo) throws IOException {
-        log("DEBUG", "    parseSign() - Extracting text from pre-1.20 sign");
-        String text1 = getString(tileEntity, "Text1");
-        String text2 = getString(tileEntity, "Text2");
-        String text3 = getString(tileEntity, "Text3");
-        String text4 = getString(tileEntity, "Text4");
+        log("DEBUG", "    parseSign() - Extracting text from old format sign");
+        String text1 = tileEntity.getString("Text1");
+        String text2 = tileEntity.getString("Text2");
+        String text3 = tileEntity.getString("Text3");
+        String text4 = tileEntity.getString("Text4");
         log("DEBUG", "    parseSign() - Raw text: [" + text1 + "] [" + text2 + "] [" + text3 + "] [" + text4 + "]");
 
         JSONObject json1 = null;
@@ -1422,24 +1444,26 @@ public class Main implements Runnable {
         signWriter.newLine();
     }
 
-    // Parse sign in Minecraft 1.20+ format (front_text/back_text)
+    /**
+     * Parse sign in new format (front_text/back_text fields, introduced in 1.20)
+     */
     private static void parseSignNew(CompoundTag tileEntity, BufferedWriter signWriter, String signInfo) throws IOException {
-        log("DEBUG", "    parseSignNew() - Extracting text from 1.20+ sign");
+        log("DEBUG", "    parseSignNew() - Extracting text from new format sign");
         // Get front_text compound
         CompoundTag frontText = getCompoundTag(tileEntity, "front_text");
 
         // Extract messages array (contains 4 lines)
-        ListTag<?> messages = getTagList(frontText, "messages", 8); // 8 = String type
+        ListTag<?> messages = getListTag(frontText, "messages");
 
-        if (tagCount(messages) == 0) {
+        if (messages.size() == 0) {
             log("DEBUG", "    parseSignNew() - No messages found, returning");
             return;
         }
 
-        String text1 = getStringTagAt(messages, 0);
-        String text2 = getStringTagAt(messages, 1);
-        String text3 = getStringTagAt(messages, 2);
-        String text4 = getStringTagAt(messages, 3);
+        String text1 = getStringAt(messages, 0);
+        String text2 = getStringAt(messages, 1);
+        String text3 = getStringAt(messages, 2);
+        String text4 = getStringAt(messages, 3);
         log("DEBUG", "    parseSignNew() - Raw text: [" + text1 + "] [" + text2 + "] [" + text3 + "] [" + text4 + "]");
 
         JSONObject json1 = null;
@@ -1511,155 +1535,137 @@ public class Main implements Runnable {
         return (CompoundTag) namedTag.getTag();
     }
 
+    // ========== Querz NBT Helper Methods ==========
+    // Minimal helper methods - Querz library already provides safe getters that return defaults for missing/null keys
+
     /**
-     * Check if a CompoundTag has a key
+     * Check if a CompoundTag has a specific key (null-safe)
      */
     private static boolean hasKey(CompoundTag tag, String key) {
         return tag != null && tag.containsKey(key);
     }
 
-    // ========== BitBuf NBT Helper Methods ==========
-    // Helper methods for Querz NBT library
-
-    /**
-     * Get a string value from a CompoundTag, returns empty string if not found
-     */
-    private static String getString(CompoundTag tag, String key) {
-        if (tag == null || !tag.containsKey(key)) {
-            return "";
-        }
-        try {
-            return tag.getString(key);
-        } catch (ClassCastException e) {
-            // Key exists but is not a string tag
-            return "";
-        }
-    }
-
-    /**
-     * Get an integer value from a CompoundTag, returns 0 if not found
-     */
-    private static int getInteger(CompoundTag tag, String key) {
-        if (tag == null || !tag.containsKey(key)) {
-            return 0;
-        }
-        try {
-            return tag.getInt(key);
-        } catch (ClassCastException e) {
-            return 0;
-        }
-    }
-
-    /**
-     * Get a short value from a CompoundTag, returns 0 if not found
-     */
-    private static short getShort(CompoundTag tag, String key) {
-        if (tag == null || !tag.containsKey(key)) {
-            return 0;
-        }
-        try {
-            return tag.getShort(key);
-        } catch (ClassCastException e) {
-            return 0;
-        }
-    }
-
     /**
      * Get a CompoundTag from a CompoundTag, returns empty CompoundTag if not found
+     * (Querz returns null, we prefer empty CompoundTag for easier chaining)
      */
     private static CompoundTag getCompoundTag(CompoundTag tag, String key) {
-        if (tag == null || !tag.containsKey(key)) {
+        if (tag == null) {
             return new CompoundTag();
         }
+        CompoundTag result = tag.getCompoundTag(key);
+        return result != null ? result : new CompoundTag();
+    }
+
+    /**
+     * Get a ListTag as CompoundTagList from a CompoundTag, returns empty ListTag if not found
+     * Uses Querz's type-safe asCompoundTagList() method
+     */
+    private static ListTag<CompoundTag> getCompoundTagList(CompoundTag tag, String key) {
+        if (tag == null || !tag.containsKey(key)) {
+            return new ListTag<>(CompoundTag.class);
+        }
+        ListTag<?> list = tag.getListTag(key);
+        if (list == null || list.size() == 0) {
+            return new ListTag<>(CompoundTag.class);
+        }
         try {
-            CompoundTag result = tag.getCompoundTag(key);
-            return result != null ? result : new CompoundTag();
+            return list.asCompoundTagList();
         } catch (ClassCastException e) {
-            return new CompoundTag();
+            // List exists but is not a CompoundTag list
+            return new ListTag<>(CompoundTag.class);
         }
     }
 
     /**
-     * Get a ListTag from a CompoundTag, returns empty ListTag if not found
-     *
-     * @param typeId The NBT type ID (kept for API compatibility, not used)
+     * Get a generic ListTag from a CompoundTag, returns empty ListTag if not found
      */
-    @SuppressWarnings("unchecked")
-    private static ListTag<CompoundTag> getTagList(CompoundTag tag, String key, int typeId) {
+    private static ListTag<?> getListTag(CompoundTag tag, String key) {
         if (tag == null || !tag.containsKey(key)) {
-            return new ListTag<>(CompoundTag.class);
+            return ListTag.createUnchecked(Object.class);
+        }
+        ListTag<?> list = tag.getListTag(key);
+        return list != null ? list : ListTag.createUnchecked(Object.class);
+    }
+
+    /**
+     * Get a double value from a ListTag at a specific index (for position coordinates)
+     * Returns 0.0 if index is out of bounds or tag is not a number
+     */
+    private static double getDoubleAt(ListTag<?> list, int index) {
+        if (list == null || index < 0 || index >= list.size()) {
+            return 0.0;
         }
         try {
-            ListTag<?> list = tag.getListTag(key);
-            if (list == null) {
-                return new ListTag<>(CompoundTag.class);
+            Tag<?> tag = list.get(index);
+            if (tag instanceof NumberTag) {
+                return ((NumberTag<?>) tag).asDouble();
+            } else if (tag instanceof StringTag) {
+                // Some old formats store positions as strings
+                return Double.parseDouble(((StringTag) tag).getValue());
             }
-            return (ListTag<CompoundTag>) list;
-        } catch (ClassCastException e) {
-            return new ListTag<>(CompoundTag.class);
+        } catch (Exception e) {
+            // Ignore parsing errors
+        }
+        return 0.0;
+    }
+
+    /**
+     * Get a string value from a ListTag at a specific index
+     * Returns empty string if index is out of bounds
+     */
+    private static String getStringAt(ListTag<?> list, int index) {
+        if (list == null || index < 0 || index >= list.size()) {
+            return "";
+        }
+        try {
+            Tag<?> tag = list.get(index);
+            if (tag instanceof StringTag) {
+                return ((StringTag) tag).getValue();
+            }
+            return tag.valueToString();
+        } catch (Exception e) {
+            return "";
         }
     }
 
     /**
-     * Get the number of elements in a ListTag
+     * Get a CompoundTag from a ListTag at a specific index
+     * Returns empty CompoundTag if index is out of bounds
      */
-    private static int tagCount(ListTag<?> list) {
-        return list != null ? list.size() : 0;
-    }
-
-    /**
-     * Get a CompoundTag at a specific index in a ListTag
-     */
-    private static CompoundTag getCompoundTagAt(ListTag<?> list, int index) {
+    private static CompoundTag getCompoundAt(ListTag<?> list, int index) {
         if (list == null || index < 0 || index >= list.size()) {
             return new CompoundTag();
         }
-        Object tag = list.get(index);
-        if (tag instanceof CompoundTag) {
-            return (CompoundTag) tag;
+        try {
+            Tag<?> tag = list.get(index);
+            if (tag instanceof CompoundTag) {
+                return (CompoundTag) tag;
+            }
+        } catch (Exception e) {
+            // Ignore
         }
         return new CompoundTag();
     }
 
     /**
-     * Get a string value at a specific index in a ListTag
+     * Check if a ListTag contains string elements (type ID 8)
      */
-    private static String getStringTagAt(ListTag<?> list, int index) {
-        if (list == null || index < 0 || index >= list.size()) {
-            return "";
+    private static boolean isStringList(ListTag<?> list) {
+        if (list == null || list.size() == 0) {
+            return false;
         }
-        Object tag = list.get(index);
-        if (tag instanceof net.querz.nbt.tag.StringTag) {
-            return ((net.querz.nbt.tag.StringTag) tag).getValue();
-        } else if (tag instanceof net.querz.nbt.tag.DoubleTag) {
-            return String.valueOf(((net.querz.nbt.tag.DoubleTag) tag).asDouble());
-        }
-        return tag != null ? tag.toString() : "";
+        return list.getTypeClass() == StringTag.class;
     }
 
     /**
-     * Get the type ID of elements in a ListTag (for compatibility with old API)
+     * Check if a ListTag contains compound elements (type ID 10)
      */
-    private static int getListType(ListTag<?> list) {
+    private static boolean isCompoundList(ListTag<?> list) {
         if (list == null || list.size() == 0) {
-            return 0;
+            return false;
         }
-        // Querz NBT doesn't have getTypeId(), but we can get it from the type class
-        Class<?> typeClass = list.getTypeClass();
-        if (typeClass == net.querz.nbt.tag.EndTag.class) return 0;
-        if (typeClass == net.querz.nbt.tag.ByteTag.class) return 1;
-        if (typeClass == net.querz.nbt.tag.ShortTag.class) return 2;
-        if (typeClass == net.querz.nbt.tag.IntTag.class) return 3;
-        if (typeClass == net.querz.nbt.tag.LongTag.class) return 4;
-        if (typeClass == net.querz.nbt.tag.FloatTag.class) return 5;
-        if (typeClass == net.querz.nbt.tag.DoubleTag.class) return 6;
-        if (typeClass == net.querz.nbt.tag.ByteArrayTag.class) return 7;
-        if (typeClass == net.querz.nbt.tag.StringTag.class) return 8;
-        if (typeClass == net.querz.nbt.tag.ListTag.class) return 9;
-        if (typeClass == net.querz.nbt.tag.CompoundTag.class) return 10;
-        if (typeClass == net.querz.nbt.tag.IntArrayTag.class) return 11;
-        if (typeClass == net.querz.nbt.tag.LongArrayTag.class) return 12;
-        return 0;
+        return list.getTypeClass() == CompoundTag.class;
     }
 
     @Override
