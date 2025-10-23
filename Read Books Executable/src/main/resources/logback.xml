@@ -1,13 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-    <!-- Console appender with colored output -->
+    <!-- Console appender with colored output - INFO level only to avoid cluttering progress bar -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>INFO</level>
+        </filter>
         <encoder>
             <pattern>%d{HH:mm:ss.SSS} [%highlight(%-5level)] %msg%n</pattern>
         </encoder>
     </appender>
 
-    <!-- File appender for detailed logs -->
+    <!-- File appender for detailed logs - captures DEBUG and above -->
     <appender name="FILE" class="ch.qos.logback.core.FileAppender">
         <file>${LOG_FILE:-logs.txt}</file>
         <append>false</append>
@@ -16,13 +19,13 @@
         </encoder>
     </appender>
 
-    <!-- Root logger configuration -->
-    <root level="INFO">
+    <!-- Root logger configuration - DEBUG level for file, INFO for console -->
+    <root level="DEBUG">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="FILE"/>
     </root>
 
-    <!-- Set DEBUG level for our application when needed -->
-    <logger name="Main" level="INFO"/>
+    <!-- Set DEBUG level for our application -->
+    <logger name="Main" level="DEBUG"/>
 </configuration>
 

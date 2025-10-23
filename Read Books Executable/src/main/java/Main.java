@@ -50,6 +50,9 @@ public class Main implements Runnable {
     static String dateStamp;
     static int bookCounter = 0;
 
+    // Combined books file writer
+    static BufferedWriter combinedBooksWriter = null;
+
     // Statistics tracking
     static Map<String, Integer> booksByContainerType = new HashMap<>();
     static Map<String, Integer> booksByLocationType = new HashMap<>();
@@ -153,19 +156,19 @@ public class Main implements Runnable {
         File outputDir = new File(baseDirectory, outputFolder);
         if (!outputDir.exists()) {
             outputDir.mkdirs();
-            logger.info("Created output directory: {}", outputDir.getAbsolutePath());
+            logger.debug("Created output directory: {}", outputDir.getAbsolutePath());
         }
 
         File booksDirFile = new File(baseDirectory, booksFolder);
         if (!booksDirFile.exists()) {
             booksDirFile.mkdirs();
-            logger.info("Created books directory: {}", booksDirFile.getAbsolutePath());
+            logger.debug("Created books directory: {}", booksDirFile.getAbsolutePath());
         }
 
         File duplicatesDirFile = new File(baseDirectory, duplicatesFolder);
         if (!duplicatesDirFile.exists()) {
             duplicatesDirFile.mkdirs();
-            logger.info("Created duplicates directory: {}", duplicatesDirFile.getAbsolutePath());
+            logger.debug("Created duplicates directory: {}", duplicatesDirFile.getAbsolutePath());
         }
 
         logger.info("=".repeat(80));
@@ -180,12 +183,25 @@ public class Main implements Runnable {
         long startTime = System.currentTimeMillis();
 
         try {
+            // Initialize combined books file if book extraction is enabled
+            if (enableBookExtraction) {
+                File combinedBooksFile = new File(baseDirectory, outputFolder + File.separator + "all_books.txt");
+                combinedBooksWriter = new BufferedWriter(new FileWriter(combinedBooksFile));
+                logger.debug("Created combined books file: {}", combinedBooksFile.getAbsolutePath());
+            }
+
             if (enableBookExtraction) {
                 readPlayerData();
             }
             readSignsAndBooks();
             if (enableBookExtraction) {
                 readEntities();
+            }
+
+            // Close combined books file
+            if (combinedBooksWriter != null) {
+                combinedBooksWriter.close();
+                logger.debug("Closed combined books file");
             }
 
             long elapsed = System.currentTimeMillis() - startTime;
@@ -196,6 +212,14 @@ public class Main implements Runnable {
             logger.info("{} seconds to complete.", elapsed / 1000);
         } catch (Exception e) {
             logger.error("Fatal error during execution: {}", e.getMessage(), e);
+            // Make sure to close combined books file on error
+            if (combinedBooksWriter != null) {
+                try {
+                    combinedBooksWriter.close();
+                } catch (IOException ioException) {
+                    logger.error("Failed to close combined books file: {}", ioException.getMessage());
+                }
+            }
             throw e;
         }
     }
@@ -317,7 +341,7 @@ public class Main implements Runnable {
     }
 
     public static void readSignsAndBooks() throws IOException {
-        logger.info("Starting readSignsAndBooks()");
+        logger.debug("Starting readSignsAndBooks()");
 
         File folder = new File(baseDirectory, "region");
         if (!folder.exists() || !folder.isDirectory()) {
@@ -331,14 +355,14 @@ public class Main implements Runnable {
             return;
         }
 
-        logger.info("Found {}", listOfFiles.length + " region files to process");
+        logger.debug("Found {} region files to process", listOfFiles.length);
 
         File signOutput = new File(baseDirectory, outputFolder + File.separator + "signs.txt");
         BufferedWriter signWriter = new BufferedWriter(new FileWriter(signOutput));
 
-        logger.info("Output files:");
-        logger.info("  - Books: Individual files in {}", booksFolder);
-        logger.info("  - Signs: {}", signOutput.getAbsolutePath());
+        logger.debug("Output files:");
+        logger.debug("  - Books: Individual files in {}", booksFolder);
+        logger.debug("  - Signs: {}", signOutput.getAbsolutePath());
 
         int processedFiles = 0;
         int totalChunks = 0;
@@ -354,11 +378,6 @@ public class Main implements Runnable {
             for (int f = 0; f < listOfFiles.length; f++) {
                 String fileName = listOfFiles[f].getName();
                 logger.debug("Processing region file [{}/{}]: {}", (f + 1), listOfFiles.length, fileName);
-
-                signWriter.newLine();
-                signWriter.write("--------------------------------" + fileName + "--------------------------------");
-                signWriter.newLine();
-                signWriter.newLine();
 
                 try {
                     // Load the entire region file using Querz MCA library
@@ -539,30 +558,29 @@ public class Main implements Runnable {
                         }
                     }
                 } catch (IOException e) {
-                    logger.error("Failed to read region file {}: {}", fileName, e.getMessage());
-                    e.printStackTrace();
+                    logger.debug("Failed to read region file {}: {}", fileName, e.getMessage());
                 }
 
                 processedFiles++;
-                logger.info("Completed region file [{}", processedFiles + "/" + listOfFiles.length + "]: " + fileName);
+                logger.debug("Completed region file [{}/{}]: {}", processedFiles, listOfFiles.length, fileName);
                 pb.step();
             }
         }
 
-        logger.info("");
-        logger.info("Processing complete!");
-        logger.info("Total region files processed: {}", processedFiles);
-        logger.info("Total chunks processed: {}", totalChunks);
-        logger.info("Total unique signs found: {}", signHashes.size());
-        logger.info("Total unique books found: {}", bookHashes.size());
-        logger.info("Total books extracted (including duplicates): {}", bookCounter);
+        logger.debug("");
+        logger.debug("Processing complete!");
+        logger.debug("Total region files processed: {}", processedFiles);
+        logger.debug("Total chunks processed: {}", totalChunks);
+        logger.debug("Total unique signs found: {}", signHashes.size());
+        logger.debug("Total unique books found: {}", bookHashes.size());
+        logger.debug("Total books extracted (including duplicates): {}", bookCounter);
 
         signWriter.newLine();
         signWriter.write("Completed.");
         signWriter.newLine();
         signWriter.close();
 
-        logger.info("Output files written successfully");
+        logger.debug("Output files written successfully");
     }
 
     /**
@@ -571,7 +589,7 @@ public class Main implements Runnable {
      * Prior to 20w45a, entities were stored within chunk data in region files
      */
     public static void readEntities() throws IOException {
-        logger.info("Starting readEntities()");
+        logger.debug("Starting readEntities()");
 
         File folder = new File(baseDirectory, "entities");
         if (!folder.exists() || !folder.isDirectory()) {
@@ -585,7 +603,7 @@ public class Main implements Runnable {
             return;
         }
 
-        logger.info("Found {}", listOfFiles.length + " entity files to process");
+        logger.debug("Found {} entity files to process", listOfFiles.length);
 
         int processedFiles = 0;
         int totalEntities = 0;
@@ -692,21 +710,20 @@ public class Main implements Runnable {
                             }
                         }
 
-                        logger.info("Completed entity file [{}/{}]: {}", processedFiles, listOfFiles.length, listOfFiles[f].getName());
+                        logger.debug("Completed entity file [{}/{}]: {}", processedFiles, listOfFiles.length, listOfFiles[f].getName());
 
                     } catch (Exception e) {
-                        logger.error("Error processing entity file {}: {}", listOfFiles[f].getName(), e.getMessage());
-                        // Exception already logged above
+                        logger.debug("Error processing entity file {}: {}", listOfFiles[f].getName(), e.getMessage());
                     }
                     pb.step();
                 }
             }
         }
 
-        logger.info("Entity processing complete!");
-        logger.info("Total entity files processed: {}", processedFiles);
-        logger.info("Total entities scanned: {}", totalEntities);
-        logger.info("Entities with books: {}", entitiesWithBooks);
+        logger.debug("Entity processing complete!");
+        logger.debug("Total entity files processed: {}", processedFiles);
+        logger.debug("Total entities scanned: {}", totalEntities);
+        logger.debug("Entities with books: {}", entitiesWithBooks);
     }
 
     public static void readSignsAnvil() throws IOException {
@@ -773,8 +790,7 @@ public class Main implements Runnable {
                     }
                 }
             } catch (IOException e) {
-                logger.error("Failed to read region file {}: {}", listOfFiles[f].getName(), e.getMessage());
-                e.printStackTrace();
+                logger.debug("Failed to read region file {}: {}", listOfFiles[f].getName(), e.getMessage());
             }
         }
         writer.newLine();
@@ -784,7 +800,7 @@ public class Main implements Runnable {
     }
 
     public static void readPlayerData() throws IOException {
-        logger.info("Starting readPlayerData()");
+        logger.debug("Starting readPlayerData()");
 
         File folder = new File(baseDirectory, "playerdata");
         if (!folder.exists() || !folder.isDirectory()) {
@@ -798,7 +814,7 @@ public class Main implements Runnable {
             return;
         }
 
-        logger.info("Found {}", listOfFiles.length + " player data files to process");
+        logger.debug("Found {} player data files to process", listOfFiles.length);
 
         int totalPlayerBooks = 0;
 
@@ -851,8 +867,8 @@ public class Main implements Runnable {
             }
         }
 
-        logger.info("Player data processing complete!");
-        logger.info("Total books found in player inventories: {}", totalPlayerBooks);
+        logger.debug("Player data processing complete!");
+        logger.debug("Total books found in player inventories: {}", totalPlayerBooks);
     }
 
     public static void readBooksAnvil() throws IOException {
@@ -964,8 +980,7 @@ public class Main implements Runnable {
                     }
                 }
             } catch (IOException e) {
-                logger.error("Failed to read region file {}: {}", listOfFiles[f].getName(), e.getMessage());
-                e.printStackTrace();
+                logger.debug("Failed to read region file {}: {}", listOfFiles[f].getName(), e.getMessage());
             }
         }
         writer.newLine();
@@ -1195,7 +1210,51 @@ public class Main implements Runnable {
 
         // Create individual file for this book
         bookCounter++;
-        String filename = String.format("%03d_written_%s_by_%s.txt", bookCounter, sanitizeFilename(title), sanitizeFilename(author));
+
+        // Extract coordinates from bookInfo for filename
+        // bookInfo format examples:
+        // "Chunk [x, z] Inside minecraft:chest at (x y z) r.0.0.mca"
+        // "Inventory of player uuid.dat"
+        String coordsForFilename = "";
+        String locationForFilename = "";
+        try {
+            if (bookInfo.contains(" at (")) {
+                int atIndex = bookInfo.indexOf(" at (");
+                int endParenIndex = bookInfo.indexOf(")", atIndex);
+                if (endParenIndex > atIndex) {
+                    String coords = bookInfo.substring(atIndex + 5, endParenIndex);
+                    coordsForFilename = coords.replace(" ", "_");
+                }
+
+                // Extract location (what container/entity it's in)
+                if (bookInfo.contains("Inside ")) {
+                    int insideIndex = bookInfo.indexOf("Inside ") + 7;
+                    locationForFilename = bookInfo.substring(insideIndex, atIndex).trim();
+                } else if (bookInfo.contains("In ")) {
+                    int inIndex = bookInfo.indexOf("In ") + 3;
+                    locationForFilename = bookInfo.substring(inIndex, atIndex).trim();
+                }
+            } else if (bookInfo.contains("Inventory of player")) {
+                coordsForFilename = "player_inventory";
+                locationForFilename = "player_inventory";
+            } else if (bookInfo.contains("Ender Chest of player")) {
+                coordsForFilename = "ender_chest";
+                locationForFilename = "ender_chest";
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to parse bookInfo for filename: {}", bookInfo);
+            coordsForFilename = "unknown";
+            locationForFilename = "unknown";
+        }
+
+        // Create filename: title_by_author_at_coords_location_pages_1-N.txt
+        String filename = String.format("%s_by_%s_at_%s_%s_pages_%d-%d.txt",
+                sanitizeFilename(title.isEmpty() ? "untitled" : title),
+                sanitizeFilename(author.isEmpty() ? "unknown" : author),
+                sanitizeFilename(coordsForFilename),
+                sanitizeFilename(locationForFilename),
+                1,
+                pages.size());
 
         // Save to duplicates folder if it's a duplicate, otherwise to main books folder
         String targetFolder = isDuplicate ? duplicatesFolder : booksFolder;
@@ -1204,25 +1263,20 @@ public class Main implements Runnable {
 
         logger.debug("      Writing book to: {}{}", (isDuplicate ? ".duplicates/" : ""), filename);
 
-        writer.write("=".repeat(80));
-        writer.newLine();
-        writer.write("WRITTEN BOOK");
-        writer.newLine();
-        writer.write("=".repeat(80));
-        writer.newLine();
-        writer.write("Title: " + title);
-        writer.newLine();
-        writer.write("Author: " + author);
-        writer.newLine();
-        writer.write("Pages: " + pages.size());
-        writer.newLine();
-        writer.write("Format: " + format);
-        writer.newLine();
-        writer.write("Location: " + bookInfo);
-        writer.newLine();
-        writer.write("=".repeat(80));
-        writer.newLine();
-        writer.newLine();
+        // Write to combined books file
+        if (combinedBooksWriter != null) {
+            combinedBooksWriter.write("#region " + filename);
+            combinedBooksWriter.newLine();
+            combinedBooksWriter.write("Title: " + title);
+            combinedBooksWriter.newLine();
+            combinedBooksWriter.write("Author: " + author);
+            combinedBooksWriter.newLine();
+            combinedBooksWriter.write("Pages: " + pages.size());
+            combinedBooksWriter.newLine();
+            combinedBooksWriter.write("Location: " + bookInfo);
+            combinedBooksWriter.newLine();
+            combinedBooksWriter.newLine();
+        }
         for (int pc = 0; pc < pages.size(); pc++) {
             String pageText = null;
 
@@ -1255,29 +1309,47 @@ public class Main implements Runnable {
                 }
             }
 
-            writer.write("Page " + pc + ": ");
-
+            // Extract text content
+            String pageContent = "";
             //IF VALID JSON
             if (pageJSON != null) {
                 if (pageJSON.has("extra")) {
-
+                    StringBuilder sb = new StringBuilder();
                     for (int h = 0; h < pageJSON.getJSONArray("extra").length(); h++) {
                         if (pageJSON.getJSONArray("extra").get(h) instanceof String)
-                            writer.write(removeTextFormatting(pageJSON.getJSONArray("extra").get(0).toString()));
+                            sb.append(removeTextFormatting(pageJSON.getJSONArray("extra").get(0).toString()));
                         else {
                             JSONObject temp = (JSONObject) pageJSON.getJSONArray("extra").get(h);
-                            writer.write(removeTextFormatting(temp.get("text").toString()));
+                            sb.append(removeTextFormatting(temp.get("text").toString()));
                         }
                     }
+                    pageContent = sb.toString();
                 } else if (pageJSON.has("text"))
-                    writer.write(removeTextFormatting(pageJSON.getString("text")));
+                    pageContent = removeTextFormatting(pageJSON.getString("text"));
             } else
-                writer.write(removeTextFormatting(pageText));
+                pageContent = removeTextFormatting(pageText);
 
+            // Write to individual file (just page content, no "Page X:" prefix)
+            writer.write(pageContent);
             writer.newLine();
+
+            // Write to combined books file
+            if (combinedBooksWriter != null) {
+                combinedBooksWriter.write("Page " + (pc + 1) + ": ");
+                combinedBooksWriter.write(pageContent);
+                combinedBooksWriter.newLine();
+            }
         }
 
         writer.close();
+
+        // Close region in combined books file
+        if (combinedBooksWriter != null) {
+            combinedBooksWriter.newLine();
+            combinedBooksWriter.write("#endregion " + filename);
+            combinedBooksWriter.newLine();
+            combinedBooksWriter.newLine();
+        }
     }
 
     private static void readWritableBook(CompoundTag item, String bookInfo) throws IOException {
@@ -1317,7 +1389,46 @@ public class Main implements Runnable {
 
         // Create individual file for this book
         bookCounter++;
-        String filename = String.format("%03d_writable_book.txt", bookCounter);
+
+        // Extract coordinates from bookInfo for filename
+        String coordsForFilename = "";
+        String locationForFilename = "";
+        try {
+            if (bookInfo.contains(" at (")) {
+                int atIndex = bookInfo.indexOf(" at (");
+                int endParenIndex = bookInfo.indexOf(")", atIndex);
+                if (endParenIndex > atIndex) {
+                    String coords = bookInfo.substring(atIndex + 5, endParenIndex);
+                    coordsForFilename = coords.replace(" ", "_");
+                }
+
+                // Extract location (what container/entity it's in)
+                if (bookInfo.contains("Inside ")) {
+                    int insideIndex = bookInfo.indexOf("Inside ") + 7;
+                    locationForFilename = bookInfo.substring(insideIndex, atIndex).trim();
+                } else if (bookInfo.contains("In ")) {
+                    int inIndex = bookInfo.indexOf("In ") + 3;
+                    locationForFilename = bookInfo.substring(inIndex, atIndex).trim();
+                }
+            } else if (bookInfo.contains("Inventory of player")) {
+                coordsForFilename = "player_inventory";
+                locationForFilename = "player_inventory";
+            } else if (bookInfo.contains("Ender Chest of player")) {
+                coordsForFilename = "ender_chest";
+                locationForFilename = "ender_chest";
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to parse bookInfo for filename: {}", bookInfo);
+            coordsForFilename = "unknown";
+            locationForFilename = "unknown";
+        }
+
+        // Create filename: writable_book_at_coords_location_pages_1-N.txt
+        String filename = String.format("writable_book_at_%s_%s_pages_%d-%d.txt",
+                sanitizeFilename(coordsForFilename),
+                sanitizeFilename(locationForFilename),
+                1,
+                pages.size());
 
         // Save to duplicates folder if it's a duplicate, otherwise to main books folder
         String targetFolder = isDuplicate ? duplicatesFolder : booksFolder;
@@ -1326,21 +1437,18 @@ public class Main implements Runnable {
 
         logger.debug("      Writing book to: {}{}", (isDuplicate ? ".duplicates/" : ""), filename);
 
-        writer.write("=".repeat(80));
-        writer.newLine();
-        writer.write("WRITABLE BOOK (Book & Quill)");
-        writer.newLine();
-        writer.write("=".repeat(80));
-        writer.newLine();
-        writer.write("Pages: " + pages.size());
-        writer.newLine();
-        writer.write("Format: " + format);
-        writer.newLine();
-        writer.write("Location: " + bookInfo);
-        writer.newLine();
-        writer.write("=".repeat(80));
-        writer.newLine();
-        writer.newLine();
+        // Write to combined books file
+        if (combinedBooksWriter != null) {
+            combinedBooksWriter.write("#region " + filename);
+            combinedBooksWriter.newLine();
+            combinedBooksWriter.write("WRITABLE BOOK (Book & Quill)");
+            combinedBooksWriter.newLine();
+            combinedBooksWriter.write("Pages: " + pages.size());
+            combinedBooksWriter.newLine();
+            combinedBooksWriter.write("Location: " + bookInfo);
+            combinedBooksWriter.newLine();
+            combinedBooksWriter.newLine();
+        }
 
         for (int pc = 0; pc < pages.size(); pc++) {
             String pageText = null;
@@ -1364,14 +1472,31 @@ public class Main implements Runnable {
                 continue;
             }
 
-            writer.write("Page " + (pc + 1) + ":");
+            String pageContent = removeTextFormatting(pageText);
+
+            // Write to individual file (just page content)
+            writer.write(pageContent);
             writer.newLine();
-            writer.write(removeTextFormatting(pageText));
-            writer.newLine();
-            writer.newLine();
+
+            // Write to combined books file
+            if (combinedBooksWriter != null) {
+                combinedBooksWriter.write("Page " + (pc + 1) + ":");
+                combinedBooksWriter.newLine();
+                combinedBooksWriter.write(pageContent);
+                combinedBooksWriter.newLine();
+                combinedBooksWriter.newLine();
+            }
         }
 
         writer.close();
+
+        // Close region in combined books file
+        if (combinedBooksWriter != null) {
+            combinedBooksWriter.newLine();
+            combinedBooksWriter.write("#endregion " + filename);
+            combinedBooksWriter.newLine();
+            combinedBooksWriter.newLine();
+        }
     }
 
     /**
