@@ -8,6 +8,7 @@ import net.querz.mca.MCAUtil;
 import net.querz.nbt.io.NBTUtil;
 import net.querz.nbt.io.NamedTag;
 import net.querz.nbt.tag.*;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -1421,13 +1422,22 @@ public class Main implements Runnable {
         for (int o = 0; o < 4; o++) {
             if (objects[o] != null) {
                 if (objects[o].has("extra")) {
-                    for (int h = 0; h < objects[o].getJSONArray("extra").length(); h++) {
-                        if ((objects[o].getJSONArray("extra").get(0) instanceof String))
-                            signWriter.write(objects[o].getJSONArray("extra").get(0).toString());
-                        else {
-                            JSONObject temp = (JSONObject) objects[o].getJSONArray("extra").get(0);
-                            signWriter.write(temp.get("text").toString());
+                    Object extraObj = objects[o].get("extra");
+                    if (extraObj instanceof JSONArray) {
+                        JSONArray extraArray = (JSONArray) extraObj;
+                        for (int h = 0; h < extraArray.length(); h++) {
+                            if ((extraArray.get(h) instanceof String))
+                                signWriter.write(extraArray.get(h).toString());
+                            else {
+                                JSONObject temp = (JSONObject) extraArray.get(h);
+                                if (temp.has("text"))
+                                    signWriter.write(temp.get("text").toString());
+                            }
                         }
+                    } else if (extraObj instanceof JSONObject) {
+                        JSONObject extraObject = (JSONObject) extraObj;
+                        if (extraObject.has("text"))
+                            signWriter.write(extraObject.get("text").toString());
                     }
                 } else if (objects[o].has("text"))
                     signWriter.write(objects[o].getString("text"));
@@ -1499,13 +1509,22 @@ public class Main implements Runnable {
         for (int o = 0; o < 4; o++) {
             if (objects[o] != null) {
                 if (objects[o].has("extra")) {
-                    for (int h = 0; h < objects[o].getJSONArray("extra").length(); h++) {
-                        if ((objects[o].getJSONArray("extra").get(0) instanceof String))
-                            signWriter.write(objects[o].getJSONArray("extra").get(0).toString());
-                        else {
-                            JSONObject temp = (JSONObject) objects[o].getJSONArray("extra").get(0);
-                            signWriter.write(temp.get("text").toString());
+                    Object extraObj = objects[o].get("extra");
+                    if (extraObj instanceof JSONArray) {
+                        JSONArray extraArray = (JSONArray) extraObj;
+                        for (int h = 0; h < extraArray.length(); h++) {
+                            if ((extraArray.get(h) instanceof String))
+                                signWriter.write(extraArray.get(h).toString());
+                            else {
+                                JSONObject temp = (JSONObject) extraArray.get(h);
+                                if (temp.has("text"))
+                                    signWriter.write(temp.get("text").toString());
+                            }
                         }
+                    } else if (extraObj instanceof JSONObject) {
+                        JSONObject extraObject = (JSONObject) extraObj;
+                        if (extraObject.has("text"))
+                            signWriter.write(extraObject.get("text").toString());
                     }
                 } else if (objects[o].has("text"))
                     signWriter.write(objects[o].getString("text"));
