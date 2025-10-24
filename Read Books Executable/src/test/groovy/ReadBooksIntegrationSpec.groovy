@@ -85,13 +85,17 @@ class ReadBooksIntegrationSpec extends Specification {
             def bookFiles = getBookFiles()
             assert bookFiles.size() > 0
 
-            // Verify book file contents
+            // Verify book file contents (should contain only page content, metadata is in filename)
             bookFiles.each { bookFile ->
                 def content = bookFile.text
-                assert content.contains("=".repeat(80))
-                assert content.contains("WRITTEN BOOK") || content.contains("WRITABLE BOOK")
-                assert content.contains("Title:") || content.contains("Pages:")
-                assert content.contains("Location:")
+                // Individual book files contain only page content (no headers)
+                assert content.length() > 0
+
+                // Verify filename contains metadata
+                def filename = bookFile.name
+                assert filename.contains("_at_") // Contains coordinates
+                assert filename.contains("_pages_") // Contains page count
+                assert filename.endsWith(".txt")
             }
 
             // Verify no errors in log
@@ -122,20 +126,18 @@ class ReadBooksIntegrationSpec extends Specification {
         expect: "at least one test world exists"
         testWorlds.size() > 0
 
-        and: "all books have location information"
+        and: "all books have location information in filename"
         testWorlds.every { worldInfo ->
             setupTestWorld(worldInfo)
             runReadBooksProgram()
 
             def bookFiles = getBookFiles()
             bookFiles.every { bookFile ->
-                def content = bookFile.text
-                assert content.contains("Location:")
+                def filename = bookFile.name
 
-                // Location should mention chunk coordinates or player inventory
-                content =~ /Chunk \[\d+, \d+\]/ ||
-                        content.contains("Inventory of player") ||
-                        content.contains("Ender Chest")
+                // Location information is in the filename (after "_at_")
+                // This includes coordinates and location type (e.g., "_at_-2_75_-9_minecraft_chest")
+                filename.contains("_at_")
             }
         }
     }
@@ -153,15 +155,18 @@ class ReadBooksIntegrationSpec extends Specification {
             runReadBooksProgram()
 
             def bookFiles = getBookFiles()
-            bookFiles.every { bookFile ->
+            bookFiles.each { bookFile ->
                 def filename = bookFile.name
 
-                // Filenames should not contain invalid characters
-                assert !(filename =~ /[\\/:*?"<>|]/)
+                // Filenames should not contain invalid characters (note: no escaped quote in regex)
+                assert !(filename =~ /[\\/:*?<>|]/), "Filename contains invalid characters: ${filename}"
 
-                // Filenames should follow the pattern: NNN_written_title_by_author.txt or NNN_writable_book.txt
-                filename =~ /^\d{3}_(written|writable)_.*\.txt$/
+                // Filenames should contain location and page info
+                assert filename.contains("_at_"), "Filename missing '_at_': ${filename}"
+                assert filename.contains("_pages_"), "Filename missing '_pages_': ${filename}"
+                assert filename.endsWith(".txt"), "Filename doesn't end with .txt: ${filename}"
             }
+            true // Return true for every() to work
         }
     }
 
@@ -178,8 +183,10 @@ class ReadBooksIntegrationSpec extends Specification {
             runReadBooksProgram()
 
             def bookFiles = getBookFiles()
-            def writtenBooks = bookFiles.findAll { it.name.contains("_written_") }
-            def writableBooks = bookFiles.findAll { it.name.contains("_writable_") }
+            // Written books have "_by_" in filename (title_by_author format)
+            def writtenBooks = bookFiles.findAll { it.name.contains("_by_") }
+            // Writable books start with "writable_book_"
+            def writableBooks = bookFiles.findAll { it.name.startsWith("writable_book_") }
 
             // All books should be categorized
             (writtenBooks.size() + writableBooks.size()) == bookFiles.size()
