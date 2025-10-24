@@ -4,7 +4,7 @@ plugins {
     id 'groovy'
 }
 
-group = 'com.minecraft'
+group = 'com.minecraftdatamining'
 version = '1.0.0'
 
 sourceCompatibility = '21'
@@ -13,6 +13,9 @@ targetCompatibility = '21'
 // Specify source directory (now using standard Maven/Gradle layout)
 sourceSets {
     main {
+        groovy {
+            srcDirs = ['src/main/groovy']
+        }
         java {
             srcDirs = ['src/main/java']
         }
@@ -36,14 +39,21 @@ repositories {
 }
 
 dependencies {
-    // JSON library - latest stable version
-    implementation 'org.json:json:20250517'
+    // Groovy - for main application code
+    implementation 'org.apache.groovy:groovy:4.0.24'
+    implementation 'org.apache.groovy:groovy-json:4.0.24'
+
+    // Apache Commons IO - simplifies file operations
+    implementation 'commons-io:commons-io:2.18.0'
 
     // Picocli for command-line argument parsing (annotation-based, modern)
     implementation 'info.picocli:picocli:4.7.7'
 
     // Querz NBT library - Complete NBT + MCA/Region file support
     implementation 'com.github.Querz:NBT:6.1'
+
+    // JSON library - for parsing Minecraft JSON text components
+    implementation 'org.json:json:20250517'
 
     // SLF4J API for logging
     implementation 'org.slf4j:slf4j-api:2.0.16'
@@ -55,8 +65,8 @@ dependencies {
     implementation 'me.tongfei:progressbar:0.10.1'
 
     // Spock Framework for testing
-    testImplementation 'org.spockframework:spock-core:2.3-groovy-3.0'
-    testImplementation 'org.codehaus.groovy:groovy-all:3.0.19'
+    testImplementation 'org.spockframework:spock-core:2.3-groovy-4.0'
+    testImplementation 'org.apache.groovy:groovy-all:4.0.24'
 
     // JUnit Platform for running Spock tests
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
@@ -64,6 +74,11 @@ dependencies {
 
 application {
     mainClass = 'Main'
+    applicationDefaultJvmArgs = [
+        '-Xmx10G',
+        '-XX:+UseG1GC',
+        '-XX:MaxGCPauseMillis=200'
+    ]
 }
 
 tasks.withType(JavaCompile) {
@@ -92,11 +107,6 @@ jar {
             into projectDir
         }
     }
-}
-
-// Clean task to remove old builds
-clean {
-    delete 'ReadSignsAndBooks.jar'
 }
 
 // Configure test task
