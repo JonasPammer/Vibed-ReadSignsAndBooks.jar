@@ -95,7 +95,7 @@ jar {
 
     // Include dependencies in the JAR (fat JAR)
     from {
-        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+        configurations.runtimeClasspath.collect { file -> file.directory ? file : zipTree(file) }
     }
 
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
@@ -114,8 +114,8 @@ test {
     useJUnitPlatform()
 
     testLogging {
-        events "passed", "skipped", "failed"
-        exceptionFormat "full"
+        events 'passed', 'skipped', 'failed'
+        exceptionFormat 'full'
         showStandardStreams = true
     }
 
