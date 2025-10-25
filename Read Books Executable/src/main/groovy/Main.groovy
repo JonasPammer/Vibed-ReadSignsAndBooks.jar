@@ -1,3 +1,4 @@
+/* groovylint-disable ClassSize */
 import groovy.json.JsonSlurper
 import me.tongfei.progressbar.ProgressBarBuilder
 import me.tongfei.progressbar.ProgressBarStyle
@@ -25,12 +26,12 @@ import java.text.SimpleDateFormat
         version = '1.0')
 class Main implements Runnable {
 
-    private static final Logger logger = LoggerFactory.getLogger(Main)
-    private static final JsonSlurper jsonSlurper = new JsonSlurper()
-    private static final String[] COLOR_CODES = ["\u00A70", "\u00A71", "\u00A72", "\u00A73", "\u00A74", "\u00A75",
-                                                 "\u00A76", "\u00A77", "\u00A78", "\u00A79", "\u00A7a", "\u00A7b",
-                                                 "\u00A7c", "\u00A7d", "\u00A7e", "\u00A7f", "\u00A7k", "\u00A7l",
-                                                 "\u00A7m", "\u00A7n", "\u00A7o", "\u00A7r"]
+    private static final Logger LOGGER = LoggerFactory.getLogger(Main)
+    private static final JsonSlurper JSON_SLURPER = new JsonSlurper()
+    private static final String[] COLOR_CODES = ['\u00A70', '\u00A71', '\u00A72', '\u00A73', '\u00A74', '\u00A75',
+                                                 '\u00A76', '\u00A77', '\u00A78', '\u00A79', '\u00A7a', '\u00A7b',
+                                                 '\u00A7c', '\u00A7d', '\u00A7e', '\u00A7f', '\u00A7k', '\u00A7l',
+                                                 '\u00A7m', '\u00A7n', '\u00A7o', '\u00A7r']
 
     static String baseDirectory = System.getProperty('user.dir')
     static String outputFolder, booksFolder, duplicatesFolder, dateStamp
@@ -66,16 +67,17 @@ class Main implements Runnable {
     static boolean enableSignExtraction = true
 
     static void main(String[] args) {
-        System.exit(new CommandLine(new Main()).execute(args))
+        new CommandLine(new Main()).execute(args)
+    // Exit code is automatically handled by picocli
     }
 
     @Override
     void run() {
         try {
             runExtraction()
-        } catch (Exception e) {
-            logger.error("Error during extraction: ${e.message}", e)
-            System.exit(1)
+        } catch (IllegalStateException | IOException e) {
+            LOGGER.error("Error during extraction: ${e.message}", e)
+            throw new RuntimeException('Extraction failed', e)
         }
     }
 
@@ -85,12 +87,12 @@ class Main implements Runnable {
         enableBookExtraction = !(signsOnly || disableBooks)
 
         // Reset state
-        [bookHashes, signHashes, booksByContainerType, booksByLocationType].each { it.clear() }
+        [bookHashes, signHashes, booksByContainerType, booksByLocationType].each { collection -> collection.clear() }
         bookCounter = 0
 
         // Set directories
         baseDirectory = customWorldDirectory ?: System.getProperty('user.dir')
-        dateStamp = new SimpleDateFormat('yyyy-MM-dd').format(new Date())
+        dateStamp = new SimpleDateFormat('yyyy-MM-dd', Locale.US).format(new Date())
         outputFolder = customOutputDirectory ?: "ReadBooks${File.separator}${dateStamp}"
         booksFolder = "${outputFolder}${File.separator}books"
         duplicatesFolder = "${booksFolder}${File.separator}.duplicates"
@@ -100,18 +102,18 @@ class Main implements Runnable {
         reloadLogbackConfiguration()
 
         // Create directories
-        [outputFolder, booksFolder, duplicatesFolder].each {
-            new File(baseDirectory, it).mkdirs()
+        [outputFolder, booksFolder, duplicatesFolder].each { String folder ->
+            new File(baseDirectory, folder).mkdirs()
         }
 
-        logger.info('=' * 80)
-        logger.info('ReadSignsAndBooks - Minecraft World Data Extractor')
-        logger.info("Started at: ${new SimpleDateFormat('yyyy-MM-dd HH:mm:ss').format(new Date())}")
-        logger.info("World directory: ${baseDirectory}")
-        logger.info("Output folder: ${outputFolder}")
-        logger.info("Book extraction: ${enableBookExtraction}")
-        logger.info("Sign extraction: ${enableSignExtraction}")
-        logger.info('=' * 80)
+        LOGGER.info('=' * 80)
+        LOGGER.info('ReadSignsAndBooks - Minecraft World Data Extractor')
+        LOGGER.info("Started at: ${new SimpleDateFormat('yyyy-MM-dd HH:mm:ss', Locale.US).format(new Date())}")
+        LOGGER.info("World directory: ${baseDirectory}")
+        LOGGER.info("Output folder: ${outputFolder}")
+        LOGGER.info("Book extraction: ${enableBookExtraction}")
+        LOGGER.info("Sign extraction: ${enableSignExtraction}")
+        LOGGER.info('=' * 80)
 
         long startTime = System.currentTimeMillis()
 
@@ -131,23 +133,23 @@ class Main implements Runnable {
 
             long elapsed = System.currentTimeMillis() - startTime
             printSummaryStatistics(elapsed)
-            logger.info("${elapsed / 1000} seconds to complete.")
-        } catch (Exception e) {
-            logger.error("Fatal error: ${e.message}", e)
+            LOGGER.info("${elapsed / 1000} seconds to complete.")
+        } catch (IllegalStateException | IOException e) {
+            LOGGER.error("Fatal error: ${e.message}", e)
             combinedBooksWriter?.close()
             throw e
         }
     }
 
     static void reloadLogbackConfiguration() {
-        def loggerContext = LoggerFactory.getILoggerFactory() as ch.qos.logback.classic.LoggerContext
+        ch.qos.logback.classic.LoggerContext loggerContext = LoggerFactory.ILoggerFactory as ch.qos.logback.classic.LoggerContext
         loggerContext.reset()
-        def configurator = new ch.qos.logback.classic.joran.JoranConfigurator()
+        ch.qos.logback.classic.joran.JoranConfigurator configurator = new ch.qos.logback.classic.joran.JoranConfigurator()
         configurator.context = loggerContext
         try {
             configurator.doConfigure(Main.classLoader.getResourceAsStream('logback.xml'))
-        } catch (Exception e) {
-            e.printStackTrace()
+        } catch (IllegalStateException e) {
+            LOGGER.debug("Failed to configure logback from XML, using default configuration: ${e.message}")
         }
     }
 
@@ -156,14 +158,18 @@ class Main implements Runnable {
         long minutes = seconds / 60
         long hours = minutes / 60
 
-        if (hours > 0) return String.format('%dh %dm %ds', hours, minutes % 60, seconds % 60)
-        if (minutes > 0) return String.format('%dm %ds', minutes, seconds % 60)
+        if (hours > 0) {
+            return String.format('%dh %dm %ds', hours, minutes % 60, seconds % 60)
+        }
+        if (minutes > 0) {
+            return String.format('%dm %ds', minutes, seconds % 60)
+        }
         return "${seconds}s"
     }
 
     static void printSummaryStatistics(long elapsedMillis) {
-        def summaryFile = new File(baseDirectory, "${outputFolder}${File.separator}summary.txt")
-        summaryFile.withWriter { w ->
+        File summaryFile = new File(baseDirectory, "${outputFolder}${File.separator}summary.txt")
+        summaryFile.withWriter { BufferedWriter w ->
             w.writeLine('=' * 80)
             w.writeLine('SUMMARY STATISTICS')
             w.writeLine('=' * 80)
@@ -176,14 +182,14 @@ class Main implements Runnable {
 
                 if (booksByLocationType) {
                     w.writeLine('\n  Books by location type:')
-                    booksByLocationType.sort { -it.value }.each { k, v ->
+                    booksByLocationType.sort { Map.Entry<String, Integer> entry -> -entry.value }.each { String k, Integer v ->
                         w.writeLine("    ${k}: ${v}")
                 }
             }
 
                 if (booksByContainerType) {
                     w.writeLine('\n  Books by container type:')
-                    booksByContainerType.sort { -it.value }.each { k, v ->
+                    booksByContainerType.sort { Map.Entry<String, Integer> entry -> -entry.value }.each { String k, Integer v ->
                         w.writeLine("    ${k}: ${v}")
                 }
         }
@@ -201,9 +207,9 @@ class Main implements Runnable {
             w.writeLine('=' * 80)
 }
 
-        logger.info("\n${'=' * 80}")
-        logger.info("Summary statistics written to: ${summaryFile.absolutePath}")
-        logger.info('=' * 80)
+        LOGGER.info("\n${'=' * 80}")
+        LOGGER.info("Summary statistics written to: ${summaryFile.absolutePath}")
+        LOGGER.info('=' * 80)
     }
 
     static void incrementBookStats(String containerType, String locationType) {
@@ -212,34 +218,34 @@ class Main implements Runnable {
     }
 
     static void readPlayerData() {
-        logger.debug('Starting readPlayerData()')
-        def folder = new File(baseDirectory, 'playerdata')
+        LOGGER.debug('Starting readPlayerData()')
+        File folder = new File(baseDirectory, 'playerdata')
 
-        if (!folder.exists() || !folder.isDirectory()) {
-            logger.warn("No player data files found in: ${folder.absolutePath}")
+        if (!folder.exists() || !folder.directory) {
+            LOGGER.warn("No player data files found in: ${folder.absolutePath}")
             return
         }
 
-        def files = folder.listFiles()
+        File[] files = folder.listFiles()
         if (!files) {
-            logger.warn("No player data files found in: ${folder.absolutePath}")
+            LOGGER.warn("No player data files found in: ${folder.absolutePath}")
             return
         }
 
-        logger.debug("Found ${files.length} player data files to process")
+        LOGGER.debug("Found ${files.length} player data files to process")
 
         new ProgressBarBuilder()
                 .setTaskName('Player data')
                 .setInitialMax(files.length)
                 .setStyle(ProgressBarStyle.ASCII)
                 .build().withCloseable { pb ->
-                            files.each { file ->
-                    logger.debug("Processing player data: ${file.name}")
-                    def playerCompound = readCompressedNBT(file)
+                            files.each { File file ->
+                    LOGGER.debug("Processing player data: ${file.name}")
+                    CompoundTag playerCompound = readCompressedNBT(file)
 
                     // Process inventory
-                    getCompoundTagList(playerCompound, 'Inventory').each { item ->
-                        def booksBefore = bookCounter
+                    getCompoundTagList(playerCompound, 'Inventory').each { CompoundTag item ->
+                        int booksBefore = bookCounter
                         parseItem(item, "Inventory of player ${file.name}")
                         if (bookCounter > booksBefore) {
                             incrementBookStats('Player Inventory', 'Player')
@@ -247,8 +253,8 @@ class Main implements Runnable {
                     }
 
                     // Process ender chest
-                    getCompoundTagList(playerCompound, 'EnderItems').each { item ->
-                        def booksBefore = bookCounter
+                    getCompoundTagList(playerCompound, 'EnderItems').each { CompoundTag item ->
+                        int booksBefore = bookCounter
                         parseItem(item, "Ender Chest of player ${file.name}")
                         if (bookCounter > booksBefore) {
                             incrementBookStats('Ender Chest', 'Player')
@@ -259,64 +265,68 @@ class Main implements Runnable {
                             }
                 }
 
-        logger.debug('Player data processing complete!')
+        LOGGER.debug('Player data processing complete!')
     }
 
     static void readSignsAndBooks() {
-        logger.debug('Starting readSignsAndBooks()')
-        def folder = new File(baseDirectory, 'region')
+        LOGGER.debug('Starting readSignsAndBooks()')
+        File folder = new File(baseDirectory, 'region')
 
-        if (!folder.exists() || !folder.isDirectory()) {
-            logger.warn("No region files found in: ${folder.absolutePath}")
+        if (!folder.exists() || !folder.directory) {
+            LOGGER.warn("No region files found in: ${folder.absolutePath}")
             return
         }
 
-        def files = folder.listFiles()
+        File[] files = folder.listFiles()
         if (!files) {
-            logger.warn("No region files found in: ${folder.absolutePath}")
+            LOGGER.warn("No region files found in: ${folder.absolutePath}")
             return
         }
 
-        logger.debug("Found ${files.length} region files to process")
+        LOGGER.debug("Found ${files.length} region files to process")
 
-        def signOutput = new File(baseDirectory, "${outputFolder}${File.separator}signs.txt")
-        signOutput.withWriter { signWriter ->
+        File signOutput = new File(baseDirectory, "${outputFolder}${File.separator}signs.txt")
+        signOutput.withWriter { BufferedWriter signWriter ->
             new ProgressBarBuilder()
                     .setTaskName('Region files')
                     .setInitialMax(files.length)
                     .setStyle(ProgressBarStyle.ASCII)
                     .build().withCloseable { pb ->
-                                files.each { file ->
-                        logger.debug("Processing region file: ${file.name}")
+                                files.each { File file ->
+                        LOGGER.debug("Processing region file: ${file.name}")
 
                         try {
-                            def mcaFile = MCAUtil.read(file, LoadFlags.RAW)
+                            net.querz.mca.MCAFile mcaFile = MCAUtil.read(file, LoadFlags.RAW)
 
-                            (0..31).each { x ->
-                                (0..31).each { z ->
-                                    def chunk = mcaFile.getChunk(x, z)
-                                    if (!chunk) return
+                            (0..31).each { int x ->
+                                (0..31).each { int z ->
+                                    net.querz.mca.Chunk chunk = mcaFile.getChunk(x, z)
+                                    if (!chunk) {
+                                        return
+                                    }
 
-                                    def chunkData = chunk.handle
-                                    if (!chunkData) return
+                                    CompoundTag chunkData = chunk.handle
+                                    if (!chunkData) {
+                                        return
+                                    }
 
                                     // Handle both old and new chunk formats
-                                    def level = chunkData.getCompoundTag('Level')
-                                    def chunkRoot = level ?: chunkData
+                                    CompoundTag level = chunkData.getCompoundTag('Level')
+                                    CompoundTag chunkRoot = level ?: chunkData
 
                                     // Process block entities (chests, signs, etc.)
-                                    def tileEntities = chunkRoot.containsKey('block_entities') ?
+                                    ListTag<CompoundTag> tileEntities = chunkRoot.containsKey('block_entities') ?
                                         getCompoundTagList(chunkRoot, 'block_entities') :
                                         getCompoundTagList(chunkRoot, 'TileEntities')
 
-                                    tileEntities.each { tileEntity ->
-                                        def blockId = tileEntity.getString('id')
+                                    tileEntities.each { CompoundTag tileEntity ->
+                                        String blockId = tileEntity.getString('id')
 
                                         // Process containers with items
                                         if (hasKey(tileEntity, 'id')) {
-                                            getCompoundTagList(tileEntity, 'Items').each { item ->
-                                                def bookInfo = "Chunk [${x}, ${z}] Inside ${blockId} at (${tileEntity.getInt('x')} ${tileEntity.getInt('y')} ${tileEntity.getInt('z')}) ${file.name}"
-                                                def booksBefore = bookCounter
+                                            getCompoundTagList(tileEntity, 'Items').each { CompoundTag item ->
+                                                String bookInfo = "Chunk [${x}, ${z}] Inside ${blockId} at (${tileEntity.getInt('x')} ${tileEntity.getInt('y')} ${tileEntity.getInt('z')}) ${file.name}"
+                                                int booksBefore = bookCounter
                                                 parseItem(item, bookInfo)
                                                 if (bookCounter > booksBefore) {
                                                     incrementBookStats(blockId, 'Block Entity')
@@ -326,9 +336,9 @@ class Main implements Runnable {
 
                                         // Process lecterns (single book)
                                         if (hasKey(tileEntity, 'Book')) {
-                                            def book = getCompoundTag(tileEntity, 'Book')
-                                            def bookInfo = "Chunk [${x}, ${z}] Inside ${blockId} at (${tileEntity.getInt('x')} ${tileEntity.getInt('y')} ${tileEntity.getInt('z')}) ${file.name}"
-                                            def booksBefore = bookCounter
+                                            CompoundTag book = getCompoundTag(tileEntity, 'Book')
+                                            String bookInfo = "Chunk [${x}, ${z}] Inside ${blockId} at (${tileEntity.getInt('x')} ${tileEntity.getInt('y')} ${tileEntity.getInt('z')}) ${file.name}"
+                                            int booksBefore = bookCounter
                                             parseItem(book, bookInfo)
                                             if (bookCounter > booksBefore) {
                                                 incrementBookStats('Lectern', 'Block Entity')
@@ -336,31 +346,31 @@ class Main implements Runnable {
                                         }
 
                                         // Process signs
-                                        def signInfo = "Chunk [${x}, ${z}]\t(${tileEntity.getInt('x')} ${tileEntity.getInt('y')} ${tileEntity.getInt('z')})\t\t"
+                                        String signInfo = "Chunk [${x}, ${z}]\t(${tileEntity.getInt('x')} ${tileEntity.getInt('y')} ${tileEntity.getInt('z')})\t\t"
                                         if (hasKey(tileEntity, 'Text1')) {
                                             parseSign(tileEntity, signWriter, signInfo)
-                                    } else if (hasKey(tileEntity, 'front_text')) {
+                                        } else if (hasKey(tileEntity, 'front_text')) {
                                             parseSignNew(tileEntity, signWriter, signInfo)
                                         }
                                     }
 
                                     // Process entities in chunk (for proto-chunks)
-                                    def entities = chunkRoot.containsKey('entities') ?
+                                    ListTag<CompoundTag> entities = chunkRoot.containsKey('entities') ?
                                         getCompoundTagList(chunkRoot, 'entities') :
                                         getCompoundTagList(chunkRoot, 'Entities')
 
-                                    entities.each { entity ->
-                                        def entityId = entity.getString('id')
-                                        def entityPos = getListTag(entity, 'Pos')
-                                        def xPos = getDoubleAt(entityPos, 0) as int
-                                        def yPos = getDoubleAt(entityPos, 1) as int
-                                        def zPos = getDoubleAt(entityPos, 2) as int
+                                    entities.each { CompoundTag entity ->
+                                        String entityId = entity.getString('id')
+                                        ListTag<?> entityPos = getListTag(entity, 'Pos')
+                                        int xPos = getDoubleAt(entityPos, 0) as int
+                                        int yPos = getDoubleAt(entityPos, 1) as int
+                                        int zPos = getDoubleAt(entityPos, 2) as int
 
                                         // Entities with inventory
                                         if (hasKey(entity, 'Items')) {
-                                            getCompoundTagList(entity, 'Items').each { item ->
-                                                def bookInfo = "Chunk [${x}, ${z}] In ${entityId} at (${xPos} ${yPos} ${zPos}) ${file.name}"
-                                                def booksBefore = bookCounter
+                                            getCompoundTagList(entity, 'Items').each { CompoundTag item ->
+                                                String bookInfo = "Chunk [${x}, ${z}] In ${entityId} at (${xPos} ${yPos} ${zPos}) ${file.name}"
+                                                int booksBefore = bookCounter
                                                 parseItem(item, bookInfo)
                                                 if (bookCounter > booksBefore) {
                                                     incrementBookStats(entityId, 'Entity')
@@ -370,9 +380,9 @@ class Main implements Runnable {
 
                                         // Item frames and items on ground
                                         if (hasKey(entity, 'Item')) {
-                                            def item = getCompoundTag(entity, 'Item')
-                                            def bookInfo = "Chunk [${x}, ${z}] In ${entityId} at (${xPos} ${yPos} ${zPos}) ${file.name}"
-                                            def booksBefore = bookCounter
+                                            CompoundTag item = getCompoundTag(entity, 'Item')
+                                            String bookInfo = "Chunk [${x}, ${z}] In ${entityId} at (${xPos} ${yPos} ${zPos}) ${file.name}"
+                                            int booksBefore = bookCounter
                                             parseItem(item, bookInfo)
                                             if (bookCounter > booksBefore) {
                                                 incrementBookStats(entityId, 'Entity')
@@ -381,8 +391,8 @@ class Main implements Runnable {
                                     }
                                 }
                             }
-                    } catch (IOException e) {
-                            logger.debug("Failed to read region file ${file.name}: ${e.message}")
+                        } catch (IOException e) {
+                            LOGGER.debug("Failed to read region file ${file.name}: ${e.message}")
                         }
 
                         pb.step()
@@ -392,66 +402,70 @@ class Main implements Runnable {
             signWriter.writeLine('\nCompleted.')
         }
 
-        logger.debug('Processing complete!')
-        logger.debug("Total unique signs found: ${signHashes.size()}")
-        logger.debug("Total unique books found: ${bookHashes.size()}")
+        LOGGER.debug('Processing complete!')
+        LOGGER.debug("Total unique signs found: ${signHashes.size()}")
+        LOGGER.debug("Total unique books found: ${bookHashes.size()}")
     }
 
     static void readEntities() {
-        logger.debug('Starting readEntities()')
-        def folder = new File(baseDirectory, 'entities')
+        LOGGER.debug('Starting readEntities()')
+        File folder = new File(baseDirectory, 'entities')
 
-        if (!folder.exists() || !folder.isDirectory()) {
-            logger.debug("Entities folder not found (normal for pre-1.17 worlds): ${folder.absolutePath}")
+        if (!folder.exists() || !folder.directory) {
+            LOGGER.debug("Entities folder not found (normal for pre-1.17 worlds): ${folder.absolutePath}")
             return
         }
 
-        def files = folder.listFiles()?.findAll { it.isFile() && it.name.endsWith('.mca') }
+        List<File> files = folder.listFiles()?.findAll { File f -> f.file && f.name.endsWith('.mca') }
         if (!files) {
-            logger.debug("No entity files found in: ${folder.absolutePath}")
+            LOGGER.debug("No entity files found in: ${folder.absolutePath}")
             return
         }
 
-        logger.debug("Found ${files.size()} entity files to process")
+        LOGGER.debug("Found ${files.size()} entity files to process")
 
         new ProgressBarBuilder()
                 .setTaskName('Entity files')
                 .setInitialMax(files.size())
                 .setStyle(ProgressBarStyle.ASCII)
                 .build().withCloseable { pb ->
-                            files.each { file ->
-                    logger.debug("Processing entity file: ${file.name}")
+                            files.each { File file ->
+                    LOGGER.debug("Processing entity file: ${file.name}")
 
                     try {
-                        def mcaFile = MCAUtil.read(file, LoadFlags.RAW)
+                        net.querz.mca.MCAFile mcaFile = MCAUtil.read(file, LoadFlags.RAW)
 
-                        (0..31).each { x ->
-                            (0..31).each { z ->
-                                def chunk = mcaFile.getChunk(x, z)
-                                if (!chunk) return
+                        (0..31).each { int x ->
+                            (0..31).each { int z ->
+                                net.querz.mca.Chunk chunk = mcaFile.getChunk(x, z)
+                                if (!chunk) {
+                                    return
+                                }
 
-                                def chunkData = chunk.handle
-                                if (!chunkData) return
+                                CompoundTag chunkData = chunk.handle
+                                if (!chunkData) {
+                                    return
+                                }
 
-                                def level = chunkData.getCompoundTag('Level')
-                                def chunkRoot = level ?: chunkData
+                                CompoundTag level = chunkData.getCompoundTag('Level')
+                                CompoundTag chunkRoot = level ?: chunkData
 
-                                def entities = chunkRoot.containsKey('entities') ?
+                                ListTag<CompoundTag> entities = chunkRoot.containsKey('entities') ?
                                     getCompoundTagList(chunkRoot, 'entities') :
                                     getCompoundTagList(chunkRoot, 'Entities')
 
-                                entities.each { entity ->
-                                    def entityId = entity.getString('id')
-                                    def entityPos = getListTag(entity, 'Pos')
-                                    def xPos = entityPos.size() >= 3 ? getDoubleAt(entityPos, 0) as int : 0
-                                    def yPos = entityPos.size() >= 3 ? getDoubleAt(entityPos, 1) as int : 0
-                                    def zPos = entityPos.size() >= 3 ? getDoubleAt(entityPos, 2) as int : 0
+                                entities.each { CompoundTag entity ->
+                                    String entityId = entity.getString('id')
+                                    ListTag<?> entityPos = getListTag(entity, 'Pos')
+                                    int xPos = entityPos.size() >= 3 ? getDoubleAt(entityPos, 0) as int : 0
+                                    int yPos = entityPos.size() >= 3 ? getDoubleAt(entityPos, 1) as int : 0
+                                    int zPos = entityPos.size() >= 3 ? getDoubleAt(entityPos, 2) as int : 0
 
                                     // Entities with inventory
                                     if (hasKey(entity, 'Items')) {
-                                        getCompoundTagList(entity, 'Items').each { item ->
-                                            def bookInfo = "Chunk [${x}, ${z}] In ${entityId} at (${xPos} ${yPos} ${zPos}) ${file.name}"
-                                            def booksBefore = bookCounter
+                                        getCompoundTagList(entity, 'Items').each { CompoundTag item ->
+                                            String bookInfo = "Chunk [${x}, ${z}] In ${entityId} at (${xPos} ${yPos} ${zPos}) ${file.name}"
+                                            int booksBefore = bookCounter
                                             parseItem(item, bookInfo)
                                             if (bookCounter > booksBefore) {
                                                 incrementBookStats(entityId, 'Entity')
@@ -461,9 +475,9 @@ class Main implements Runnable {
 
                                     // Item frames and items on ground
                                     if (hasKey(entity, 'Item')) {
-                                        def item = getCompoundTag(entity, 'Item')
-                                        def bookInfo = "Chunk [${x}, ${z}] In ${entityId} at (${xPos} ${yPos} ${zPos}) ${file.name}"
-                                        def booksBefore = bookCounter
+                                        CompoundTag item = getCompoundTag(entity, 'Item')
+                                        String bookInfo = "Chunk [${x}, ${z}] In ${entityId} at (${xPos} ${yPos} ${zPos}) ${file.name}"
+                                        int booksBefore = bookCounter
                                         parseItem(item, bookInfo)
                                         if (bookCounter > booksBefore) {
                                             incrementBookStats(entityId, 'Entity')
@@ -472,46 +486,46 @@ class Main implements Runnable {
                                 }
                             }
                         }
-                } catch (Exception e) {
-                        logger.debug("Error processing entity file ${file.name}: ${e.message}")
+                    } catch (IOException e) {
+                        LOGGER.debug("Error processing entity file ${file.name}: ${e.message}")
                     }
 
                     pb.step()
                             }
                 }
 
-        logger.debug('Entity processing complete!')
+        LOGGER.debug('Entity processing complete!')
     }
 
     static void parseItem(CompoundTag item, String bookInfo) {
-        def itemId = item.getString('id')
+        String itemId = item.getString('id')
 
         if (itemId == 'minecraft:written_book') {
-            logger.debug("Found written book: ${bookInfo.take(80)}...")
+            LOGGER.debug("Found written book: ${bookInfo.take(80)}...")
             readWrittenBook(item, bookInfo)
         }
 
         if (itemId == 'minecraft:writable_book') {
-            logger.debug("Found writable book: ${bookInfo.take(80)}...")
+            LOGGER.debug("Found writable book: ${bookInfo.take(80)}...")
             readWritableBook(item, bookInfo)
         }
 
         // Shulker boxes
         if (itemId.contains('shulker_box')) {
-            logger.debug('Found shulker box, scanning contents...')
+            LOGGER.debug('Found shulker box, scanning contents...')
 
             if (hasKey(item, 'components')) {
-                def components = getCompoundTag(item, 'components')
+                CompoundTag components = getCompoundTag(item, 'components')
                 if (hasKey(components, 'minecraft:container')) {
-                    getCompoundTagList(components, 'minecraft:container').each { containerEntry ->
-                        def shelkerItem = getCompoundTag(containerEntry, 'item')
+                    getCompoundTagList(components, 'minecraft:container').each { CompoundTag containerEntry ->
+                        CompoundTag shelkerItem = getCompoundTag(containerEntry, 'item')
                         parseItem(shelkerItem, "${bookInfo} > shulker_box")
                     }
                 }
             } else if (hasKey(item, 'tag')) {
-                def shelkerCompound = getCompoundTag(item, 'tag')
-                def shelkerCompound2 = getCompoundTag(shelkerCompound, 'BlockEntityTag')
-                getCompoundTagList(shelkerCompound2, 'Items').each { shelkerItem ->
+                CompoundTag shelkerCompound = getCompoundTag(item, 'tag')
+                CompoundTag shelkerCompound2 = getCompoundTag(shelkerCompound, 'BlockEntityTag')
+                getCompoundTagList(shelkerCompound2, 'Items').each { CompoundTag shelkerItem ->
                     parseItem(shelkerItem, "${bookInfo} > shulker_box")
                 }
             }
@@ -519,12 +533,12 @@ class Main implements Runnable {
 
         // Bundles
         if (itemId.contains('bundle')) {
-            logger.debug('Found bundle, scanning contents...')
+            LOGGER.debug('Found bundle, scanning contents...')
 
             if (hasKey(item, 'components')) {
-                def components = getCompoundTag(item, 'components')
+                CompoundTag components = getCompoundTag(item, 'components')
                 if (hasKey(components, 'minecraft:bundle_contents')) {
-                    getCompoundTagList(components, 'minecraft:bundle_contents').each { bundleItem ->
+                    getCompoundTagList(components, 'minecraft:bundle_contents').each { CompoundTag bundleItem ->
                         parseItem(bundleItem, "${bookInfo} > bundle")
                     }
                 }
@@ -533,20 +547,20 @@ class Main implements Runnable {
 
         // Copper chests
         if (itemId.contains('copper_chest')) {
-            logger.debug('Found copper chest, scanning contents...')
+            LOGGER.debug('Found copper chest, scanning contents...')
 
             if (hasKey(item, 'components')) {
-                def components = getCompoundTag(item, 'components')
+                CompoundTag components = getCompoundTag(item, 'components')
                 if (hasKey(components, 'minecraft:container')) {
-                    getCompoundTagList(components, 'minecraft:container').each { containerEntry ->
-                        def chestItem = getCompoundTag(containerEntry, 'item')
+                    getCompoundTagList(components, 'minecraft:container').each { CompoundTag containerEntry ->
+                        CompoundTag chestItem = getCompoundTag(containerEntry, 'item')
                         parseItem(chestItem, "${bookInfo} > copper_chest")
                     }
                 }
             } else if (hasKey(item, 'tag')) {
-                def chestCompound = getCompoundTag(item, 'tag')
-                def chestCompound2 = getCompoundTag(chestCompound, 'BlockEntityTag')
-                getCompoundTagList(chestCompound2, 'Items').each { chestItem ->
+                CompoundTag chestCompound = getCompoundTag(item, 'tag')
+                CompoundTag chestCompound2 = getCompoundTag(chestCompound, 'BlockEntityTag')
+                getCompoundTagList(chestCompound2, 'Items').each { CompoundTag chestItem ->
                     parseItem(chestItem, "${bookInfo} > copper_chest")
                 }
             }
@@ -554,12 +568,16 @@ class Main implements Runnable {
     }
 
     static String sanitizeFilename(String name) {
-        if (!name) return 'unnamed'
-        name.replaceAll(/[\\/:*?<>|]/, '_').take(200)
+        if (!name) {
+            return 'unnamed'
+        }
+        return name.replaceAll(/[\\/:*?<>|]/, '_').take(200)
     }
 
     static void readWrittenBook(CompoundTag item, String bookInfo) {
-        def tag, pages, format
+        CompoundTag tag = null
+        ListTag<?> pages = null
+        String format = null
 
         // Try both old and new formats
         if (hasKey(item, 'tag')) {
@@ -567,9 +585,9 @@ class Main implements Runnable {
             pages = getListTag(tag, 'pages')
             format = 'pre-1.20.5'
         } else if (hasKey(item, 'components')) {
-            def components = getCompoundTag(item, 'components')
+            CompoundTag components = getCompoundTag(item, 'components')
             if (hasKey(components, 'minecraft:written_book_content')) {
-                def bookContent = getCompoundTag(components, 'minecraft:written_book_content')
+                CompoundTag bookContent = getCompoundTag(components, 'minecraft:written_book_content')
                 pages = getListTag(bookContent, 'pages')
                 tag = bookContent
                 format = '1.20.5+'
@@ -577,41 +595,43 @@ class Main implements Runnable {
         }
 
         if (!pages || pages.size() == 0) {
-            logger.debug("Written book has no pages (format: ${format})")
+            LOGGER.debug("Written book has no pages (format: ${format})")
             return
         }
 
         // Check for duplicates
-        def isDuplicate = !bookHashes.add(pages.hashCode())
+        boolean isDuplicate = !bookHashes.add(pages.hashCode())
         if (isDuplicate) {
-            logger.debug('Written book is a duplicate - saving to .duplicates folder')
+            LOGGER.debug('Written book is a duplicate - saving to .duplicates folder')
         }
 
         // Extract author and title
-        def author = tag?.getString('author') ?: ''
-        def title = ''
+        String author = tag?.getString('author') ?: ''
+        String title = ''
 
-        def titleTag = tag?.get('title')
+        net.querz.nbt.tag.Tag<?> titleTag = tag?.get('title')
         if (titleTag instanceof CompoundTag) {
             // 1.20.5+ format
-            title = titleTag.getString('raw') ?: titleTag.getString('filtered') ?: ''
+            title = ((CompoundTag) titleTag).getString('raw') ?: ((CompoundTag) titleTag).getString('filtered') ?: ''
         } else if (titleTag instanceof StringTag) {
             // Pre-1.20.5 format
             title = tag.getString('title')
         }
 
-        logger.debug("Extracted written book: \"${title}\" by ${author} (${pages.size()} pages, format: ${format})")
+        LOGGER.debug("Extracted written book: \"${title}\" by ${author} (${pages.size()} pages, format: ${format})")
 
         bookCounter++
 
         // Extract coordinates for filename
-        def (coordsForFilename, locationForFilename) = extractLocationInfo(bookInfo)
+        List<String> locationInfo = extractLocationInfo(bookInfo)
+        String coordsForFilename = locationInfo[0]
+        String locationForFilename = locationInfo[1]
 
-        def filename = sanitizeFilename(String.format('%03d_', bookCounter) + "${title ?: 'untitled'}_by_${author ?: 'unknown'}_at_${coordsForFilename}_${locationForFilename}_pages_1-${pages.size()}.txt")
-        def targetFolder = isDuplicate ? duplicatesFolder : booksFolder
-        def bookFile = new File(baseDirectory, "${targetFolder}${File.separator}${filename}")
+        String filename = sanitizeFilename(String.format('%03d_', bookCounter) + "${title ?: 'untitled'}_by_${author ?: 'unknown'}_at_${coordsForFilename}_${locationForFilename}_pages_1-${pages.size()}.txt")
+        String targetFolder = isDuplicate ? duplicatesFolder : booksFolder
+        File bookFile = new File(baseDirectory, "${targetFolder}${File.separator}${filename}")
 
-        bookFile.withWriter { writer ->
+        bookFile.withWriter { BufferedWriter writer ->
             combinedBooksWriter?.with {
                 writeLine("#region ${filename}")
                 writeLine("Title: ${title}")
@@ -621,11 +641,13 @@ class Main implements Runnable {
                 writeLine('')
             }
 
-            (0..<pages.size()).each { pc ->
-                def pageText = extractPageText(pages, pc)
-                if (!pageText) return
+            (0..<pages.size()).each { int pc ->
+                String pageText = extractPageText(pages, pc)
+                if (!pageText) {
+                    return
+                }
 
-                def pageContent = extractTextContent(pageText)
+                String pageContent = extractTextContent(pageText)
 
                 writer.writeLine(pageContent)
                 combinedBooksWriter?.writeLine("Page ${pc + 1}: ${pageContent}")
@@ -640,41 +662,44 @@ class Main implements Runnable {
     }
 
     static void readWritableBook(CompoundTag item, String bookInfo) {
-        def pages, format
+        ListTag<?> pages = null
+        String format = null
 
         if (hasKey(item, 'tag')) {
-            def tag = getCompoundTag(item, 'tag')
+            CompoundTag tag = getCompoundTag(item, 'tag')
             pages = getListTag(tag, 'pages')
             format = 'pre-1.20.5'
         } else if (hasKey(item, 'components')) {
-            def components = getCompoundTag(item, 'components')
+            CompoundTag components = getCompoundTag(item, 'components')
             if (hasKey(components, 'minecraft:writable_book_content')) {
-                def bookContent = getCompoundTag(components, 'minecraft:writable_book_content')
+                CompoundTag bookContent = getCompoundTag(components, 'minecraft:writable_book_content')
                 pages = getListTag(bookContent, 'pages')
                 format = '1.20.5+'
             }
         }
 
         if (!pages || pages.size() == 0) {
-            logger.debug("Writable book has no pages (format: ${format})")
+            LOGGER.debug("Writable book has no pages (format: ${format})")
             return
         }
 
-        def isDuplicate = !bookHashes.add(pages.hashCode())
+        boolean isDuplicate = !bookHashes.add(pages.hashCode())
         if (isDuplicate) {
-            logger.debug('Writable book is a duplicate - saving to .duplicates folder')
+            LOGGER.debug('Writable book is a duplicate - saving to .duplicates folder')
         }
 
-        logger.debug("Extracted writable book (${pages.size()} pages, format: ${format})")
+        LOGGER.debug("Extracted writable book (${pages.size()} pages, format: ${format})")
 
         bookCounter++
 
-        def (coordsForFilename, locationForFilename) = extractLocationInfo(bookInfo)
-        def filename = sanitizeFilename(String.format('%03d_', bookCounter) + "writable_book_at_${coordsForFilename}_${locationForFilename}_pages_1-${pages.size()}.txt")
-        def targetFolder = isDuplicate ? duplicatesFolder : booksFolder
-        def bookFile = new File(baseDirectory, "${targetFolder}${File.separator}${filename}")
+        List<String> locationInfo = extractLocationInfo(bookInfo)
+        String coordsForFilename = locationInfo[0]
+        String locationForFilename = locationInfo[1]
+        String filename = sanitizeFilename(String.format('%03d_', bookCounter) + "writable_book_at_${coordsForFilename}_${locationForFilename}_pages_1-${pages.size()}.txt")
+        String targetFolder = isDuplicate ? duplicatesFolder : booksFolder
+        File bookFile = new File(baseDirectory, "${targetFolder}${File.separator}${filename}")
 
-        bookFile.withWriter { writer ->
+        bookFile.withWriter { BufferedWriter writer ->
             combinedBooksWriter?.with {
                 writeLine("#region ${filename}")
                 writeLine('WRITABLE BOOK (Book & Quill)')
@@ -683,11 +708,13 @@ class Main implements Runnable {
                 writeLine('')
             }
 
-            (0..<pages.size()).each { pc ->
-                def pageText = extractPageText(pages, pc)
-                if (!pageText) return
+            (0..<pages.size()).each { int pc ->
+                String pageText = extractPageText(pages, pc)
+                if (!pageText) {
+                    return
+                }
 
-                def pageContent = removeTextFormatting(pageText)
+                String pageContent = removeTextFormatting(pageText)
 
                 writer.writeLine(pageContent)
                 combinedBooksWriter?.with {
@@ -705,24 +732,28 @@ class Main implements Runnable {
         }
     }
 
-    static List extractLocationInfo(String bookInfo) {
-        def coordsForFilename = 'unknown'
-        def locationForFilename = 'unknown'
+    static List<String> extractLocationInfo(String bookInfo) {
+        String coordsForFilename = 'unknown'
+        String locationForFilename = 'unknown'
 
         try {
             if (bookInfo.contains(' at (')) {
-                def atIndex = bookInfo.indexOf(' at (')
-                def endParenIndex = bookInfo.indexOf(')', atIndex)
-                if (endParenIndex > atIndex) {
+                int atIndex = bookInfo.indexOf(' at (')
+                int endParenIndex = bookInfo.indexOf(')', atIndex)
+                if (endParenIndex > atIndex && atIndex + 5 < bookInfo.length()) {
                     coordsForFilename = bookInfo.substring(atIndex + 5, endParenIndex).replace(' ', '_')
                 }
 
                 if (bookInfo.contains('Inside ')) {
-                    def insideIndex = bookInfo.indexOf('Inside ') + 7
-                    locationForFilename = bookInfo.substring(insideIndex, atIndex).trim()
+                    int insideIndex = bookInfo.indexOf('Inside ') + 7
+                    if (insideIndex < atIndex && insideIndex < bookInfo.length()) {
+                        locationForFilename = bookInfo.substring(insideIndex, atIndex).trim()
+                    }
                 } else if (bookInfo.contains('In ')) {
-                    def inIndex = bookInfo.indexOf('In ') + 3
-                    locationForFilename = bookInfo.substring(inIndex, atIndex).trim()
+                    int inIndex = bookInfo.indexOf('In ') + 3
+                    if (inIndex < atIndex && inIndex < bookInfo.length()) {
+                        locationForFilename = bookInfo.substring(inIndex, atIndex).trim()
+                    }
                 }
             } else if (bookInfo.contains('Inventory of player')) {
                 coordsForFilename = 'player_inventory'
@@ -731,37 +762,39 @@ class Main implements Runnable {
                 coordsForFilename = 'ender_chest'
                 locationForFilename = 'ender_chest'
             }
-        } catch (Exception e) {
-            logger.warn("Failed to parse bookInfo for filename: ${bookInfo}")
+        } catch (StringIndexOutOfBoundsException e) {
+            LOGGER.warn("Failed to parse bookInfo for filename: ${bookInfo}", e)
         }
 
-        [coordsForFilename, locationForFilename]
+        return [coordsForFilename, locationForFilename]
     }
 
     static String extractPageText(ListTag<?> pages, int index) {
         if (isStringList(pages)) {
             return getStringAt(pages, index)
         } else if (isCompoundList(pages)) {
-            def pageCompound = getCompoundAt(pages, index)
+            CompoundTag pageCompound = getCompoundAt(pages, index)
             return pageCompound.getString('raw') ?: pageCompound.getString('filtered') ?: ''
         }
         return ''
     }
 
     static String extractTextContent(String pageText) {
-        if (!pageText) return ''
+        if (!pageText) {
+            return ''
+        }
 
         if (!pageText.startsWith('{')) {
             return removeTextFormatting(pageText)
         }
 
         try {
-            def pageJSON = jsonSlurper.parseText(pageText)
+            Object pageJSON = JSON_SLURPER.parseText(pageText)
 
             if (pageJSON.extra) {
-                return pageJSON.extra.collect { item ->
+                return pageJSON.extra.collect { Object item ->
                     if (item instanceof String) {
-                        removeTextFormatting(item)
+                        removeTextFormatting((String) item)
                     } else {
                         removeTextFormatting(item.text ?: '')
                     }
@@ -769,59 +802,61 @@ class Main implements Runnable {
             } else if (pageJSON.text) {
                 return removeTextFormatting(pageJSON.text)
             }
-        } catch (Exception e) {
-        // Not valid JSON, return as-is
+        } catch (groovy.json.JsonException e) {
+            LOGGER.debug("Page text is not valid JSON, returning as-is: ${e.message}")
         }
 
         return removeTextFormatting(pageText)
     }
 
     static void parseSign(CompoundTag tileEntity, BufferedWriter signWriter, String signInfo) {
-        logger.debug('parseSign() - Extracting text from old format sign')
+        LOGGER.debug('parseSign() - Extracting text from old format sign')
 
         // Get the StringTag objects and extract their values
-        String text1 = ((StringTag) tileEntity.get("Text1")).getValue()
-        String text2 = ((StringTag) tileEntity.get("Text2")).getValue()
-        String text3 = ((StringTag) tileEntity.get("Text3")).getValue()
-        String text4 = ((StringTag) tileEntity.get("Text4")).getValue()
+        String text1 = ((StringTag) tileEntity.get('Text1')).value
+        String text2 = ((StringTag) tileEntity.get('Text2')).value
+        String text3 = ((StringTag) tileEntity.get('Text3')).value
+        String text4 = ((StringTag) tileEntity.get('Text4')).value
 
-        def hash = signInfo + text1 + text2 + text3 + text4
+        String hash = signInfo + text1 + text2 + text3 + text4
         if (!signHashes.add(hash)) {
-            logger.debug('Sign is duplicate, skipping')
+            LOGGER.debug('Sign is duplicate, skipping')
             return
         }
 
-        signWriter.write(signInfo)
-        signWriter.write(extractSignLineText(text1) + " ")
-        signWriter.write(extractSignLineText(text2) + " ")
-        signWriter.write(extractSignLineText(text3) + " ")
-        signWriter.write(extractSignLineText(text4) + " ")
-        signWriter.newLine()
+        signWriter.with {
+            write(signInfo)
+            write(extractSignLineText(text1) + ' ')
+            write(extractSignLineText(text2) + ' ')
+            write(extractSignLineText(text3) + ' ')
+            write(extractSignLineText(text4) + ' ')
+            newLine()
+        }
     }
 
     static void parseSignNew(CompoundTag tileEntity, BufferedWriter signWriter, String signInfo) {
-        logger.debug('parseSignNew() - Extracting text from new format sign')
+        LOGGER.debug('parseSignNew() - Extracting text from new format sign')
 
-        def frontText = getCompoundTag(tileEntity, 'front_text')
-        def messages = getListTag(frontText, 'messages')
+        CompoundTag frontText = getCompoundTag(tileEntity, 'front_text')
+        ListTag<?> messages = getListTag(frontText, 'messages')
 
         if (messages.size() == 0) {
-            logger.debug('No messages found, returning')
+            LOGGER.debug('No messages found, returning')
             return
         }
 
-        def signLines = (0..3).collect { getStringAt(messages, it) }
+        List<String> signLines = (0..3).collect { int i -> getStringAt(messages, i) }
 
-        def hash = signInfo + signLines.join('')
+        String hash = signInfo + signLines.join('')
         if (!signHashes.add(hash)) {
-            logger.debug('Sign is duplicate, skipping')
+            LOGGER.debug('Sign is duplicate, skipping')
             return
         }
 
         signWriter.write(signInfo)
 
-        signLines.each { line ->
-            def text = extractSignLineText(line)
+        signLines.each { String line ->
+            String text = extractSignLineText(line)
             signWriter.write("${text} ")
         }
 
@@ -829,23 +864,27 @@ class Main implements Runnable {
     }
 
     static String extractSignLineText(String line) {
-        if (!line || line == '' || line == 'null') return ''
-        if (!line.startsWith('{')) return line
+        if (!line || line == '' || line == 'null') {
+            return ''
+        }
+        if (!line.startsWith('{')) {
+            return line
+        }
 
         try {
-            def json = new JSONObject(line)
+            JSONObject json = new JSONObject(line)
 
             if (json.has('extra')) {
-                def extra = json.get('extra')
+                Object extra = json.get('extra')
                 if (extra instanceof JSONArray) {
-                    def sb = new StringBuilder()
-                    def extraArray = (JSONArray) extra
+                    StringBuilder sb = new StringBuilder()
+                    JSONArray extraArray = (JSONArray) extra
                     for (int i = 0; i < extraArray.length(); i++) {
-                        def item = extraArray.get(i)
+                        Object item = extraArray.get(i)
                         if (item instanceof String) {
                             sb.append(item)
                         } else if (item instanceof JSONObject) {
-                            def temp = (JSONObject) item
+                            JSONObject temp = (JSONObject) item
                             if (temp.has('text')) {
                                 sb.append(temp.get('text'))
                             }
@@ -853,13 +892,13 @@ class Main implements Runnable {
                     }
                     return sb.toString()
                 } else if (extra instanceof JSONObject) {
-                    def extraObj = (JSONObject) extra
+                    JSONObject extraObj = (JSONObject) extra
                     if (extraObj.has('text')) {
-                        return extraObj.get('text').toString()
+                        return String.valueOf(extraObj.get('text'))
                     }
                 }
             } else if (json.has('text')) {
-                def text = json.get('text').toString()
+                String text = String.valueOf(json.get('text'))
                 // Filter out empty text with only empty key-value pairs
                 if (text == '' && json.length() == 1) {
                     return ''
@@ -867,7 +906,7 @@ class Main implements Runnable {
                 return text
             }
         } catch (JSONException e) {
-            // Not valid JSON
+            LOGGER.debug("Sign line is not valid JSON: ${e.message}")
         }
 
         // Filter out empty JSON objects like {"":""} or {}
@@ -879,77 +918,97 @@ class Main implements Runnable {
     }
 
     static String removeTextFormatting(String text) {
-        if (!text) return ''
-        COLOR_CODES.inject(text) { result, code -> result.replace(code, '') }
+        if (!text) {
+            return ''
+        }
+        return COLOR_CODES.inject(text) { String result, String code -> result.replace(code, '') }
     }
 
     static CompoundTag readCompressedNBT(File file) {
-        def namedTag = NBTUtil.read(file)
-        (CompoundTag) namedTag.tag
+        net.querz.nbt.io.NamedTag namedTag = NBTUtil.read(file)
+        return (CompoundTag) namedTag.tag
     }
 
     // ========== NBT Helper Methods ==========
 
     static boolean hasKey(CompoundTag tag, String key) {
-        tag != null && tag.containsKey(key)
+        return tag != null && tag.containsKey(key)
     }
 
     static CompoundTag getCompoundTag(CompoundTag tag, String key) {
-        if (!tag) return new CompoundTag()
-        tag.getCompoundTag(key) ?: new CompoundTag()
+        if (!tag) {
+            return new CompoundTag()
+        }
+        return tag.getCompoundTag(key) ?: new CompoundTag()
     }
 
     static ListTag<CompoundTag> getCompoundTagList(CompoundTag tag, String key) {
         if (!tag || !tag.containsKey(key)) {
-            return new ListTag<>(CompoundTag.class)
+            return new ListTag<>(CompoundTag)
         }
-        def list = tag.getListTag(key)
+        ListTag<?> list = tag.getListTag(key)
         if (!list || list.size() == 0) {
-            return new ListTag<>(CompoundTag.class)
+            return new ListTag<>(CompoundTag)
         }
         try {
             return list.asCompoundTagList()
         } catch (ClassCastException e) {
-            return new ListTag<>(CompoundTag.class)
+            return new ListTag<>(CompoundTag)
         }
     }
 
     static ListTag<?> getListTag(CompoundTag tag, String key) {
         if (!tag || !tag.containsKey(key)) {
-            return ListTag.createUnchecked(Object.class)
+            return ListTag.createUnchecked(Object)
         }
-        tag.getListTag(key) ?: ListTag.createUnchecked(Object.class)
+        return tag.getListTag(key) ?: ListTag.createUnchecked(Object)
     }
 
     static double getDoubleAt(ListTag<?> list, int index) {
-        if (!list || index < 0 || index >= list.size()) return 0.0
+        if (!list || index < 0 || index >= list.size()) {
+            return 0.0
+        }
 
         try {
-            def tag = list.get(index)
-            if (tag instanceof NumberTag) {
-                return ((NumberTag<?>) tag).asDouble()
-            } else if (tag instanceof StringTag) {
-                return Double.parseDouble(((StringTag) tag).value)
+            net.querz.nbt.tag.Tag<?> tag = list.get(index)
+            if (tag == null) {
+                return 0.0
             }
-        } catch (Exception e) {
-        // Ignore
+            switch (tag) {
+                case NumberTag:
+                    return ((NumberTag<?>) tag).asDouble()
+                case StringTag:
+                    return Double.parseDouble(((StringTag) tag).value)
+                default:
+                    return 0.0
+            }
+        } catch (NumberFormatException e) {
+            LOGGER.debug("Invalid number format in NBT tag, returning default: ${e.message}")
+            return 0.0
         }
-        return 0.0
     }
 
     static String getStringAt(ListTag<?> list, int index) {
-        if (!list || index < 0 || index >= list.size()) return ''
+        if (!list || index < 0 || index >= list.size()) {
+            return ''
+        }
 
         try {
-            def tag = list.get(index)
-            if (tag instanceof StringTag) {
-                return ((StringTag) tag).getValue()
-            } else if (tag instanceof CompoundTag) {
-                // Convert CompoundTag to JSON using org.json library
-                return convertNbtToJson((CompoundTag) tag).toString()
+            net.querz.nbt.tag.Tag<?> tag = list.get(index)
+            if (tag == null) {
+                return ''
             }
-            return tag.valueToString()
-        } catch (Exception e) {
+            switch (tag) {
+                case StringTag:
+                    return ((StringTag) tag).value
+                case CompoundTag:
+                    // Convert CompoundTag to JSON using org.json library
+                    return convertNbtToJson((CompoundTag) tag).toString()
+                default:
+                    return tag.valueToString()
+            }
+        } catch (ClassCastException e) {
+            LOGGER.debug("Error casting NBT tag at index ${index}: ${e.message}")
             return ''
         }
     }
@@ -959,19 +1018,24 @@ class Main implements Runnable {
      * This handles the NBT -> JSON conversion for Minecraft text components.
      */
     static JSONObject convertNbtToJson(CompoundTag tag) {
-        def json = new JSONObject()
+        JSONObject json = new JSONObject()
 
-        tag.forEach { key, value ->
-            if (value instanceof StringTag) {
-                json.put(key, ((StringTag) value).getValue())
-            } else if (value instanceof NumberTag) {
-                json.put(key, ((NumberTag) value).asNumber())
-            } else if (value instanceof CompoundTag) {
-                json.put(key, convertNbtToJson((CompoundTag) value))
-            } else if (value instanceof ListTag) {
-                json.put(key, convertNbtListToJsonArray((ListTag<?>) value))
-            } else {
-                json.put(key, value.getValue())
+        tag.forEach { String key, net.querz.nbt.tag.Tag<?> value ->
+            switch (value) {
+                case StringTag:
+                    json.put(key, ((StringTag) value).value)
+                    break
+                case NumberTag:
+                    json.put(key, ((NumberTag) value).asNumber())
+                    break
+                case CompoundTag:
+                    json.put(key, convertNbtToJson((CompoundTag) value))
+                    break
+                case ListTag:
+                    json.put(key, convertNbtListToJsonArray((ListTag<?>) value))
+                    break
+                default:
+                    json.put(key, value.value)
             }
         }
 
@@ -982,21 +1046,26 @@ class Main implements Runnable {
      * Converts a ListTag (NBT) to a JSONArray.
      */
     static JSONArray convertNbtListToJsonArray(ListTag<?> list) {
-        def array = new JSONArray()
+        JSONArray array = new JSONArray()
 
         for (int i = 0; i < list.size(); i++) {
-            def tag = list.get(i)
+            net.querz.nbt.tag.Tag<?> tag = list.get(i)
 
-            if (tag instanceof StringTag) {
-                array.put(((StringTag) tag).getValue())
-            } else if (tag instanceof NumberTag) {
-                array.put(((NumberTag) tag).asNumber())
-            } else if (tag instanceof CompoundTag) {
-                array.put(convertNbtToJson((CompoundTag) tag))
-            } else if (tag instanceof ListTag) {
-                array.put(convertNbtListToJsonArray((ListTag<?>) tag))
-            } else {
-                array.put(tag.getValue())
+            switch (tag) {
+                case StringTag:
+                    array.put(((StringTag) tag).value)
+                    break
+                case NumberTag:
+                    array.put(((NumberTag) tag).asNumber())
+                    break
+                case CompoundTag:
+                    array.put(convertNbtToJson((CompoundTag) tag))
+                    break
+                case ListTag:
+                    array.put(convertNbtListToJsonArray((ListTag<?>) tag))
+                    break
+                default:
+                    array.put(tag.value)
             }
         }
 
@@ -1004,49 +1073,51 @@ class Main implements Runnable {
     }
 
     static String getStringFrom(CompoundTag tag, String key) {
-        if (!tag || !tag.containsKey(key)) return ''
+        if (!tag || !tag.containsKey(key)) {
+            return ''
+        }
 
         try {
-            def value = tag.get(key)
-            if (value == null) return ''
+            net.querz.nbt.tag.Tag<?> value = tag.get(key)
+            if (value == null) {
+                return ''
+            }
 
-            logger.debug("getStringFrom() - key: ${key}, value type: ${value.getClass().name}, value: ${value}")
+            LOGGER.debug("getStringFrom() - key: ${key}, value type: ${value.getClass().name}, value: ${value}")
 
             // Check if it's a StringTag and get the value
-            if (value instanceof net.querz.nbt.tag.StringTag) {
-                def result = ((net.querz.nbt.tag.StringTag) value).getValue()
-                logger.debug("getStringFrom() - returning: ${result}")
+            if (value instanceof StringTag) {
+                String result = ((StringTag) value).value
+                LOGGER.debug("getStringFrom() - returning: ${result}")
                 return result
             }
 
-            logger.debug("getStringFrom() - value is not a StringTag, returning empty string")
+            LOGGER.debug('getStringFrom() - value is not a StringTag, returning empty string')
             return ''
-        } catch (Exception e) {
-            logger.error("getStringFrom() - exception: ${e.message}", e)
+        } catch (ClassCastException e) {
+            LOGGER.error("getStringFrom() - error casting value for key '${key}': ${e.message}", e)
             return ''
         }
     }
 
     static CompoundTag getCompoundAt(ListTag<?> list, int index) {
-        if (!list || index < 0 || index >= list.size()) return new CompoundTag()
+        if (!list || index < 0 || index >= list.size()) {
+            return new CompoundTag()
+        }
 
-        try {
-            def tag = list.get(index)
-            if (tag instanceof CompoundTag) {
-                return (CompoundTag) tag
-            }
-        } catch (Exception e) {
-        // Ignore
+        net.querz.nbt.tag.Tag<?> tag = list.get(index)
+        if (tag instanceof CompoundTag) {
+            return (CompoundTag) tag
         }
         return new CompoundTag()
     }
 
     static boolean isStringList(ListTag<?> list) {
-        list && list.size() > 0 && list.typeClass == StringTag.class
+        return list && list.size() > 0 && list.typeClass == StringTag
     }
 
     static boolean isCompoundList(ListTag<?> list) {
-        list && list.size() > 0 && list.typeClass == CompoundTag.class
+        return list && list.size() > 0 && list.typeClass == CompoundTag
     }
 
 }

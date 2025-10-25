@@ -1,0 +1,37 @@
+{
+    "extends": "recommended",
+    "rules": {
+        "BlockEndsWithBlankLine": "off",
+        "ClassJavadoc": "off",
+        "ClassSize": "off",
+        "CompileStatic": "off",
+        "DuplicateNumberLiteral": "off",
+        "DuplicateStringLiteral": "off",
+        "Instanceof": "off",
+        "JUnitPublicField": "off",
+        "JUnitPublicNonTestMethod": "off",
+        "JUnitPublicProperty": "off",
+        "JavaIoPackageAccess": "off",
+        "LineLength": "off",
+        "MethodCount": "off",
+        "MethodName": {
+            "enabled": false
+        },
+        "MethodReturnTypeRequired": {
+            "enabled": false
+        },
+        "MethodSize": "off",
+        "NestedBlockDepth": "off",
+        "NoDouble": "off",
+        "NoTabCharacter": "off",
+        "PublicMethodsBeforeNonPublicMethods": "off",
+        "StaticMethodsBeforeInstanceMethods": "off",
+        "ThrowRuntimeException": "off",
+        "UnnecessaryObjectReferences": "off"
+    },
+    "excludes": [
+        "**/test/**",
+        "**/build/**",
+        "**/.gradle/**"
+    ]
+}

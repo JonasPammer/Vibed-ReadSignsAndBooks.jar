@@ -36,30 +36,30 @@ class ReadBooksIntegrationSpec extends Specification {
     int currentExpectedBookCount
     int currentExpectedSignCount
 
-    def setup() {
+    void setup() {
         // Create date stamp for expected output folder
-        dateStamp = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+        dateStamp = LocalDate.now().format(DateTimeFormatter.ofPattern('yyyy-MM-dd'))
 
         // Create temp directory in build/test-worlds (gitignored)
-        def projectRoot = Paths.get(System.getProperty("user.dir"))
-        tempDir = projectRoot.resolve("build").resolve("test-worlds")
+        Path projectRoot = Paths.get(System.getProperty('user.dir'))
+        tempDir = projectRoot.resolve('build').resolve('test-worlds')
         Files.createDirectories(tempDir)
 
         println "Test output directory: ${tempDir.toAbsolutePath()}"
     }
 
     def "should extract books from test world and create individual book files"() {
-        given: "test Minecraft worlds with known books"
-        def testWorlds = discoverTestWorlds()
+        given: 'test Minecraft worlds with known books'
+        List testWorlds = discoverTestWorlds()
 
-        expect: "at least one test world exists"
+        expect: 'at least one test world exists'
         testWorlds.size() > 0
 
-        and: "all test worlds are processed successfully"
+        and: 'all test worlds are processed successfully'
         testWorlds.every { worldInfo ->
-            println "\n" + "=".repeat(80)
+            println '\n' + '='.repeat(80)
             println "Testing world: ${worldInfo.name} (expected ${worldInfo.bookCount} books, ${worldInfo.signCount} signs)"
-            println "=".repeat(80)
+            println '='.repeat(80)
 
             currentTestWorldName = worldInfo.name
             currentExpectedBookCount = worldInfo.bookCount
@@ -70,7 +70,7 @@ class ReadBooksIntegrationSpec extends Specification {
             Files.createDirectories(testWorldDir)
 
             // Expected output directory
-            outputDir = testWorldDir.resolve("ReadBooks").resolve(dateStamp)
+            outputDir = testWorldDir.resolve('ReadBooks').resolve(dateStamp)
 
             // Copy and run
             copyTestWorldData(worldInfo.resourcePath)
@@ -78,40 +78,39 @@ class ReadBooksIntegrationSpec extends Specification {
 
             // Verify output directory structure
             assert Files.exists(outputDir)
-            assert Files.exists(outputDir.resolve("books"))
-            assert Files.exists(outputDir.resolve("logs.txt"))
+            assert Files.exists(outputDir.resolve('books'))
+            assert Files.exists(outputDir.resolve('logs.txt'))
 
             // Verify book files
-            def bookFiles = getBookFiles()
             assert bookFiles.size() > 0
 
             // Verify book file contents (should contain only page content, metadata is in filename)
-            bookFiles.each { bookFile ->
-                def content = bookFile.text
+            bookFiles.each { File bookFile ->
+                String content = bookFile.text
                 // Individual book files contain only page content (no headers)
                 assert content.length() > 0
 
                 // Verify filename contains metadata
-                def filename = bookFile.name
-                assert filename.contains("_at_") // Contains coordinates
-                assert filename.contains("_pages_") // Contains page count
-                assert filename.endsWith(".txt")
+                String filename = bookFile.name
+                assert filename.contains('_at_') // Contains coordinates
+                assert filename.contains('_pages_') // Contains page count
+                assert filename.endsWith('.txt')
             }
 
             // Verify no errors in log
-            def logContent = outputDir.resolve("logs.txt").text
-            assert !logContent.contains("[ERROR]")
+            String logContent = outputDir.resolve('logs.txt').text
+            assert !logContent.contains('[ERROR]')
 
             // Verify correct book count (getBookFiles() already includes duplicates)
-            def totalBooks = bookFiles.size()
+            int totalBooks = bookFiles.size()
             println "  ✓ Found ${totalBooks} books (expected ${currentExpectedBookCount})"
             assert totalBooks == currentExpectedBookCount
 
             // Verify correct sign count
-            def signFile = outputDir.resolve("signs.txt")
-            def signContent = signFile.text
-            // Count signs by counting lines that match the pattern: "Chunk [X, Z]	(x y z)		text"
-            def signCount = signContent.findAll(/Chunk \[\d+, \d+\]\t\([^)]+\)\t\t/).size()
+            Path signFile = outputDir.resolve('signs.txt')
+            String signContent = signFile.text
+            // Count signs by counting lines that match the pattern: "Chunk [X, Z]    (x y z)        text"
+            int signCount = signContent.findAll(/Chunk \[\d+, \d+\]\t\([^)]+\)\t\t/).size()
             println "  ✓ Found ${signCount} signs (expected ${currentExpectedSignCount})"
             assert signCount == currentExpectedSignCount
 
@@ -120,73 +119,70 @@ class ReadBooksIntegrationSpec extends Specification {
     }
 
     def "should include location information in each book file"() {
-        given: "test worlds with books in various containers"
-        def testWorlds = discoverTestWorlds()
+        given: 'test worlds with books in various containers'
+        List testWorlds = discoverTestWorlds()
 
-        expect: "at least one test world exists"
+        expect: 'at least one test world exists'
         testWorlds.size() > 0
 
-        and: "all books have location information in filename"
+        and: 'all books have location information in filename'
         testWorlds.every { worldInfo ->
             setupTestWorld(worldInfo)
             runReadBooksProgram()
 
-            def bookFiles = getBookFiles()
-            bookFiles.every { bookFile ->
-                def filename = bookFile.name
+            bookFiles.every { File bookFile ->
+                String filename = bookFile.name
 
                 // Location information is in the filename (after "_at_")
                 // This includes coordinates and location type (e.g., "_at_-2_75_-9_minecraft_chest")
-                filename.contains("_at_")
+                filename.contains('_at_')
             }
         }
     }
 
     def "should handle books with special characters in titles"() {
-        given: "test worlds potentially containing books with special characters"
-        def testWorlds = discoverTestWorlds()
+        given: 'test worlds potentially containing books with special characters'
+        List testWorlds = discoverTestWorlds()
 
-        expect: "at least one test world exists"
+        expect: 'at least one test world exists'
         testWorlds.size() > 0
 
-        and: "all book files have sanitized filenames"
+        and: 'all book files have sanitized filenames'
         testWorlds.every { worldInfo ->
             setupTestWorld(worldInfo)
             runReadBooksProgram()
 
-            def bookFiles = getBookFiles()
-            bookFiles.each { bookFile ->
-                def filename = bookFile.name
+            bookFiles.each { File bookFile ->
+                String filename = bookFile.name
 
                 // Filenames should not contain invalid characters (note: no escaped quote in regex)
                 assert !(filename =~ /[\\/:*?<>|]/), "Filename contains invalid characters: ${filename}"
 
                 // Filenames should contain location and page info
-                assert filename.contains("_at_"), "Filename missing '_at_': ${filename}"
-                assert filename.contains("_pages_"), "Filename missing '_pages_': ${filename}"
-                assert filename.endsWith(".txt"), "Filename doesn't end with .txt: ${filename}"
+                assert filename.contains('_at_'), "Filename missing '_at_': ${filename}"
+                assert filename.contains('_pages_'), "Filename missing '_pages_': ${filename}"
+                assert filename.endsWith('.txt'), "Filename doesn't end with .txt: ${filename}"
             }
             true // Return true for every() to work
         }
     }
 
     def "should create separate files for written books and writable books"() {
-        given: "test worlds with both written and writable books"
-        def testWorlds = discoverTestWorlds()
+        given: 'test worlds with both written and writable books'
+        List testWorlds = discoverTestWorlds()
 
-        expect: "at least one test world exists"
+        expect: 'at least one test world exists'
         testWorlds.size() > 0
 
-        and: "files are created with appropriate naming"
+        and: 'files are created with appropriate naming'
         testWorlds.every { worldInfo ->
             setupTestWorld(worldInfo)
             runReadBooksProgram()
 
-            def bookFiles = getBookFiles()
             // Written books have "_by_" in filename (title_by_author format)
-            def writtenBooks = bookFiles.findAll { it.name.contains("_by_") }
+            List<File> writtenBooks = bookFiles.findAll { File file -> file.name.contains('_by_') }
             // Writable books start with "writable_book_"
-            def writableBooks = bookFiles.findAll { it.name.startsWith("writable_book_") }
+            List<File> writableBooks = bookFiles.findAll { File file -> file.name.startsWith('writable_book_') }
 
             // All books should be categorized
             (writtenBooks.size() + writableBooks.size()) == bookFiles.size()
@@ -194,22 +190,21 @@ class ReadBooksIntegrationSpec extends Specification {
     }
 
     def "should save duplicates to .duplicates folder"() {
-        given: "test worlds with duplicate books"
-        def testWorlds = discoverTestWorlds()
+        given: 'test worlds with duplicate books'
+        List testWorlds = discoverTestWorlds()
 
-        expect: "at least one test world exists"
+        expect: 'at least one test world exists'
         testWorlds.size() > 0
 
-        and: "duplicates are properly organized"
+        and: 'duplicates are properly organized'
         testWorlds.every { worldInfo ->
             setupTestWorld(worldInfo)
             runReadBooksProgram()
 
-            def booksDir = outputDir.resolve("books").toFile()
-            def duplicatesDir = new File(booksDir, ".duplicates")
+            File booksDir = outputDir.resolve('books').toFile()
 
             // If we have more books than expected unique books, duplicates folder should exist
-            def totalBooks = getBookFiles().size()
+            int totalBooks = bookFiles.size()
             if (totalBooks > 1) {
                 // At least check that the structure is correct
                 assert booksDir.exists()
@@ -221,66 +216,66 @@ class ReadBooksIntegrationSpec extends Specification {
     }
 
     def "should log processing information"() {
-        given: "test worlds"
-        def testWorlds = discoverTestWorlds()
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
 
-        expect: "at least one test world exists"
+        expect: 'at least one test world exists'
         testWorlds.size() > 0
 
-        and: "log files contain processing information"
+        and: 'log files contain processing information'
         testWorlds.every { worldInfo ->
             setupTestWorld(worldInfo)
             runReadBooksProgram()
 
-            def logFile = outputDir.resolve("logs.txt")
+            Path logFile = outputDir.resolve('logs.txt')
             assert Files.exists(logFile)
 
-            def logContent = logFile.text
-            assert logContent.contains("[INFO]")
-            assert logContent.contains("Starting readSignsAndBooks()")
+            String logContent = logFile.text
+            assert logContent.contains('[INFO]')
+            assert logContent.contains('Starting readSignsAndBooks()')
 
             // Check that summary file contains completion message
-            def summaryFile = outputDir.resolve("summary.txt")
+            Path summaryFile = outputDir.resolve('summary.txt')
             assert Files.exists(summaryFile)
-            def summaryContent = summaryFile.text
-            assert summaryContent.contains("Completed successfully")
+            String summaryContent = summaryFile.text
+            assert summaryContent.contains('Completed successfully')
             true
         }
     }
 
     def "should extract signs to signOutput file"() {
-        given: "test worlds with signs"
-        def testWorlds = discoverTestWorlds()
+        given: 'test worlds with signs'
+        List testWorlds = discoverTestWorlds()
 
-        expect: "at least one test world exists"
+        expect: 'at least one test world exists'
         testWorlds.size() > 0
 
-        and: "sign output files are created"
+        and: 'sign output files are created'
         testWorlds.every { worldInfo ->
             setupTestWorld(worldInfo)
             runReadBooksProgram()
 
-            def signFile = outputDir.resolve("signs.txt")
+            Path signFile = outputDir.resolve('signs.txt')
             assert Files.exists(signFile)
 
-            def signContent = signFile.text
+            String signContent = signFile.text
             // Sign output should have region file headers and "Completed." at the end
-            assert signContent.contains("Completed.")
+            assert signContent.contains('Completed.')
 
             // If there are signs, they should be formatted with chunk and coordinate info
-            // Example: "Chunk [31, 31]	(-2 75 -5)		Line 1! ⚠ Line 2! ☀"
+            // Example: "Chunk [31, 31]    (-2 75 -5)        Line 1! ⚠ Line 2! ☀"
             true
         }
     }
 
     def "should verify complete output directory structure"() {
-        given: "test worlds"
-        def testWorlds = discoverTestWorlds()
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
 
-        expect: "at least one test world exists"
+        expect: 'at least one test world exists'
         testWorlds.size() > 0
 
-        and: "all output directories and files are created correctly"
+        and: 'all output directories and files are created correctly'
         testWorlds.every { worldInfo ->
             setupTestWorld(worldInfo)
             runReadBooksProgram()
@@ -290,26 +285,24 @@ class ReadBooksIntegrationSpec extends Specification {
             assert Files.isDirectory(outputDir)
 
             // Verify books directory
-            def booksDir = outputDir.resolve("books")
+            Path booksDir = outputDir.resolve('books')
             assert Files.exists(booksDir)
             assert Files.isDirectory(booksDir)
 
-            // Verify .duplicates directory (may or may not exist depending on world)
-            def duplicatesDir = booksDir.resolve(".duplicates")
-            // Don't assert existence - it's created only if there are duplicates
+            // Note: .duplicates directory may or may not exist depending on whether there are duplicate books
 
             // Verify sign output file
-            def signFile = outputDir.resolve("signs.txt")
+            Path signFile = outputDir.resolve('signs.txt')
             assert Files.exists(signFile)
             assert Files.isRegularFile(signFile)
 
             // Verify log file
-            def logFile = outputDir.resolve("logs.txt")
+            Path logFile = outputDir.resolve('logs.txt')
             assert Files.exists(logFile)
             assert Files.isRegularFile(logFile)
 
             // Verify summary file
-            def summaryFile = outputDir.resolve("summary.txt")
+            Path summaryFile = outputDir.resolve('summary.txt')
             assert Files.exists(summaryFile)
             assert Files.isRegularFile(summaryFile)
 
@@ -328,10 +321,10 @@ class ReadBooksIntegrationSpec extends Specification {
         testWorldDir = tempDir.resolve(worldInfo.name)
         Files.createDirectories(testWorldDir)
 
-        outputDir = testWorldDir.resolve("ReadBooks").resolve(dateStamp)
+        outputDir = testWorldDir.resolve('ReadBooks').resolve(dateStamp)
 
         // Clean up ReadBooks folder from previous test runs
-        def readBooksDir = testWorldDir.resolve("ReadBooks").toFile()
+        File readBooksDir = testWorldDir.resolve('ReadBooks').toFile()
         if (readBooksDir.exists()) {
             readBooksDir.deleteDir()
         }
@@ -346,28 +339,28 @@ class ReadBooksIntegrationSpec extends Specification {
      * Note: SIGNCOUNT is the number of physical signs (by location), not unique text content
      */
     private List<Map> discoverTestWorlds() {
-        def testWorlds = []
+        List<Map> testWorlds = []
 
         // Get the test resources directory
         // Try to find a resource file first to get the correct path
-        def testResourcesUrl = getClass().getClassLoader().getResource("")
+        URL testResourcesUrl = getClass().classLoader.getResource('')
         if (testResourcesUrl == null) {
-            println "WARNING: No resources folder found"
+            println 'WARNING: No resources folder found'
             return testWorlds
         }
 
         // The classloader gives us the classes directory, but we need the resources directory
-        def testResourcesPath = Path.of(testResourcesUrl.toURI())
+        Path testResourcesPath = Path.of(testResourcesUrl.toURI())
 
         // If we're in build/classes/groovy/test, navigate to build/resources/test
-        if (testResourcesPath.toString().contains("classes")) {
+        if (testResourcesPath.toString().contains('classes')) {
             // Navigate up from build/classes/groovy/test to build, then to build/resources/test
-            def buildDir = testResourcesPath
-            while (buildDir != null && !buildDir.fileName.toString().equals("build")) {
-                buildDir = buildDir.getParent()
+            Path buildDir = testResourcesPath
+            while (buildDir != null && buildDir.fileName.toString() != 'build') {
+                buildDir = buildDir.parent
             }
             if (buildDir != null) {
-                testResourcesPath = buildDir.resolve("resources").resolve("test")
+                testResourcesPath = buildDir.resolve('resources').resolve('test')
             }
         }
 
@@ -380,21 +373,21 @@ class ReadBooksIntegrationSpec extends Specification {
         }
 
         // List all items in the resources directory
-        Files.list(testResourcesPath).each { path ->
+        Files.list(testResourcesPath).each { Path path ->
             if (Files.isDirectory(path)) {
-                def folderName = path.fileName.toString()
+                String folderName = path.fileName
 
                 // Skip class files and other non-world directories
-                if (folderName.endsWith(".class") || folderName.startsWith("ReadBooksIntegrationSpec")) {
+                if (folderName.endsWith('.class') || folderName.startsWith('ReadBooksIntegrationSpec')) {
                     return
                 }
 
                 // Check if folder name ends with -BOOKCOUNT-SIGNCOUNT pattern
-                def matcher = folderName =~ /^(.+)-(\d+)-(\d+)$/
+                java.util.regex.Matcher matcher = folderName =~ /^(.+)-(\d+)-(\d+)$/
                 if (matcher.matches()) {
-                    def worldName = matcher.group(1)
-                    def bookCount = matcher.group(2).toInteger()
-                    def signCount = matcher.group(3).toInteger()
+                    String worldName = matcher.group(1)
+                    int bookCount = matcher.group(2).toInteger()
+                    int signCount = matcher.group(3).toInteger()
                     testWorlds << [
                             name        : folderName,
                             worldName   : worldName,
@@ -407,8 +400,8 @@ class ReadBooksIntegrationSpec extends Specification {
             }
         }
 
-        if (testWorlds.isEmpty()) {
-            println "WARNING: No test worlds found. Create folders named WORLDNAME-BOOKCOUNT-SIGNCOUNT in src/test/resources/"
+        if (testWorlds.empty) {
+            println 'WARNING: No test worlds found. Create folders named WORLDNAME-BOOKCOUNT-SIGNCOUNT in src/test/resources/'
             println "  Resources path: ${testResourcesPath}"
         }
 
@@ -419,20 +412,20 @@ class ReadBooksIntegrationSpec extends Specification {
      * Get all book files from the output directory (including duplicates)
      */
     private List<File> getBookFiles() {
-        def booksDir = outputDir.resolve("books").toFile()
+        File booksDir = outputDir.resolve('books').toFile()
         if (!booksDir.exists()) {
             return []
         }
 
-        def bookFiles = []
+        List<File> bookFiles = []
 
         // Get books from main folder
-        booksDir.listFiles().findAll { it.isFile() }.each { bookFiles << it }
+        booksDir.listFiles().findAll { File file -> file.file }.each { File file -> bookFiles << file }
 
         // Get books from .duplicates folder
-        def duplicatesDir = new File(booksDir, ".duplicates")
+        File duplicatesDir = new File(booksDir, '.duplicates')
         if (duplicatesDir.exists()) {
-            duplicatesDir.listFiles().findAll { it.isFile() }.each { bookFiles << it }
+            duplicatesDir.listFiles().findAll { File file -> file.file }.each { File file -> bookFiles << file }
         }
 
         return bookFiles
@@ -453,7 +446,7 @@ class ReadBooksIntegrationSpec extends Specification {
      * Skips files that already exist to avoid file locking issues
      */
     private void copyDirectory(Path source, Path target) {
-        Files.walk(source).forEach { sourcePath ->
+        Files.walk(source).forEach { Path sourcePath ->
             try {
                 Path targetPath = target.resolve(source.relativize(sourcePath))
                 if (Files.isDirectory(sourcePath)) {
@@ -475,18 +468,18 @@ class ReadBooksIntegrationSpec extends Specification {
      */
     private void runReadBooksProgram() {
         // Save current directory
-        def originalUserDir = System.getProperty("user.dir")
+        String originalUserDir = System.getProperty('user.dir')
 
         try {
             // Change to test world directory
-            System.setProperty("user.dir", testWorldDir.toString())
+            System.setProperty('user.dir', testWorldDir.toString())
 
             // Run the extraction directly (avoid System.exit() in main())
             Main.runExtraction()
 
         } finally {
             // Restore original directory
-            System.setProperty("user.dir", originalUserDir)
+            System.setProperty('user.dir', originalUserDir)
         }
     }
 
