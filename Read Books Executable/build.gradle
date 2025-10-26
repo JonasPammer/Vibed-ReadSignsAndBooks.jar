@@ -46,6 +46,9 @@ dependencies {
     // Apache Commons IO - simplifies file operations
     implementation 'commons-io:commons-io:2.18.0'
 
+    // Apache Commons Lang - for duration formatting
+    implementation 'org.apache.commons:commons-lang3:3.17.0'
+
     // Picocli for command-line argument parsing (annotation-based, modern)
     implementation 'info.picocli:picocli:4.7.7'
 

@@ -9,6 +9,7 @@ import net.querz.nbt.tag.CompoundTag
 import net.querz.nbt.tag.ListTag
 import net.querz.nbt.tag.NumberTag
 import net.querz.nbt.tag.StringTag
+import org.apache.commons.lang3.time.DurationFormatUtils
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -56,12 +57,6 @@ class Main implements Runnable {
     @Option(names = ['--no-signs'], description = 'Disable sign extraction')
     static boolean disableSigns = false
 
-    @Option(names = ['--books-only'], description = 'Extract only books')
-    static boolean booksOnly = false
-
-    @Option(names = ['--signs-only'], description = 'Extract only signs')
-    static boolean signsOnly = false
-
     // Derived flags
     static boolean enableBookExtraction = true
     static boolean enableSignExtraction = true
@@ -83,8 +78,8 @@ class Main implements Runnable {
 
     static void runExtraction() {
         // Apply flag logic
-        enableSignExtraction = !(booksOnly || disableSigns)
-        enableBookExtraction = !(signsOnly || disableBooks)
+        enableSignExtraction = !disableSigns
+        enableBookExtraction = !disableBooks
 
         // Reset state
         [bookHashes, signHashes, booksByContainerType, booksByLocationType].each { collection -> collection.clear() }
@@ -153,20 +148,6 @@ class Main implements Runnable {
         }
     }
 
-    static String formatTime(long millis) {
-        long seconds = millis / 1000
-        long minutes = seconds / 60
-        long hours = minutes / 60
-
-        if (hours > 0) {
-            return String.format('%dh %dm %ds', hours, minutes % 60, seconds % 60)
-        }
-        if (minutes > 0) {
-            return String.format('%dm %ds', minutes, seconds % 60)
-        }
-        return "${seconds}s"
-    }
-
     static void printSummaryStatistics(long elapsedMillis) {
         File summaryFile = new File(baseDirectory, "${outputFolder}${File.separator}summary.txt")
         summaryFile.withWriter { BufferedWriter w ->
@@ -201,7 +182,7 @@ class Main implements Runnable {
             }
 
             w.writeLine('\nPerformance:')
-            w.writeLine("  Total processing time: ${formatTime(elapsedMillis)} (${elapsedMillis / 1000} seconds)")
+            w.writeLine("  Total processing time: ${DurationFormatUtils.formatDurationWords(elapsedMillis, true, true)} (${elapsedMillis / 1000} seconds)")
             w.writeLine("\n${'=' * 80}")
             w.writeLine('Completed successfully!')
             w.writeLine('=' * 80)
@@ -217,7 +198,10 @@ class Main implements Runnable {
         booksByLocationType[locationType] = (booksByLocationType[locationType] ?: 0) + 1
     }
 
-    static void readPlayerData() {
+    /**
+     * Read books from player data files (player inventories and ender chests)
+     */
+    public static void readPlayerData() {
         LOGGER.debug('Starting readPlayerData()')
         File folder = new File(baseDirectory, 'playerdata')
 
@@ -268,7 +252,20 @@ class Main implements Runnable {
         LOGGER.debug('Player data processing complete!')
     }
 
-    static void readSignsAndBooks() {
+    /**
+     * Read books and signs from region files (main world data)
+     * Processes both block entities (chests, signs, lecterns) and entities (item frames, minecarts)
+     *
+     * CHUNK FORMAT CHANGES (21w43a/1.18):
+     * - Removed "Level" wrapper tag
+     * - Renamed "TileEntities" → "block_entities"
+     * - Renamed "Entities" → "entities"
+     *
+     * SIGN FORMAT CHANGES (1.20):
+     * - Old format: "Text1", "Text2", "Text3", "Text4" fields
+     * - New format: "front_text"/"back_text" with "messages" array
+     */
+    public static void readSignsAndBooks() {
         LOGGER.debug('Starting readSignsAndBooks()')
         File folder = new File(baseDirectory, 'region')
 
@@ -285,7 +282,7 @@ class Main implements Runnable {
 
         LOGGER.debug("Found ${files.length} region files to process")
 
-        File signOutput = new File(baseDirectory, "${outputFolder}${File.separator}signs.txt")
+        File signOutput = new File(baseDirectory, "${outputFolder}${File.separator}all_signs.txt")
         signOutput.withWriter { BufferedWriter signWriter ->
             new ProgressBarBuilder()
                     .setTaskName('Region files')
@@ -407,7 +404,16 @@ class Main implements Runnable {
         LOGGER.debug("Total unique books found: ${bookHashes.size()}")
     }
 
-    static void readEntities() {
+    /**
+     * Read entities from separate entity files (introduced in 20w45a/1.17)
+     * Entities like item frames, minecarts, boats are stored in entities/ folder
+     * Prior to 20w45a, entities were stored within chunk data in region files
+     *
+     * CHUNK FORMAT CHANGES (21w43a/1.18):
+     * - Removed "Level" wrapper tag
+     * - Renamed "Entities" → "entities"
+     */
+    public static void readEntities() {
         LOGGER.debug('Starting readEntities()')
         File folder = new File(baseDirectory, 'entities')
 
@@ -497,7 +503,38 @@ class Main implements Runnable {
         LOGGER.debug('Entity processing complete!')
     }
 
-    static void parseItem(CompoundTag item, String bookInfo) {
+    /**
+     * Parse an item and recursively scan for books in nested containers
+     *
+     * ITEM FORMAT CHANGES (1.20.5):
+     * - Changed "tag" → "components"
+     * - Changed "BlockEntityTag" → "minecraft:container"
+     * - minecraft:container stores items as list of slot records: {slot: int, item: ItemStack}
+     * - minecraft:bundle_contents stores items as direct list of ItemStacks (not slot records)
+     *
+     * CONTAINERS THAT CAN HOLD BOOKS:
+     * - Barrel, Chest, Trapped Chest, Ender Chest (block entities with Items)
+     * - Shulker Box (item/block with container component) - all 17 color variants
+     * - Bundle (item with bundle_contents component) - 1.20.5+
+     * - Copper Chest (various oxidation states) - modded
+     * - Decorated Pot (block entity with Items)
+     * - Dispenser, Dropper (block entities with Items)
+     * - Furnace, Blast Furnace, Smoker (block entities with Items)
+     * - Hopper (block entity with Items)
+     * - Lectern (block entity with Book tag) - holds single book
+     * - Minecart with Chest/Hopper (entity with Items)
+     * - Item Frame, Glow Item Frame (entity with Item)
+     * - Player Inventory, Ender Chest (player data with Inventory/EnderItems)
+     *
+     * CONTAINERS THAT CANNOT HOLD BOOKS:
+     * - Armor Stand (can only hold armor/equipment)
+     * - Brewing Stand (can only hold potions/ingredients)
+     * - Campfire, Soul Campfire (can only hold 4 food items for cooking)
+     * - Cauldron (holds liquids/powders, not items)
+     * - Flower Pot (can only hold flowers/plants)
+     * - Jukebox (can only hold music discs)
+     */
+    public static void parseItem(CompoundTag item, String bookInfo) {
         String itemId = item.getString('id')
 
         if (itemId == 'minecraft:written_book') {
@@ -510,10 +547,13 @@ class Main implements Runnable {
             readWritableBook(item, bookInfo)
         }
 
-        // Shulker boxes
+        // Shulker boxes (all 17 color variants)
+        // Matches: minecraft:shulker_box, minecraft:white_shulker_box, minecraft:orange_shulker_box, etc.
         if (itemId.contains('shulker_box')) {
             LOGGER.debug('Found shulker box, scanning contents...')
 
+            // Try new format first (1.20.5+ with components)
+            // Note: minecraft:container stores items as a list of slot records: {slot: int, item: ItemStack}
             if (hasKey(item, 'components')) {
                 CompoundTag components = getCompoundTag(item, 'components')
                 if (hasKey(components, 'minecraft:container')) {
@@ -523,6 +563,7 @@ class Main implements Runnable {
                     }
                 }
             } else if (hasKey(item, 'tag')) {
+                // Old format (pre-1.20.5)
                 CompoundTag shelkerCompound = getCompoundTag(item, 'tag')
                 CompoundTag shelkerCompound2 = getCompoundTag(shelkerCompound, 'BlockEntityTag')
                 getCompoundTagList(shelkerCompound2, 'Items').each { CompoundTag shelkerItem ->
@@ -531,7 +572,9 @@ class Main implements Runnable {
             }
         }
 
-        // Bundles
+        // Bundle support (1.20.5+)
+        // Matches: minecraft:bundle, minecraft:white_bundle, minecraft:orange_bundle, etc.
+        // Note: minecraft:bundle_contents stores items as a direct list of ItemStacks (not slot records like containers)
         if (itemId.contains('bundle')) {
             LOGGER.debug('Found bundle, scanning contents...')
 
@@ -545,7 +588,10 @@ class Main implements Runnable {
             }
         }
 
-        // Copper chests
+        // Copper chest support (various oxidation states)
+        // Matches: minecraft:copper_chest, minecraft:exposed_copper_chest, minecraft:weathered_copper_chest,
+        //          minecraft:oxidized_copper_chest, and waxed variants
+        // Note: minecraft:container stores items as a list of slot records: {slot: int, item: ItemStack}
         if (itemId.contains('copper_chest')) {
             LOGGER.debug('Found copper chest, scanning contents...')
 
@@ -558,6 +604,7 @@ class Main implements Runnable {
                     }
                 }
             } else if (hasKey(item, 'tag')) {
+                // Old format (if copper chests existed in pre-1.20.5)
                 CompoundTag chestCompound = getCompoundTag(item, 'tag')
                 CompoundTag chestCompound2 = getCompoundTag(chestCompound, 'BlockEntityTag')
                 getCompoundTagList(chestCompound2, 'Items').each { CompoundTag chestItem ->
@@ -565,6 +612,10 @@ class Main implements Runnable {
                 }
             }
         }
+
+        // Note: Lecterns are handled as block entities with "Book" tag (not "Items")
+        // They are scanned separately in the block entity processing code
+        // Decorated pots are handled as block entities with "Items" tag (standard container)
     }
 
     static String sanitizeFilename(String name) {
@@ -574,7 +625,17 @@ class Main implements Runnable {
         return name.replaceAll(/[\\/:*?<>|]/, '_').take(200)
     }
 
-    static void readWrittenBook(CompoundTag item, String bookInfo) {
+    /**
+     * Read a written book (signed book with author and title)
+     *
+     * BOOK FORMAT CHANGES (1.20.5):
+     * - Changed "tag" → "components"
+     * - Changed book data location to "minecraft:written_book_content"
+     * - Pages changed from string list to compound list with "raw"/"filtered" fields
+     * - Title changed from plain string to filterable string (CompoundTag with "raw"/"filtered")
+     * - Author remains a plain string in both formats
+     */
+    public static void readWrittenBook(CompoundTag item, String bookInfo) {
         CompoundTag tag = null
         ListTag<?> pages = null
         String format = null
@@ -605,16 +666,18 @@ class Main implements Runnable {
             LOGGER.debug('Written book is a duplicate - saving to .duplicates folder')
         }
 
-        // Extract author and title
+        // Extract author and title - handle both old format (plain string) and new format (filterable string)
+        // IMPORTANT: In 1.20.5+, author is a plain STRING, but title is a filterable string (CompoundTag with "raw"/"filtered")
+        // In pre-1.20.5, both are plain strings
         String author = tag?.getString('author') ?: ''
         String title = ''
 
         net.querz.nbt.tag.Tag<?> titleTag = tag?.get('title')
         if (titleTag instanceof CompoundTag) {
-            // 1.20.5+ format
+            // 1.20.5+ format: filterable string (compound with "raw"/"filtered" fields)
             title = ((CompoundTag) titleTag).getString('raw') ?: ((CompoundTag) titleTag).getString('filtered') ?: ''
         } else if (titleTag instanceof StringTag) {
-            // Pre-1.20.5 format
+            // Pre-1.20.5 format: plain string
             title = tag.getString('title')
         }
 
@@ -661,7 +724,15 @@ class Main implements Runnable {
         }
     }
 
-    static void readWritableBook(CompoundTag item, String bookInfo) {
+    /**
+     * Read a writable book (unsigned book & quill)
+     *
+     * BOOK FORMAT CHANGES (1.20.5):
+     * - Changed "tag" → "components"
+     * - Changed book data location to "minecraft:writable_book_content"
+     * - Pages changed from string list to compound list with "raw"/"filtered" fields containing plain strings
+     */
+    public static void readWritableBook(CompoundTag item, String bookInfo) {
         ListTag<?> pages = null
         String format = null
 
@@ -769,7 +840,14 @@ class Main implements Runnable {
         return [coordsForFilename, locationForFilename]
     }
 
-    static String extractPageText(ListTag<?> pages, int index) {
+    /**
+     * Extract page text from a book page (handles both string and compound formats)
+     *
+     * PAGE FORMAT CHANGES (1.20.5):
+     * - Pre-1.20.5: Pages are string list
+     * - 1.20.5+: Pages are compound list with "raw"/"filtered" fields
+     */
+    public static String extractPageText(ListTag<?> pages, int index) {
         if (isStringList(pages)) {
             return getStringAt(pages, index)
         } else if (isCompoundList(pages)) {
@@ -809,7 +887,10 @@ class Main implements Runnable {
         return removeTextFormatting(pageText)
     }
 
-    static void parseSign(CompoundTag tileEntity, BufferedWriter signWriter, String signInfo) {
+    /**
+     * Parse sign in old format (Text1-Text4 fields, used before 1.20)
+     */
+    public static void parseSign(CompoundTag tileEntity, BufferedWriter signWriter, String signInfo) {
         LOGGER.debug('parseSign() - Extracting text from old format sign')
 
         // Get the StringTag objects and extract their values
@@ -834,7 +915,11 @@ class Main implements Runnable {
         }
     }
 
-    static void parseSignNew(CompoundTag tileEntity, BufferedWriter signWriter, String signInfo) {
+    /**
+     * Parse sign in new format (front_text/back_text fields, introduced in 1.20)
+     * The front_text/back_text compounds contain a "messages" array of 4 text component JSON strings
+     */
+    public static void parseSignNew(CompoundTag tileEntity, BufferedWriter signWriter, String signInfo) {
         LOGGER.debug('parseSignNew() - Extracting text from new format sign')
 
         CompoundTag frontText = getCompoundTag(tileEntity, 'front_text')
@@ -930,6 +1015,11 @@ class Main implements Runnable {
     }
 
     // ========== NBT Helper Methods ==========
+    // Minimal helper methods - Querz library already provides safe getters that return defaults for missing/null keys
+    // Our custom code only adds:
+    // 1. Null-safe wrappers (returns empty objects instead of null)
+    // 2. Format detection for Minecraft version changes (1.20, 1.20.5, 21w43a)
+    // 3. Fallback logic for old/new format compatibility
 
     static boolean hasKey(CompoundTag tag, String key) {
         return tag != null && tag.containsKey(key)
