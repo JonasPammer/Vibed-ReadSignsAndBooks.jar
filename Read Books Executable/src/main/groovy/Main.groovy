@@ -47,7 +47,13 @@ class Main implements Runnable {
     static Map<String, Integer> booksByContainerType = [:]
     static Map<String, Integer> booksByLocationType = [:]
     static List<Map<String, String>> bookMetadataList = []
+    static List<Map<String, Object>> bookCsvData = []
+    static List<Map<String, Object>> signCsvData = []
+    static int emptySignsRemoved = 0
     static BufferedWriter combinedBooksWriter
+
+    // Page separator for books - using Unicode box drawing for subtle visual separation
+    static final String PAGE_SEPARATOR = '─' * 40
 
     @Option(names = ['-w', '--world'], description = 'Specify custom world directory')
     static String customWorldDirectory
@@ -86,8 +92,9 @@ class Main implements Runnable {
         enableBookExtraction = !disableBooks
 
         // Reset state
-        [bookHashes, signHashes, booksByContainerType, booksByLocationType, bookMetadataList].each { collection -> collection.clear() }
+        [bookHashes, signHashes, booksByContainerType, booksByLocationType, bookMetadataList, bookCsvData, signCsvData].each { collection -> collection.clear() }
         bookCounter = 0
+        emptySignsRemoved = 0
 
         // Set directories
         baseDirectory = customWorldDirectory ?: System.getProperty('user.dir')
@@ -130,6 +137,14 @@ class Main implements Runnable {
 
             combinedBooksWriter?.close()
 
+            // Write CSV exports
+            if (enableBookExtraction) {
+                writeBooksCSV()
+            }
+            if (enableSignExtraction) {
+                writeSignsCSV()
+            }
+
             long elapsed = System.currentTimeMillis() - startTime
             printSummaryStatistics(elapsed)
             LOGGER.info("${elapsed / 1000} seconds to complete.")
@@ -150,6 +165,83 @@ class Main implements Runnable {
         } catch (IllegalStateException e) {
             LOGGER.debug("Failed to configure logback from XML, using default configuration: ${e.message}")
         }
+    }
+
+    /**
+     * Write books data to CSV file
+     * CSV format: X,Y,Z,FoundWhere,Bookname,Author,Pages
+     */
+    static void writeBooksCSV() {
+        File csvFile = new File(baseDirectory, "${outputFolder}${File.separator}books.csv")
+        LOGGER.info("Writing books CSV to: ${csvFile.absolutePath}")
+
+        csvFile.withWriter('UTF-8') { BufferedWriter writer ->
+            // Write header
+            writer.writeLine('X,Y,Z,FoundWhere,Bookname,Author,Pages')
+
+            // Write data
+            bookCsvData.each { Map<String, Object> book ->
+                String x = book.x != null ? book.x.toString() : ''
+                String y = book.y != null ? book.y.toString() : ''
+                String z = book.z != null ? book.z.toString() : ''
+                String foundWhere = escapeCsvField(book.foundWhere?.toString() ?: '')
+                String bookname = escapeCsvField(book.bookname?.toString() ?: '')
+                String author = escapeCsvField(book.author?.toString() ?: '')
+                String pages = escapeCsvField(book.pages?.toString() ?: '')
+
+                writer.writeLine("${x},${y},${z},${foundWhere},${bookname},${author},${pages}")
+            }
+        }
+
+        LOGGER.info("Books CSV written successfully with ${bookCsvData.size()} entries")
+    }
+
+    /**
+     * Write signs data to CSV file
+     * CSV format: X,Y,Z,FoundWhere,SignText
+     */
+    static void writeSignsCSV() {
+        File csvFile = new File(baseDirectory, "${outputFolder}${File.separator}signs.csv")
+        LOGGER.info("Writing signs CSV to: ${csvFile.absolutePath}")
+
+        csvFile.withWriter('UTF-8') { BufferedWriter writer ->
+            // Write header
+            writer.writeLine('X,Y,Z,FoundWhere,SignText')
+
+            // Write data
+            signCsvData.each { Map<String, Object> sign ->
+                String x = sign.x?.toString() ?: ''
+                String y = sign.y?.toString() ?: ''
+                String z = sign.z?.toString() ?: ''
+                String foundWhere = escapeCsvField(sign.foundWhere?.toString() ?: '')
+                String signText = escapeCsvField(sign.signText?.toString() ?: '')
+
+                writer.writeLine("${x},${y},${z},${foundWhere},${signText}")
+            }
+        }
+
+        LOGGER.info("Signs CSV written successfully with ${signCsvData.size()} entries")
+    }
+
+    /**
+     * Escape CSV field by wrapping in quotes if it contains comma, newline, or quote
+     */
+    static String escapeCsvField(String field) {
+        if (!field) {
+            return ''
+        }
+
+        // Replace newlines with space for readability
+        String escaped = field.replace('\n', ' ').replace('\r', ' ')
+
+        // If field contains comma, quote, or was modified, wrap in quotes
+        if (escaped.contains(',') || escaped.contains('"') || escaped != field) {
+            // Escape quotes by doubling them
+            escaped = escaped.replace('"', '""')
+            return "\"${escaped}\""
+        }
+
+        return escaped
     }
 
     static void printSummaryStatistics(long elapsedMillis) {
@@ -194,6 +286,9 @@ class Main implements Runnable {
             if (enableSignExtraction) {
                 w.writeLine('\nSigns:')
                 w.writeLine("  Total signs found: ${signHashes.size()}")
+                if (emptySignsRemoved > 0) {
+                    w.writeLine("  Empty signs removed: ${emptySignsRemoved}")
+                }
             }
 
             w.writeLine('\nPerformance:')
@@ -706,16 +801,64 @@ class Main implements Runnable {
             author: author ?: ''
         ])
 
-        // Extract coordinates for filename
-        List<String> locationInfo = extractLocationInfo(bookInfo)
+        // Extract coordinates and location info
+        List<Object> locationInfo = extractLocationInfo(bookInfo)
         String coordsForFilename = locationInfo[0]
         String locationForFilename = locationInfo[1]
+        Integer x = locationInfo[2]
+        Integer y = locationInfo[3]
+        Integer z = locationInfo[4]
+        String foundWhere = locationInfo[5]
 
-        String filename = sanitizeFilename(String.format('%03d_', bookCounter) + "${title ?: 'untitled'}_by_${author ?: 'unknown'}_at_${coordsForFilename}_${locationForFilename}_pages_1-${pages.size()}.txt")
+        // Collect all page content for CSV
+        List<String> allPageContents = []
+        (0..<pages.size()).each { int pc ->
+            String pageText = extractPageText(pages, pc)
+            if (pageText) {
+                allPageContents.add(extractTextContent(pageText))
+            }
+        }
+        String concatenatedPages = allPageContents.join(' ')
+
+        // Add to CSV data
+        bookCsvData.add([
+            x: x,
+            y: y,
+            z: z,
+            foundWhere: foundWhere,
+            bookname: title ?: 'Untitled',
+            author: author ?: '',
+            pages: concatenatedPages
+        ])
+
+        // New filename format: Title_(PageCount)_by_Author~location~coords.txt
+        // Remove sequence number, use tilde separator
+        String titlePart = sanitizeFilename(title ?: 'untitled')
+        String authorPart = sanitizeFilename(author ?: 'unknown')
+        String locationPart = locationForFilename.replace(':', '_')
+
+        String baseFilename
+        if (x != null && y != null && z != null) {
+            // For positioned blocks: Title_(PageCount)_by_Author~block_type~X_Y_Z.txt
+            baseFilename = "${titlePart}_(${pages.size()})_by_${authorPart}~${locationPart}~${x}_${y}_${z}"
+        } else {
+            // For inventory/ender chest: Title_(PageCount)_by_Author~container_type.txt
+            baseFilename = "${titlePart}_(${pages.size()})_by_${authorPart}~${locationPart}"
+        }
+
+        // Ensure filename uniqueness by appending counter if file exists
         String targetFolder = isDuplicate ? duplicatesFolder : booksFolder
+        String filename = "${baseFilename}.txt"
         File bookFile = new File(baseDirectory, "${targetFolder}${File.separator}${filename}")
+        int counter = 2
+        while (bookFile.exists()) {
+            filename = "${baseFilename}_${counter}.txt"
+            bookFile = new File(baseDirectory, "${targetFolder}${File.separator}${filename}")
+            counter++
+        }
 
-        bookFile.withWriter { BufferedWriter writer ->
+        // Write .txt file
+        bookFile.withWriter('UTF-8') { BufferedWriter writer ->
             combinedBooksWriter?.with {
                 writeLine("#region ${filename}")
                 writeLine("Title: ${title}")
@@ -733,8 +876,17 @@ class Main implements Runnable {
 
                 String pageContent = extractTextContent(pageText)
 
+                // Write to individual book file
+                if (pc > 0) {
+                    writer.writeLine(PAGE_SEPARATOR)
+                }
                 writer.writeLine(pageContent)
-                combinedBooksWriter?.writeLine("Page ${pc + 1}: ${pageContent}")
+
+                // Write to combined books file (without "Page X:" prefix)
+                if (pc > 0) {
+                    combinedBooksWriter?.writeLine(PAGE_SEPARATOR)
+                }
+                combinedBooksWriter?.writeLine(pageContent)
             }
 
             combinedBooksWriter?.with {
@@ -742,6 +894,25 @@ class Main implements Runnable {
                 writeLine("#endregion ${filename}")
                 writeLine('')
                 flush() // Flush immediately to ensure streaming output
+            }
+        }
+
+        // Write .stendhal file
+        File stendhalFile = new File(baseDirectory, "${targetFolder}${File.separator}${filename.replace('.txt', '.stendhal')}")
+        stendhalFile.withWriter('UTF-8') { BufferedWriter writer ->
+            writer.writeLine("title: ${title ?: 'Untitled'}")
+            writer.writeLine("author: ${author ?: ''}")
+            writer.writeLine('pages:')
+
+            (0..<pages.size()).each { int pc ->
+                String pageText = extractPageText(pages, pc)
+                if (!pageText) {
+                    return
+                }
+
+                String pageContent = extractTextContent(pageText)
+                writer.writeLine('#- ')
+                writer.writeLine(pageContent)
             }
         }
     }
@@ -791,14 +962,58 @@ class Main implements Runnable {
             author: ''
         ])
 
-        List<String> locationInfo = extractLocationInfo(bookInfo)
-        String coordsForFilename = locationInfo[0]
+        // Extract coordinates and location info
+        List<Object> locationInfo = extractLocationInfo(bookInfo)
         String locationForFilename = locationInfo[1]
-        String filename = sanitizeFilename(String.format('%03d_', bookCounter) + "writable_book_at_${coordsForFilename}_${locationForFilename}_pages_1-${pages.size()}.txt")
-        String targetFolder = isDuplicate ? duplicatesFolder : booksFolder
-        File bookFile = new File(baseDirectory, "${targetFolder}${File.separator}${filename}")
+        Integer x = locationInfo[2]
+        Integer y = locationInfo[3]
+        Integer z = locationInfo[4]
+        String foundWhere = locationInfo[5]
 
-        bookFile.withWriter { BufferedWriter writer ->
+        // Collect all page content for CSV
+        List<String> allPageContents = []
+        (0..<pages.size()).each { int pc ->
+            String pageText = extractPageText(pages, pc)
+            if (pageText) {
+                allPageContents.add(removeTextFormatting(pageText))
+            }
+        }
+        String concatenatedPages = allPageContents.join(' ')
+
+        // Add to CSV data
+        bookCsvData.add([
+            x: x,
+            y: y,
+            z: z,
+            foundWhere: foundWhere,
+            bookname: 'Writable Book',
+            author: '',
+            pages: concatenatedPages
+        ])
+
+        // New filename format: writable_book_(PageCount)~location~coords.txt
+        String locationPart = locationForFilename.replace(':', '_')
+
+        String baseFilename
+        if (x != null && y != null && z != null) {
+            baseFilename = "writable_book_(${pages.size()})~${locationPart}~${x}_${y}_${z}"
+        } else {
+            baseFilename = "writable_book_(${pages.size()})~${locationPart}"
+        }
+
+        // Ensure filename uniqueness by appending counter if file exists
+        String targetFolder = isDuplicate ? duplicatesFolder : booksFolder
+        String filename = "${baseFilename}.txt"
+        File bookFile = new File(baseDirectory, "${targetFolder}${File.separator}${filename}")
+        int counter = 2
+        while (bookFile.exists()) {
+            filename = "${baseFilename}_${counter}.txt"
+            bookFile = new File(baseDirectory, "${targetFolder}${File.separator}${filename}")
+            counter++
+        }
+
+        // Write .txt file
+        bookFile.withWriter('UTF-8') { BufferedWriter writer ->
             combinedBooksWriter?.with {
                 writeLine("#region ${filename}")
                 writeLine('WRITABLE BOOK (Book & Quill)')
@@ -815,12 +1030,17 @@ class Main implements Runnable {
 
                 String pageContent = removeTextFormatting(pageText)
 
-                writer.writeLine(pageContent)
-                combinedBooksWriter?.with {
-                    writeLine("Page ${pc + 1}:")
-                    writeLine(pageContent)
-                    writeLine('')
+                // Write to individual book file
+                if (pc > 0) {
+                    writer.writeLine(PAGE_SEPARATOR)
                 }
+                writer.writeLine(pageContent)
+
+                // Write to combined books file (without "Page X:" prefix)
+                if (pc > 0) {
+                    combinedBooksWriter?.writeLine(PAGE_SEPARATOR)
+                }
+                combinedBooksWriter?.writeLine(pageContent)
             }
 
             combinedBooksWriter?.with {
@@ -830,43 +1050,87 @@ class Main implements Runnable {
                 flush() // Flush immediately to ensure streaming output
             }
         }
+
+        // Write .stendhal file
+        File stendhalFile = new File(baseDirectory, "${targetFolder}${File.separator}${filename.replace('.txt', '.stendhal')}")
+        stendhalFile.withWriter('UTF-8') { BufferedWriter writer ->
+            writer.writeLine('title: Writable Book')
+            writer.writeLine('author: ')
+            writer.writeLine('pages:')
+
+            (0..<pages.size()).each { int pc ->
+                String pageText = extractPageText(pages, pc)
+                if (!pageText) {
+                    return
+                }
+
+                String pageContent = removeTextFormatting(pageText)
+                writer.writeLine('#- ')
+                writer.writeLine(pageContent)
+            }
+        }
     }
 
-    static List<String> extractLocationInfo(String bookInfo) {
+    /**
+     * Extract location information from bookInfo string
+     * Returns: [coordsForFilename, locationForFilename, x, y, z, foundWhere]
+     */
+    static List<Object> extractLocationInfo(String bookInfo) {
         String coordsForFilename = 'unknown'
         String locationForFilename = 'unknown'
+        Integer x = null
+        Integer y = null
+        Integer z = null
+        String foundWhere = 'unknown'
 
         try {
             if (bookInfo.contains(' at (')) {
                 int atIndex = bookInfo.indexOf(' at (')
                 int endParenIndex = bookInfo.indexOf(')', atIndex)
                 if (endParenIndex > atIndex && atIndex + 5 < bookInfo.length()) {
-                    coordsForFilename = bookInfo.substring(atIndex + 5, endParenIndex).replace(' ', '_')
+                    String coords = bookInfo.substring(atIndex + 5, endParenIndex)
+                    coordsForFilename = coords.replace(' ', '_')
+
+                    // Parse individual coordinates
+                    String[] coordParts = coords.split(' ')
+                    if (coordParts.length >= 3) {
+                        try {
+                            x = Integer.parseInt(coordParts[0])
+                            y = Integer.parseInt(coordParts[1])
+                            z = Integer.parseInt(coordParts[2])
+                        } catch (NumberFormatException e) {
+                            LOGGER.debug("Failed to parse coordinates: ${coords}")
+                        }
+                    }
                 }
 
                 if (bookInfo.contains('Inside ')) {
                     int insideIndex = bookInfo.indexOf('Inside ') + 7
                     if (insideIndex < atIndex && insideIndex < bookInfo.length()) {
                         locationForFilename = bookInfo.substring(insideIndex, atIndex).trim()
+                        foundWhere = locationForFilename
                     }
                 } else if (bookInfo.contains('In ')) {
                     int inIndex = bookInfo.indexOf('In ') + 3
                     if (inIndex < atIndex && inIndex < bookInfo.length()) {
                         locationForFilename = bookInfo.substring(inIndex, atIndex).trim()
+                        foundWhere = locationForFilename
                     }
                 }
             } else if (bookInfo.contains('Inventory of player')) {
                 coordsForFilename = 'player_inventory'
                 locationForFilename = 'player_inventory'
+                foundWhere = 'player_inventory'
             } else if (bookInfo.contains('Ender Chest of player')) {
                 coordsForFilename = 'ender_chest'
                 locationForFilename = 'ender_chest'
+                foundWhere = 'ender_chest'
             }
         } catch (StringIndexOutOfBoundsException e) {
             LOGGER.warn("Failed to parse bookInfo for filename: ${bookInfo}", e)
         }
 
-        return [coordsForFilename, locationForFilename]
+        return [coordsForFilename, locationForFilename, x, y, z, foundWhere]
     }
 
     /**
@@ -917,6 +1181,46 @@ class Main implements Runnable {
     }
 
     /**
+     * Extract coordinates from signInfo string
+     * signInfo format: "Chunk [x, z]\t(X Y Z)\t\t"
+     * Returns: [x, y, z, blockId]
+     */
+    static List<Object> extractSignCoordinates(String signInfo) {
+        Integer x = null
+        Integer y = null
+        Integer z = null
+
+        try {
+            // Extract coordinates from format: "Chunk [x, z]\t(X Y Z)\t\t"
+            int startParen = signInfo.indexOf('(')
+            int endParen = signInfo.indexOf(')')
+            if (startParen >= 0 && endParen > startParen) {
+                String coords = signInfo.substring(startParen + 1, endParen)
+                String[] parts = coords.split(' ')
+                if (parts.length >= 3) {
+                    x = Integer.parseInt(parts[0])
+                    y = Integer.parseInt(parts[1])
+                    z = Integer.parseInt(parts[2])
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.debug("Failed to parse sign coordinates from: ${signInfo}")
+        }
+
+        return [x, y, z]
+    }
+
+    /**
+     * Pad sign line to exactly 15 characters (Minecraft's max sign line width)
+     */
+    static String padSignLine(String text) {
+        if (text.length() >= 15) {
+            return text.substring(0, 15)
+        }
+        return text.padRight(15, ' ')
+    }
+
+    /**
      * Parse sign in old format (Text1-Text4 fields, used before 1.20)
      */
     public static void parseSign(CompoundTag tileEntity, BufferedWriter signWriter, String signInfo) {
@@ -934,14 +1238,46 @@ class Main implements Runnable {
             return
         }
 
+        // Extract sign text
+        String line1 = extractSignLineText(text1)
+        String line2 = extractSignLineText(text2)
+        String line3 = extractSignLineText(text3)
+        String line4 = extractSignLineText(text4)
+
+        // Check if sign is completely empty
+        if (line1.isEmpty() && line2.isEmpty() && line3.isEmpty() && line4.isEmpty()) {
+            emptySignsRemoved++
+            List<Object> coords = extractSignCoordinates(signInfo)
+            LOGGER.info("Removed empty sign at coordinates: ${coords[0]}, ${coords[1]}, ${coords[2]}")
+            return
+        }
+
+        // Pad lines to 15 characters
+        String paddedLine1 = padSignLine(line1)
+        String paddedLine2 = padSignLine(line2)
+        String paddedLine3 = padSignLine(line3)
+        String paddedLine4 = padSignLine(line4)
+
+        // Write to file
         signWriter.with {
             write(signInfo)
-            write(extractSignLineText(text1) + ' ')
-            write(extractSignLineText(text2) + ' ')
-            write(extractSignLineText(text3) + ' ')
-            write(extractSignLineText(text4) + ' ')
+            write(paddedLine1)
+            write(paddedLine2)
+            write(paddedLine3)
+            write(paddedLine4)
             newLine()
         }
+
+        // Collect CSV data
+        List<Object> coords = extractSignCoordinates(signInfo)
+        String blockId = tileEntity.getString('id')
+        signCsvData.add([
+            x: coords[0],
+            y: coords[1],
+            z: coords[2],
+            foundWhere: blockId,
+            signText: "${line1} ${line2} ${line3} ${line4}".trim()
+        ])
     }
 
     /**
@@ -967,14 +1303,34 @@ class Main implements Runnable {
             return
         }
 
-        signWriter.write(signInfo)
+        // Extract sign text
+        List<String> extractedLines = signLines.collect { String line -> extractSignLineText(line) }
 
-        signLines.each { String line ->
-            String text = extractSignLineText(line)
-            signWriter.write("${text} ")
+        // Check if sign is completely empty
+        if (extractedLines.every { it.isEmpty() }) {
+            emptySignsRemoved++
+            List<Object> coords = extractSignCoordinates(signInfo)
+            LOGGER.info("Removed empty sign at coordinates: ${coords[0]}, ${coords[1]}, ${coords[2]}")
+            return
         }
 
+        // Pad lines to 15 characters and write to file
+        signWriter.write(signInfo)
+        extractedLines.each { String text ->
+            signWriter.write(padSignLine(text))
+        }
         signWriter.newLine()
+
+        // Collect CSV data
+        List<Object> coords = extractSignCoordinates(signInfo)
+        String blockId = tileEntity.getString('id')
+        signCsvData.add([
+            x: coords[0],
+            y: coords[1],
+            z: coords[2],
+            foundWhere: blockId,
+            signText: extractedLines.join(' ').trim()
+        ])
     }
 
     static String extractSignLineText(String line) {

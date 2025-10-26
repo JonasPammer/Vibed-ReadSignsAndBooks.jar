@@ -90,11 +90,11 @@ class ReadBooksIntegrationSpec extends Specification {
                 // Individual book files contain only page content (no headers)
                 assert content.length() > 0
 
-                // Verify filename contains metadata
+                // Verify filename contains metadata in new format: Title_(PageCount)_by_Author~location~coords.txt
                 String filename = bookFile.name
-                assert filename.contains('_at_') // Contains coordinates
-                assert filename.contains('_pages_') // Contains page count
-                assert filename.endsWith('.txt')
+                assert filename.contains('~') // Contains location separator
+                assert filename =~ /\(\d+\)/ // Contains page count in parentheses
+                assert filename.endsWith('.txt') || filename.endsWith('.stendhal')
             }
 
             // Verify no errors in log
@@ -133,9 +133,10 @@ class ReadBooksIntegrationSpec extends Specification {
             bookFiles.every { File bookFile ->
                 String filename = bookFile.name
 
-                // Location information is in the filename (after "_at_")
-                // This includes coordinates and location type (e.g., "_at_-2_75_-9_minecraft_chest")
-                filename.contains('_at_')
+                // Location information is in the filename (after "~")
+                // New format: Title_(PageCount)_by_Author~location~coords.txt
+                // e.g., "Example_Book_(3)_by_Author~minecraft_chest~-2_75_-9.txt"
+                filename.contains('~')
             }
         }
     }
@@ -158,10 +159,11 @@ class ReadBooksIntegrationSpec extends Specification {
                 // Filenames should not contain invalid characters (note: no escaped quote in regex)
                 assert !(filename =~ /[\\/:*?<>|]/), "Filename contains invalid characters: ${filename}"
 
-                // Filenames should contain location and page info
-                assert filename.contains('_at_'), "Filename missing '_at_': ${filename}"
-                assert filename.contains('_pages_'), "Filename missing '_pages_': ${filename}"
-                assert filename.endsWith('.txt'), "Filename doesn't end with .txt: ${filename}"
+                // Filenames should contain location and page info in new format
+                // New format: Title_(PageCount)_by_Author~location~coords.txt
+                assert filename.contains('~'), "Filename missing '~': ${filename}"
+                assert filename =~ /\(\d+\)/, "Filename missing page count in parentheses: ${filename}"
+                assert filename.endsWith('.txt') || filename.endsWith('.stendhal'), "Filename doesn't end with .txt or .stendhal: ${filename}"
             }
             true // Return true for every() to work
         }
@@ -410,6 +412,7 @@ class ReadBooksIntegrationSpec extends Specification {
 
     /**
      * Get all book files from the output directory (including duplicates)
+     * Note: Only counts .txt files, not .stendhal files (each book has both)
      */
     private List<File> getBookFiles() {
         File booksDir = outputDir.resolve('books').toFile()
@@ -419,13 +422,13 @@ class ReadBooksIntegrationSpec extends Specification {
 
         List<File> bookFiles = []
 
-        // Get books from main folder
-        booksDir.listFiles().findAll { File file -> file.file }.each { File file -> bookFiles << file }
+        // Get books from main folder (only .txt files)
+        booksDir.listFiles().findAll { File file -> file.file && file.name.endsWith('.txt') }.each { File file -> bookFiles << file }
 
-        // Get books from .duplicates folder
+        // Get books from .duplicates folder (only .txt files)
         File duplicatesDir = new File(booksDir, '.duplicates')
         if (duplicatesDir.exists()) {
-            duplicatesDir.listFiles().findAll { File file -> file.file }.each { File file -> bookFiles << file }
+            duplicatesDir.listFiles().findAll { File file -> file.file && file.name.endsWith('.txt') }.each { File file -> bookFiles << file }
         }
 
         return bookFiles
