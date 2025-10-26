@@ -52,13 +52,16 @@ java -Xmx10G -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -jar ReadSignsAndBooks.jar --
 2. Run the application using one of the methods above
 
 3. The tool will create output in `ReadBooks/YYYY-MM-DD/` (or custom path with `--output`):
-    - `books/` - directory containing individual text files for each unique book
-        - Each book is saved as: `Title_(PageCount)_by_Author~location~coords.txt`
-        - Example: `My Book (3)_by_Joe~minecraft_chest~-10_65_20.txt`
+    - `books/` - directory containing individual Stendhal format files for each unique book
+        - Each book is saved as: `Title_(PageCount)_by_Author~location~coords.stendhal`
+        - Example: `My_Book_(3)_by_Joe~minecraft_chest~-10_65_20.stendhal`
+        - Stendhal format preserves Minecraft formatting codes (§ codes)
     - `books/.duplicates/` - directory containing duplicate books (same content, different locations)
     - `all_signs.txt` - all signs found in the world, one per line
         - Example: `Chunk [31, 31]	(-2 75 -5)		Line 1! ⚠ Line 2! ☀`
-    - `all_books.txt` - all books found in the world, seperated by `#region` and `#endregion` markers
+    - `all_books.txt` - all books in Stendhal format, separated by `#region` and `#endregion` markers for VSCode folding
+    - `all_books.csv` - CSV export of all books with metadata
+    - `all_signs.csv` - CSV export of all signs with metadata
     - `logs.txt` - program debug logs
     - `summary.txt`
         - Breakdown by container type (chests, shulker boxes, villagers, etc.)
