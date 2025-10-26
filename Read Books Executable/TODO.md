@@ -20,21 +20,3 @@ fix all_signs.txt: remove empty signs, only mention in logs
 remove "Page 1:" etc. from all_books.txt
 
 figure out non-distracting yet unique seperator for deleniating book pages in both all_books.txt and single book text file
-
-
-
----
-
-surely there is a library like humanize so we dont need own formatTime.
-
-please remove both --books-only and --signs-only flags.
-
-please re-add important comments we previously had.
-
-although no thing uses this, please make the primary big juicy methods "public"
-
-please rename signs.txt to all_signs.txt to match
-
-can we write to all_books.txt as the program progresses each new book?
-
-summary should contain list of all book names next to a column with authors,  in an properly padded/aligned ascii-table (probably a library for that too)

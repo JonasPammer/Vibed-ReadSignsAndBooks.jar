@@ -107,7 +107,7 @@ class ReadBooksIntegrationSpec extends Specification {
             assert totalBooks == currentExpectedBookCount
 
             // Verify correct sign count
-            Path signFile = outputDir.resolve('signs.txt')
+            Path signFile = outputDir.resolve('all_signs.txt')
             String signContent = signFile.text
             // Count signs by counting lines that match the pattern: "Chunk [X, Z]    (x y z)        text"
             int signCount = signContent.findAll(/Chunk \[\d+, \d+\]\t\([^)]+\)\t\t/).size()
@@ -255,7 +255,7 @@ class ReadBooksIntegrationSpec extends Specification {
             setupTestWorld(worldInfo)
             runReadBooksProgram()
 
-            Path signFile = outputDir.resolve('signs.txt')
+            Path signFile = outputDir.resolve('all_signs.txt')
             assert Files.exists(signFile)
 
             String signContent = signFile.text
@@ -292,7 +292,7 @@ class ReadBooksIntegrationSpec extends Specification {
             // Note: .duplicates directory may or may not exist depending on whether there are duplicate books
 
             // Verify sign output file
-            Path signFile = outputDir.resolve('signs.txt')
+            Path signFile = outputDir.resolve('all_signs.txt')
             assert Files.exists(signFile)
             assert Files.isRegularFile(signFile)
 
