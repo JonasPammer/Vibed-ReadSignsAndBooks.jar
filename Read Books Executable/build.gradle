@@ -67,6 +67,9 @@ dependencies {
     // Progress bar library for console output
     implementation 'me.tongfei:progressbar:0.10.1'
 
+    // ASCII table library for formatted output
+    implementation 'com.github.freva:ascii-table:1.8.0'
+
     // Spock Framework for testing
     testImplementation 'org.spockframework:spock-core:2.3-groovy-4.0'
     testImplementation 'org.apache.groovy:groovy-all:4.0.24'

@@ -1,4 +1,7 @@
 /* groovylint-disable ClassSize */
+import com.github.freva.asciitable.AsciiTable
+import com.github.freva.asciitable.Column
+import com.github.freva.asciitable.HorizontalAlign
 import groovy.json.JsonSlurper
 import me.tongfei.progressbar.ProgressBarBuilder
 import me.tongfei.progressbar.ProgressBarStyle
@@ -43,6 +46,7 @@ class Main implements Runnable {
     static int bookCounter = 0
     static Map<String, Integer> booksByContainerType = [:]
     static Map<String, Integer> booksByLocationType = [:]
+    static List<Map<String, String>> bookMetadataList = []
     static BufferedWriter combinedBooksWriter
 
     @Option(names = ['-w', '--world'], description = 'Specify custom world directory')
@@ -82,7 +86,7 @@ class Main implements Runnable {
         enableBookExtraction = !disableBooks
 
         // Reset state
-        [bookHashes, signHashes, booksByContainerType, booksByLocationType].each { collection -> collection.clear() }
+        [bookHashes, signHashes, booksByContainerType, booksByLocationType, bookMetadataList].each { collection -> collection.clear() }
         bookCounter = 0
 
         // Set directories
@@ -160,6 +164,17 @@ class Main implements Runnable {
                 w.writeLine("  Total unique books found: ${bookHashes.size()}")
                 w.writeLine("  Total books extracted (including duplicates): ${bookCounter}")
                 w.writeLine("  Duplicate books: ${bookCounter - bookHashes.size()}")
+
+                // Generate ASCII table of books with titles and authors
+                if (bookMetadataList) {
+                    w.writeLine('\n  Books extracted:')
+                    List<Column> columns = [
+                        new Column().header('Title').dataAlign(HorizontalAlign.LEFT).with({ Map<String, String> book -> book.title } as java.util.function.Function),
+                        new Column().header('Author').dataAlign(HorizontalAlign.LEFT).with({ Map<String, String> book -> book.author } as java.util.function.Function)
+                    ]
+                    String table = AsciiTable.getTable(bookMetadataList, columns)
+                    w.writeLine(table)
+                }
 
                 if (booksByLocationType) {
                     w.writeLine('\n  Books by location type:')
@@ -685,6 +700,12 @@ class Main implements Runnable {
 
         bookCounter++
 
+        // Store book metadata for summary table
+        bookMetadataList.add([
+            title: title ?: 'Untitled',
+            author: author ?: ''
+        ])
+
         // Extract coordinates for filename
         List<String> locationInfo = extractLocationInfo(bookInfo)
         String coordsForFilename = locationInfo[0]
@@ -720,6 +741,7 @@ class Main implements Runnable {
                 writeLine('')
                 writeLine("#endregion ${filename}")
                 writeLine('')
+                flush() // Flush immediately to ensure streaming output
             }
         }
     }
@@ -763,6 +785,12 @@ class Main implements Runnable {
 
         bookCounter++
 
+        // Store book metadata for summary table (writable books have no title/author)
+        bookMetadataList.add([
+            title: 'Untitled',
+            author: ''
+        ])
+
         List<String> locationInfo = extractLocationInfo(bookInfo)
         String coordsForFilename = locationInfo[0]
         String locationForFilename = locationInfo[1]
@@ -799,6 +827,7 @@ class Main implements Runnable {
                 writeLine('')
                 writeLine("#endregion ${filename}")
                 writeLine('')
+                flush() // Flush immediately to ensure streaming output
             }
         }
     }
