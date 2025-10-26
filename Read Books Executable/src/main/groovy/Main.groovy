@@ -172,7 +172,7 @@ class Main implements Runnable {
      * CSV format: X,Y,Z,FoundWhere,Bookname,Author,Pages
      */
     static void writeBooksCSV() {
-        File csvFile = new File(baseDirectory, "${outputFolder}${File.separator}books.csv")
+        File csvFile = new File(baseDirectory, "${outputFolder}${File.separator}all_books.csv")
         LOGGER.info("Writing books CSV to: ${csvFile.absolutePath}")
 
         csvFile.withWriter('UTF-8') { BufferedWriter writer ->
@@ -181,13 +181,13 @@ class Main implements Runnable {
 
             // Write data
             bookCsvData.each { Map<String, Object> book ->
-                String x = book.x != null ? book.x.toString() : ''
-                String y = book.y != null ? book.y.toString() : ''
-                String z = book.z != null ? book.z.toString() : ''
-                String foundWhere = escapeCsvField(book.foundWhere?.toString() ?: '')
-                String bookname = escapeCsvField(book.bookname?.toString() ?: '')
-                String author = escapeCsvField(book.author?.toString() ?: '')
-                String pages = escapeCsvField(book.pages?.toString() ?: '')
+                String x = book.x != null ? book.x.toString() : '0'
+                String y = book.y != null ? book.y.toString() : '0'
+                String z = book.z != null ? book.z.toString() : '0'
+                String foundWhere = escapeCsvField(book.foundWhere?.toString() ?: 'undefined')
+                String bookname = escapeCsvField(book.bookname?.toString() ?: 'undefined')
+                String author = escapeCsvField(book.author?.toString() ?: 'undefined')
+                String pages = escapeCsvField(book.pages?.toString() ?: 'undefined')
 
                 writer.writeLine("${x},${y},${z},${foundWhere},${bookname},${author},${pages}")
             }
@@ -201,7 +201,7 @@ class Main implements Runnable {
      * CSV format: X,Y,Z,FoundWhere,SignText
      */
     static void writeSignsCSV() {
-        File csvFile = new File(baseDirectory, "${outputFolder}${File.separator}signs.csv")
+        File csvFile = new File(baseDirectory, "${outputFolder}${File.separator}all_signs.csv")
         LOGGER.info("Writing signs CSV to: ${csvFile.absolutePath}")
 
         csvFile.withWriter('UTF-8') { BufferedWriter writer ->
@@ -210,11 +210,11 @@ class Main implements Runnable {
 
             // Write data
             signCsvData.each { Map<String, Object> sign ->
-                String x = sign.x?.toString() ?: ''
-                String y = sign.y?.toString() ?: ''
-                String z = sign.z?.toString() ?: ''
-                String foundWhere = escapeCsvField(sign.foundWhere?.toString() ?: '')
-                String signText = escapeCsvField(sign.signText?.toString() ?: '')
+                String x = sign.x?.toString() ?: '0'
+                String y = sign.y?.toString() ?: '0'
+                String z = sign.z?.toString() ?: '0'
+                String foundWhere = escapeCsvField(sign.foundWhere?.toString() ?: 'unknown')
+                String signText = escapeCsvField(sign.signText?.toString() ?: 'undefined')
 
                 writer.writeLine("${x},${y},${z},${foundWhere},${signText}")
             }
@@ -779,13 +779,13 @@ class Main implements Runnable {
         // Extract author and title - handle both old format (plain string) and new format (filterable string)
         // IMPORTANT: In 1.20.5+, author is a plain STRING, but title is a filterable string (CompoundTag with "raw"/"filtered")
         // In pre-1.20.5, both are plain strings
-        String author = tag?.getString('author') ?: ''
+        String author = tag?.getString('author') ?: 'herobrine'
         String title = ''
 
         net.querz.nbt.tag.Tag<?> titleTag = tag?.get('title')
         if (titleTag instanceof CompoundTag) {
             // 1.20.5+ format: filterable string (compound with "raw"/"filtered" fields)
-            title = ((CompoundTag) titleTag).getString('raw') ?: ((CompoundTag) titleTag).getString('filtered') ?: ''
+            title = ((CompoundTag) titleTag).getString('raw') ?: ((CompoundTag) titleTag).getString('filtered') ?: 'untitled'
         } else if (titleTag instanceof StringTag) {
             // Pre-1.20.5 format: plain string
             title = tag.getString('title')
@@ -797,7 +797,7 @@ class Main implements Runnable {
 
         // Store book metadata for summary table
         bookMetadataList.add([
-            title: title ?: 'Untitled',
+            title: title ?: 'untitled',
             author: author ?: ''
         ])
 
@@ -826,8 +826,8 @@ class Main implements Runnable {
             y: y,
             z: z,
             foundWhere: foundWhere,
-            bookname: title ?: 'Untitled',
-            author: author ?: '',
+            bookname: title ?: 'untitled',
+            author: author ?: 'unknown',
             pages: concatenatedPages
         ])
 
@@ -911,7 +911,7 @@ class Main implements Runnable {
                 }
 
                 String pageContent = extractTextContent(pageText)
-                writer.writeLine('#- ')
+                writer.write('#- ')
                 writer.writeLine(pageContent)
             }
         }
@@ -1065,7 +1065,7 @@ class Main implements Runnable {
                 }
 
                 String pageContent = removeTextFormatting(pageText)
-                writer.writeLine('#- ')
+                writer.write('#- ')
                 writer.writeLine(pageContent)
             }
         }
@@ -1248,7 +1248,7 @@ class Main implements Runnable {
         if (line1.isEmpty() && line2.isEmpty() && line3.isEmpty() && line4.isEmpty()) {
             emptySignsRemoved++
             List<Object> coords = extractSignCoordinates(signInfo)
-            LOGGER.info("Removed empty sign at coordinates: ${coords[0]}, ${coords[1]}, ${coords[2]}")
+            LOGGER.debug("Removed empty sign at coordinates: ${coords[0]}, ${coords[1]}, ${coords[2]}")
             return
         }
 
@@ -1310,7 +1310,7 @@ class Main implements Runnable {
         if (extractedLines.every { it.isEmpty() }) {
             emptySignsRemoved++
             List<Object> coords = extractSignCoordinates(signInfo)
-            LOGGER.info("Removed empty sign at coordinates: ${coords[0]}, ${coords[1]}, ${coords[2]}")
+            LOGGER.debug("Removed empty sign at coordinates: ${coords[0]}, ${coords[1]}, ${coords[2]}")
             return
         }
 
