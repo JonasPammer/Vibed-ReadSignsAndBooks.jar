@@ -72,6 +72,12 @@ class ReadBooksIntegrationSpec extends Specification {
             // Expected output directory
             outputDir = testWorldDir.resolve('ReadBooks').resolve(dateStamp)
 
+            // Clean up ReadBooks folder from previous test runs
+            File readBooksDir = testWorldDir.resolve('ReadBooks').toFile()
+            if (readBooksDir.exists()) {
+                readBooksDir.deleteDir()
+            }
+
             // Copy and run
             copyTestWorldData(worldInfo.resourcePath)
             runReadBooksProgram()
@@ -412,7 +418,7 @@ class ReadBooksIntegrationSpec extends Specification {
 
     /**
      * Get all book files from the output directory (including duplicates)
-     * Note: Only counts .txt files, not .stendhal files (each book has both)
+     * Note: Only counts .stendhal files (the new format)
      */
     private List<File> getBookFiles() {
         File booksDir = outputDir.resolve('books').toFile()
@@ -422,13 +428,13 @@ class ReadBooksIntegrationSpec extends Specification {
 
         List<File> bookFiles = []
 
-        // Get books from main folder (only .txt files)
-        booksDir.listFiles().findAll { File file -> file.file && file.name.endsWith('.txt') }.each { File file -> bookFiles << file }
+        // Get books from main folder (only .stendhal files)
+        booksDir.listFiles().findAll { File file -> file.file && file.name.endsWith('.stendhal') }.each { File file -> bookFiles << file }
 
-        // Get books from .duplicates folder (only .txt files)
+        // Get books from .duplicates folder (only .stendhal files)
         File duplicatesDir = new File(booksDir, '.duplicates')
         if (duplicatesDir.exists()) {
-            duplicatesDir.listFiles().findAll { File file -> file.file && file.name.endsWith('.txt') }.each { File file -> bookFiles << file }
+            duplicatesDir.listFiles().findAll { File file -> file.file && file.name.endsWith('.stendhal') }.each { File file -> bookFiles << file }
         }
 
         return bookFiles
