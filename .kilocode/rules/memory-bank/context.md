@@ -38,3 +38,27 @@
 - **Author**: Community-maintained, open-source
 - **Maintenance**: Active monitoring and updates
 - **Documentation**: Complete with usage examples and integration tests
+
+## AI Commit Convention
+
+**All AI-generated commits MUST use the "(ai)" scope identifier in commit messages.**
+
+**Format**: `<type>(ai): <description> [skip ci]`
+
+**Examples**:
+- `chore(ai): initialize project memory bank [skip ci]`
+- `feat(ai): add new container type support [skip ci]`
+- `fix(ai): correct NBT parsing for format version X [skip ci]`
+- `refactor(ai): extract utility functions to separate module [skip ci]`
+
+**Rationale**: The "(ai)" scope clearly identifies commits created by AI agents, enabling:
+- Clear audit trail of AI-assisted changes
+- Distinction from human developer commits
+- Easy filtering of automated changes in git history
+- Accountability and traceability
+
+**Enforcement**: All AI assistants working on this project should:
+1. Always include "(ai)" in their commit scope
+2. Document this convention in commit messages when first establishing it
+3. Reference this section if questioned about commit formatting
+
