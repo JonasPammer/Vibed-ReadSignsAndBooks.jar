@@ -1,2 +1,5 @@
+# Git LFS tracking for test world data
+src/test/resources/test-world/** filter=lfs diff=lfs merge=lfs -text
+
 gradle/repository/** !text !filter !merge !diff
 src/test/resources/test-world/** !text !filter !merge !diff

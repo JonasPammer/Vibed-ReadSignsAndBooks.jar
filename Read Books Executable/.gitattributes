@@ -1,3 +1,0 @@
-# Git LFS tracking for test world data
-src/test/resources/test-world/** filter=lfs diff=lfs merge=lfs -text
-
