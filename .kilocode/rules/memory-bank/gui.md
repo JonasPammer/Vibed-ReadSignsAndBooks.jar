@@ -24,7 +24,7 @@ static boolean shouldUseGui(String[] args) {
 
 **Behavior:**
 - No arguments → GUI mode
-- `--gui` or `-g` flag → Force GUI mode  
+- `--gui` or `-g` flag → Force GUI mode
 - Any other arguments → CLI mode
 
 ### GUI Class Structure
@@ -71,7 +71,7 @@ static boolean shouldUseGui(String[] args) {
 ```groovy
 class GuiLogAppender extends AppenderBase<ILoggingEvent> {
     static Closure<Void> logHandler
-    
+
     @Override
     protected void append(ILoggingEvent event) {
         if (logHandler) {
@@ -102,7 +102,7 @@ void start(Stage stage) {
     GuiLogAppender.setLogHandler { message ->
         logArea.appendText(message)
     }
-    
+
     stage.onCloseRequest = {
         GuiLogAppender.clearLogHandler()
     }
@@ -120,9 +120,9 @@ void runExtraction() {
         if (worldDir) args += ['-w', worldDir.absolutePath]
         if (outputFolder) args += ['-o', outputFolder.absolutePath]
         if (removeFormattingCheckBox.selected) args += ['--remove-formatting']
-        
+
         Main.runCli(args as String[])  // Direct CLI call, not Main.main()
-        
+
         Platform.runLater {
             statusLabel.text = "Complete! ${Main.bookHashes.size()} books..."
             showAlert('Success', "Extraction complete!...")
@@ -155,10 +155,10 @@ Output folder field shows computed default path:
 ```groovy
 void updateOutputFolderPrompt() {
     def dateStamp = new SimpleDateFormat('yyyy-MM-dd').format(new Date())
-    def defaultPath = worldDir ? 
+    def defaultPath = worldDir ?
         new File(worldDir, "ReadBooks${File.separator}${dateStamp}") :
         new File(System.getProperty('user.dir'), "ReadBooks${File.separator}${dateStamp}")
-    
+
     outputPathField.promptText = "Optional: Custom output folder (default: ${defaultPath.absolutePath})"
 }
 ```
@@ -228,11 +228,7 @@ Full attribution visible in Help → About dialog:
 - No cancel/abort button (would require threading refactor)
 
 ### Potential Enhancements
-- Add extraction progress bar (requires CLI refactor to emit progress events)
-- Add cancel button (requires interruptible CLI execution)
-- Add drag-and-drop for world folder
-- Remember last used directories (requires preferences storage)
-- Dark mode theme support
+- Add cancel button (requires safely accounted-for interruptible CLI execution)
 
 ### Not Planned
 - GroovyFX migration (library is unmaintained, Java 8-only)

@@ -8,6 +8,15 @@ import javafx.scene.layout.*
 import javafx.stage.DirectoryChooser
 import javafx.stage.Stage
 import java.awt.Desktop
+import javafx.animation.Timeline
+import javafx.animation.KeyFrame
+import javafx.util.Duration
+import javafx.scene.input.TransferMode
+import javafx.scene.input.DragEvent
+import javafx.scene.input.Dragboard
+import com.jthemedetecor.OsThemeDetector
+import atlantafx.base.theme.PrimerLight
+import atlantafx.base.theme.PrimerDark
 
 /**
  * Modern GUI for ReadSignsAndBooks using pure JavaFX
@@ -23,9 +32,15 @@ class GUI extends Application {
     static File worldDir
     static File outputFolder
     static File actualOutputFolder
+    static Button extractBtn
+    static Timeline elapsedTimeTimer
+    static long extractionStartTime
 
     void start(Stage stage) {
         stage.title = 'ReadSignsAndBooks Extractor'
+
+        // Apply theme before creating UI (AtlantaFX)
+        applyTheme()
 
         // Set up GUI log handler
         GuiLogAppender.setLogHandler { message ->
@@ -52,9 +67,10 @@ class GUI extends Application {
         def worldBox = new HBox(10)
         worldBox.alignment = Pos.CENTER_LEFT
         worldPathField = new TextField()
-        worldPathField.promptText = 'Select Minecraft world folder...'
+        worldPathField.promptText = 'Select Minecraft world folder or drag & drop here...'
         worldPathField.editable = false
         HBox.setHgrow(worldPathField, Priority.ALWAYS)  // Make it grow horizontally
+        setupDragAndDrop(worldPathField, true)  // Enable drag-and-drop for world folder
         def worldBtn = new Button('Browse...')
         worldBtn.onAction = { selectWorldDirectory(stage) }
         worldBox.children.addAll(new Label('World Directory:').with { it.minWidth = 120; it }, worldPathField, worldBtn)
@@ -66,6 +82,7 @@ class GUI extends Application {
         outputPathField.editable = false
         HBox.setHgrow(outputPathField, Priority.ALWAYS)  // Make it grow horizontally
         updateOutputFolderPrompt()  // Set initial prompt text
+        setupDragAndDrop(outputPathField, false)  // Enable drag-and-drop for output folder
         def outputBtn = new Button('Browse...')
         outputBtn.onAction = { selectOutputFolder(stage) }
         outputBox.children.addAll(new Label('Output Folder:').with { it.minWidth = 120; it }, outputPathField, outputBtn)
@@ -80,8 +97,8 @@ class GUI extends Application {
         // Action buttons (left-aligned)
         def btnBox = new HBox(15)
         btnBox.alignment = Pos.CENTER_LEFT
-        def extractBtn = new Button('Extract')
-        extractBtn.minWidth = 100
+        extractBtn = new Button('Extract')
+        extractBtn.minWidth = 150
         extractBtn.style = '-fx-font-size: 14px; -fx-background-color: #4CAF50; -fx-text-fill: white;'
         extractBtn.onAction = { runExtraction() }
         def openFolderBtn = new Button('Open Output Folder')
@@ -229,7 +246,22 @@ class GUI extends Application {
     }
 
     void runExtraction() {
+        // Disable extract button and start timer
+        extractBtn.disable = true
+        extractionStartTime = System.currentTimeMillis()
         statusLabel.text = 'Extracting...'
+
+        // Start elapsed time timer (updates button text every second)
+        elapsedTimeTimer = new Timeline(new KeyFrame(Duration.seconds(1), { event ->
+            def elapsed = (System.currentTimeMillis() - extractionStartTime) / 1000
+            def minutes = (elapsed / 60) as int
+            def seconds = (elapsed % 60) as int
+            Platform.runLater {
+                extractBtn.text = String.format('Extracting... %02d:%02d', minutes, seconds)
+            }
+        }))
+        elapsedTimeTimer.cycleCount = Timeline.INDEFINITE
+        elapsedTimeTimer.play()
 
         // Run extraction in background thread
         Thread.start {
@@ -251,16 +283,109 @@ class GUI extends Application {
                 Main.runCli(args as String[])
 
                 Platform.runLater {
-                    statusLabel.text = "Complete! ${Main.bookHashes.size()} books, ${Main.signHashes.size()} signs"
-                    showAlert('Success', "Extraction complete!\n\nBooks: ${Main.bookHashes.size()}\nSigns: ${Main.signHashes.size()}", Alert.AlertType.INFORMATION)
+                    // Stop timer and re-enable button
+                    elapsedTimeTimer?.stop()
+                    extractBtn.disable = false
+                    extractBtn.text = 'Extract'
+
+                    def totalElapsed = (System.currentTimeMillis() - extractionStartTime) / 1000
+                    def minutes = (totalElapsed / 60) as int
+                    def seconds = (totalElapsed % 60) as int
+                    statusLabel.text = String.format("Complete! %d books, %d signs (took %02d:%02d)",
+                        Main.bookHashes.size(), Main.signHashes.size(), minutes, seconds)
+                    showAlert('Success', "Extraction complete!\n\nBooks: ${Main.bookHashes.size()}\nSigns: ${Main.signHashes.size()}\nTime: ${minutes}m ${seconds}s", Alert.AlertType.INFORMATION)
                 }
 
             } catch (Exception e) {
                 Platform.runLater {
+                    // Stop timer and re-enable button
+                    elapsedTimeTimer?.stop()
+                    extractBtn.disable = false
+                    extractBtn.text = 'Extract'
+
                     statusLabel.text = 'Error occurred'
                     showAlert('Error', "Extraction failed:\n${e.message}", Alert.AlertType.ERROR)
                 }
             }
+        }
+    }
+
+    void setupDragAndDrop(TextField textField, boolean isWorldFolder) {
+        // Handle drag over event - show that drop is accepted
+        textField.onDragOver = { DragEvent event ->
+            if (event.dragboard.hasFiles()) {
+                event.acceptTransferModes(TransferMode.COPY)
+            }
+            event.consume()
+        }
+
+        // Visual feedback when drag enters
+        textField.onDragEntered = { DragEvent event ->
+            if (event.dragboard.hasFiles()) {
+                textField.style = '-fx-border-color: #4CAF50; -fx-border-width: 2px;'  // Green border highlight
+            }
+            event.consume()
+        }
+
+        // Remove visual feedback when drag exits
+        textField.onDragExited = { DragEvent event ->
+            textField.style = ''  // Reset to default
+            event.consume()
+        }
+
+        // Handle the actual drop
+        textField.onDragDropped = { DragEvent event ->
+            Dragboard db = event.dragboard
+            boolean success = false
+
+            if (db.hasFiles()) {
+                def files = db.files
+                if (files && files.size() > 0) {
+                    def droppedFile = files[0]  // Take first file/folder
+
+                    if (droppedFile.isDirectory()) {
+                        if (isWorldFolder) {
+                            worldDir = droppedFile
+                            worldPathField.text = droppedFile.absolutePath
+                            updateOutputFolderPrompt()
+                        } else {
+                            outputFolder = droppedFile
+                            outputPathField.text = droppedFile.absolutePath
+                            updateOutputFolderPrompt()
+                        }
+                        success = true
+                    } else {
+                        // User dropped a file instead of a folder
+                        Platform.runLater {
+                            showAlert('Invalid Selection',
+                                'Please drop a folder, not a file.',
+                                Alert.AlertType.WARNING)
+                        }
+                    }
+                }
+            }
+
+            event.dropCompleted = success
+            textField.style = ''  // Reset styling
+            event.consume()
+        }
+    }
+
+    void applyTheme() {
+        // Use jSystemThemeDetector to detect system theme
+        try {
+            def detector = OsThemeDetector.detector
+            def isDark = detector.isDark()
+
+            // Apply AtlantaFX theme based on system preference
+            if (isDark) {
+                Application.setUserAgentStylesheet(new PrimerDark().getUserAgentStylesheet())
+            } else {
+                Application.setUserAgentStylesheet(new PrimerLight().getUserAgentStylesheet())
+            }
+        } catch (Exception e) {
+            // Default to light theme if detection fails
+            Application.setUserAgentStylesheet(new PrimerLight().getUserAgentStylesheet())
         }
     }
 
