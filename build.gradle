@@ -2,6 +2,7 @@ plugins {
     id 'java'
     id 'application'
     id 'groovy'
+    id 'org.openjfx.javafxplugin' version '0.1.0'
 }
 
 group = 'com.minecraftdatamining'
@@ -38,6 +39,11 @@ repositories {
     maven { url 'https://jitpack.io' }
 }
 
+javafx {
+    version = '21.0.5'
+    modules = ['javafx.controls', 'javafx.fxml', 'javafx.graphics', 'javafx.web']
+}
+
 dependencies {
     // Groovy - for main application code
     implementation 'org.apache.groovy:groovy:4.0.24'
@@ -70,6 +76,8 @@ dependencies {
     // ASCII table library for formatted output
     implementation 'com.github.freva:ascii-table:1.8.0'
 
+    // JavaFX modules handled by javafxplugin above (no GroovyFX needed - using pure JavaFX with Groovy syntax)
+
     // Spock Framework for testing
     testImplementation 'org.spockframework:spock-core:2.3-groovy-4.0'
     testImplementation 'org.apache.groovy:groovy-all:4.0.24'
@@ -79,7 +87,7 @@ dependencies {
 }
 
 application {
-    mainClass = 'Main'
+    mainClass = 'Main'  // Auto-detects GUI vs CLI mode
     applicationDefaultJvmArgs = [
         '-Xmx10G',
         '-XX:+UseG1GC',
@@ -128,4 +136,3 @@ test {
     // Increase test timeout for integration tests
     timeout = java.time.Duration.ofMinutes(10)
 }
-
