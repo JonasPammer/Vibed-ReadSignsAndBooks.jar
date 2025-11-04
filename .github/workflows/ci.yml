@@ -99,6 +99,9 @@ jobs:
           tag_name: "release-${{ steps.release_info.outputs.date }}"
           name: "Automated Release ${{ steps.release_info.outputs.date }}"
           body: |
+            Old Releases will continously be deleted, please only link to
+            https://github.com/JonasPammer/Vibed-ReadSignsAndBooks.jar/releases/latest/download/ReadSignsAndBooks.jar
+
             ## Commit Message
             ${{ steps.commit.outputs.message }}
 
@@ -119,21 +122,43 @@ jobs:
         with:
           script: |
             const { owner, repo } = context.repo;
+
+            // Get all releases
             const releases = await github.rest.repos.listReleases({
               owner,
               repo,
               per_page: 100
             });
 
-            const releasesToDelete = releases.data.slice(3);
+            // Sort by created_at date (newest first)
+            const sortedReleases = releases.data.sort((a, b) => {
+              return new Date(b.created_at) - new Date(a.created_at);
+            });
 
+            console.log(`Total releases: ${sortedReleases.length}`);
+            console.log('Keeping the 3 newest releases:');
+            sortedReleases.slice(0, 3).forEach(r => {
+              console.log(`  - ${r.name} (${r.created_at})`);
+            });
+
+            // Keep only the 3 newest releases
+            const releasesToDelete = sortedReleases.slice(3);
+
+            console.log(`Deleting ${releasesToDelete.length} old releases:`);
             for (const release of releasesToDelete) {
-              console.log(`Deleting release: ${release.name} (${release.id})`);
-              await github.rest.repos.deleteRelease({
-                owner,
-                repo,
-                release_id: release.id
-              });
+              console.log(`  Deleting: ${release.name} (${release.created_at}, ID: ${release.id})`);
+
+              try {
+                await github.rest.repos.deleteRelease({
+                  owner,
+                  repo,
+                  release_id: release.id
+                });
+                console.log(`    ✓ Release deleted`);
+              } catch (error) {
+                console.log(`    ✗ Could not delete release: ${error.message}`);
+                continue;
+              }
 
               // Delete associated tag
               try {
@@ -142,7 +167,8 @@ jobs:
                   repo,
                   ref: `tags/${release.tag_name}`
                 });
+                console.log(`    ✓ Tag deleted`);
               } catch (error) {
-                console.log(`Could not delete tag ${release.tag_name}: ${error.message}`);
+                console.log(`    ✗ Could not delete tag ${release.tag_name}: ${error.message}`);
               }
             }
