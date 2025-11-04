@@ -79,16 +79,38 @@ jobs:
           gradle-version: wrapper
           arguments: clean build -x test --stacktrace
 
-      - name: Get short SHA
-        id: slug
-        run: echo "sha8=$(echo ${GITHUB_SHA} | cut -c1-8)" >> $GITHUB_OUTPUT
+      - name: Get release info
+        id: release_info
+        run: |
+          echo "date=$(date +'%Y-%m-%d_%H-%M-%S')" >> $GITHUB_OUTPUT
+          echo "sha8=$(echo ${GITHUB_SHA} | cut -c1-8)" >> $GITHUB_OUTPUT
+
+      - name: Get commit message
+        id: commit
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          echo "message<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMIT_MSG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: "release-${{ steps.slug.outputs.sha8 }}"
-          name: "Release ${{ steps.slug.outputs.sha8 }}"
-          body: "Automated release from commit ${{ github.sha }}"
+          tag_name: "release-${{ steps.release_info.outputs.date }}"
+          name: "Automated Release ${{ steps.release_info.outputs.date }}"
+          body: |
+            ## Commit Message
+            ${{ steps.commit.outputs.message }}
+
+            ## Attribution
+            This project would not exist without the code shared in 2020 by Matt (/u/worldseed) in the r/MinecraftDataMining 's Discord server,
+            and it would be more than one file if not for the Querz NBT Library.
+
+            All changes are just vibe coded with help of Claude 4.5.
+
+            ---
+
+            Commit: ${{ steps.release_info.outputs.sha8 }}
           files: build/libs/ReadSignsAndBooks.jar
           make_latest: true
 
@@ -103,7 +125,7 @@ jobs:
               per_page: 100
             });
 
-            const releasesToDelete = releases.data.slice(5);
+            const releasesToDelete = releases.data.slice(3);
 
             for (const release of releasesToDelete) {
               console.log(`Deleting release: ${release.name} (${release.id})`);
