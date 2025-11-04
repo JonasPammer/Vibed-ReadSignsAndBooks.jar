@@ -21,6 +21,7 @@ import org.slf4j.LoggerFactory
 import picocli.CommandLine
 import picocli.CommandLine.Command
 import picocli.CommandLine.Option
+import javafx.application.Application
 
 import java.text.SimpleDateFormat
 
@@ -62,8 +63,33 @@ class Main implements Runnable {
     static boolean removeFormatting = false
 
     static void main(String[] args) {
+        // Smart detection: GUI mode if no args (double-clicked JAR) or --gui flag
+        if (shouldUseGui(args)) {
+            println "Starting GUI mode..."
+            Application.launch(GUI, args)
+        } else {
+            // CLI mode with picocli
+            runCli(args)
+        }
+    }
+
+    static void runCli(String[] args) {
         new CommandLine(new Main()).execute(args)
-    // Exit code is automatically handled by picocli
+    }
+
+    static boolean shouldUseGui(String[] args) {
+        // No arguments? Assume GUI (double-clicked JAR)
+        if (args.length == 0) {
+            return true
+        }
+
+        // Explicit GUI flag
+        if (args.contains('--gui') || args.contains('-g')) {
+            return true
+        }
+
+        // Otherwise use CLI
+        return false
     }
 
     @Override
@@ -1634,4 +1660,3 @@ class Main implements Runnable {
     }
 
 }
-

@@ -35,7 +35,8 @@ Server administrators and archivists need a reliable way to:
 - ✅ Automated CI/CD with tested JAR distribution
 
 ## Project Scope
-- Single-threaded CLI tool (intentional design for simplicity)
+- **Dual interface:** CLI tool + JavaFX GUI (auto-detects based on arguments)
+- Single-threaded processing (intentional design for simplicity)
 - NBT format parsing for Minecraft data structures
 - Comprehensive integration tests with real-world test data
 - Automated build and deployment via GitHub Actions

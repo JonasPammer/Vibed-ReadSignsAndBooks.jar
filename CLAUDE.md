@@ -6,3 +6,4 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 @.kilocode/rules/memory-bank/architecture.md
 @.kilocode/rules/memory-bank/tech.md
 @.kilocode/rules/memory-bank/product.md
+@.kilocode/rules/memory-bank/gui.md

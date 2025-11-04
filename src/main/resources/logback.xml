@@ -19,13 +19,17 @@
         </encoder>
     </appender>
 
+    <!-- GUI appender for live log display in JavaFX TextArea -->
+    <appender name="GUI" class="GuiLogAppender">
+    </appender>
+
     <!-- Root logger configuration - DEBUG level for file, INFO for console -->
     <root level="DEBUG">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="FILE"/>
+        <appender-ref ref="GUI"/>
     </root>
 
     <!-- Set DEBUG level for our application -->
     <logger name="Main" level="DEBUG"/>
 </configuration>
-
