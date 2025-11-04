@@ -3,6 +3,10 @@
 Full attribution go to the source code shared on 2020 by `Matt (/u/worldseed)` in the `r/MinecraftDataMining` 's Discord server.
 All changes are just vibe coded with help of Claude 4.5.
 
+## Download
+
+**[Download Latest ReadSignsAndBooks.jar](https://github.com/JonasPammer/Vibed-ReadSignsAndBooks.jar/releases/latest/download/ReadSignsAndBooks.jar)**
+
 ## Features
 
 This tool scans Minecraft world files and extracts:
