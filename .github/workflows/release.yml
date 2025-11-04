@@ -1,0 +1,61 @@
+name: Auto Release
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get short SHA
+        id: slug
+        run: echo "sha8=$(echo ${GITHUB_SHA} | cut -c1-8)" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "release-${{ steps.slug.outputs.sha8 }}"
+          name: "Release ${{ steps.slug.outputs.sha8 }}"
+          body: "Automated release from commit ${{ github.sha }}"
+          files: ReadSignsAndBooks.jar
+          make_latest: true
+
+      - name: Delete old releases
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const releases = await github.rest.repos.listReleases({
+              owner,
+              repo,
+              per_page: 100
+            });
+
+            const releasesToDelete = releases.data.slice(5);
+
+            for (const release of releasesToDelete) {
+              console.log(`Deleting release: ${release.name} (${release.id})`);
+              await github.rest.repos.deleteRelease({
+                owner,
+                repo,
+                release_id: release.id
+              });
+
+              // Delete associated tag
+              try {
+                await github.rest.git.deleteRef({
+                  owner,
+                  repo,
+                  ref: `tags/${release.tag_name}`
+                });
+              } catch (error) {
+                console.log(`Could not delete tag ${release.tag_name}: ${error.message}`);
+              }
+            }
