@@ -19,10 +19,49 @@ This tool scans Minecraft world files and extracts:
 - **Books in player inventories** and ender chests
 - **Duplicate tracking:** Saves duplicate books to `.duplicates/` folder instead of skipping them
 
-## Running
+## Usage
 
-Although the jar is also committed, here's how to build from source
-(if gradle is installed, otherwise use gradlew.bat/gradlew):
+### Quick Start (The Easy Way)
+
+1. **[Download ReadSignsAndBooks.jar](https://github.com/JonasPammer/Vibed-ReadSignsAndBooks.jar/releases/latest/download/ReadSignsAndBooks.jar)**
+
+2. **Find your Minecraft world folder:**
+   - Windows: `%appdata%\.minecraft\saves\YourWorldName`
+   - Mac: `~/Library/Application Support/minecraft/saves/YourWorldName`
+   - Linux: `~/.minecraft/saves/YourWorldName`
+
+3. **Run the tool:**
+   ```bash
+   java -jar ReadSignsAndBooks.jar --world "C:\Users\YourName\AppData\Roaming\.minecraft\saves\YourWorldName"
+   ```
+   
+   Or simply drag and drop your world folder into the same directory as the JAR and run:
+   ```bash
+   java -jar ReadSignsAndBooks.jar --world YourWorldName
+   ```
+
+4. **Find your results** in the newly created `ReadBooks/` folder!
+
+### What You'll Get
+
+The tool creates output in `ReadBooks/YYYY-MM-DD/`:
+    - `books/` - directory containing individual Stendhal format files for each unique book
+        - Each book is saved as: `Title_(PageCount)_by_Author~location~coords.stendhal`
+        - Example: `My_Book_(3)_by_Joe~minecraft_chest~-10_65_20.stendhal`
+        - Stendhal format preserves Minecraft formatting codes (§ codes)
+    - `books/.duplicates/` - directory containing duplicate books (same content, different locations)
+    - `all_signs.txt` - all signs found in the world, one per line
+        - Example: `Chunk [31, 31]	(-2 75 -5)		Line 1! ⚠ Line 2! ☀`
+    - `all_books.txt` - all books in Stendhal format, separated by `#region` and `#endregion` markers for VSCode folding
+    - `all_books.csv` - CSV export of all books with metadata
+    - `all_signs.csv` - CSV export of all signs with metadata
+    - `logs.txt` - program debug logs
+    - `summary.txt`
+        - Breakdown by container type (chests, shulker boxes, villagers, etc.)
+        - Breakdown by location type (block entities, entities, players)
+        - Processing time and performance metrics
+
+## Development
 
 ```cmd
 gradle build
@@ -40,39 +79,7 @@ To use custom JVM arguments for large worlds:
 gradle run "-Dorg.gradle.jvmargs=-Xmx10G -XX:+UseG1GC -XX:MaxGCPauseMillis=200" --args="--world /path/to/world"
 ```
 
-Or with built jar:
-
-```bash
-java -Xmx10G -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -jar ReadSignsAndBooks.jar --world /path/to/world
-```
-
-## Usage
-
-1. Ensure you have the following folders in the executable's directory (or specify with `--world`):
-    - `region/` - containing your Minecraft world region files (*.mca or *.mcr)
-    - `playerdata/` - containing player data files (*.dat)
-    - `entities/` - containing entity files (*.mca) for Minecraft 1.17+
-
-2. Run the application using one of the methods above
-
-3. The tool will create output in `ReadBooks/YYYY-MM-DD/` (or custom path with `--output`):
-    - `books/` - directory containing individual Stendhal format files for each unique book
-        - Each book is saved as: `Title_(PageCount)_by_Author~location~coords.stendhal`
-        - Example: `My_Book_(3)_by_Joe~minecraft_chest~-10_65_20.stendhal`
-        - Stendhal format preserves Minecraft formatting codes (§ codes)
-    - `books/.duplicates/` - directory containing duplicate books (same content, different locations)
-    - `all_signs.txt` - all signs found in the world, one per line
-        - Example: `Chunk [31, 31]	(-2 75 -5)		Line 1! ⚠ Line 2! ☀`
-    - `all_books.txt` - all books in Stendhal format, separated by `#region` and `#endregion` markers for VSCode folding
-    - `all_books.csv` - CSV export of all books with metadata
-    - `all_signs.csv` - CSV export of all signs with metadata
-    - `logs.txt` - program debug logs
-    - `summary.txt`
-        - Breakdown by container type (chests, shulker boxes, villagers, etc.)
-        - Breakdown by location type (block entities, entities, players)
-        - Processing time and performance metrics
-
-## Testing
+### Testing
 
 The integration test uses real minecraft world(s).
 
