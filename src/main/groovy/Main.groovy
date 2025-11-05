@@ -18,6 +18,10 @@ import org.json.JSONException
 import org.json.JSONObject
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import ch.qos.logback.classic.LoggerContext
+import ch.qos.logback.classic.encoder.PatternLayoutEncoder
+import ch.qos.logback.core.FileAppender
+import ch.qos.logback.classic.spi.ILoggingEvent
 import picocli.CommandLine
 import picocli.CommandLine.Command
 import picocli.CommandLine.Option
@@ -52,6 +56,7 @@ class Main implements Runnable {
     static List<Map<String, Object>> signCsvData = []
     static int emptySignsRemoved = 0
     static BufferedWriter combinedBooksWriter
+    static Map<String, BufferedWriter> mcfunctionWriters = [:]
 
     @Option(names = ['-w', '--world'], description = 'Specify custom world directory')
     static String customWorldDirectory
@@ -115,9 +120,8 @@ class Main implements Runnable {
         booksFolder = "${outputFolder}${File.separator}books"
         duplicatesFolder = "${booksFolder}${File.separator}.duplicates"
 
-        // Configure logging
-        System.setProperty('LOG_FILE', new File(baseDirectory, "${outputFolder}${File.separator}logs.txt").absolutePath)
-        reloadLogbackConfiguration()
+        // Configure logging - dynamically add file appender
+        addFileAppender(new File(baseDirectory, "${outputFolder}${File.separator}logs.txt").absolutePath)
 
         // Create directories
         [outputFolder, booksFolder, duplicatesFolder].each { String folder ->
@@ -135,10 +139,20 @@ class Main implements Runnable {
 
         try {
             combinedBooksWriter = new File(baseDirectory, "${outputFolder}${File.separator}all_books.txt").newWriter()
+
+            // Initialize mcfunction writers for each Minecraft version
+            ['1_13', '1_14', '1_20_5', '1_21'].each { String version ->
+                mcfunctionWriters[version] = new File(baseDirectory,
+                    "${outputFolder}${File.separator}all_books-${version}.mcfunction").newWriter()
+            }
+
             readPlayerData()
             readSignsAndBooks()
             readEntities()
             combinedBooksWriter?.close()
+
+            // Close all mcfunction writers
+            mcfunctionWriters.values().each { it?.close() }
 
             // Write CSV exports
             writeBooksCSV()
@@ -150,20 +164,35 @@ class Main implements Runnable {
         } catch (IllegalStateException | IOException e) {
             LOGGER.error("Fatal error: ${e.message}", e)
             combinedBooksWriter?.close()
+            mcfunctionWriters.values().each { it?.close() }
             throw e
         }
     }
 
-    static void reloadLogbackConfiguration() {
-        ch.qos.logback.classic.LoggerContext loggerContext = LoggerFactory.ILoggerFactory as ch.qos.logback.classic.LoggerContext
-        loggerContext.reset()
-        ch.qos.logback.classic.joran.JoranConfigurator configurator = new ch.qos.logback.classic.joran.JoranConfigurator()
-        configurator.context = loggerContext
-        try {
-            configurator.doConfigure(Main.classLoader.getResourceAsStream('logback.xml'))
-        } catch (IllegalStateException e) {
-            LOGGER.debug("Failed to configure logback from XML, using default configuration: ${e.message}")
-        }
+    /**
+     * Dynamically add a file appender to Logback at runtime
+     * This allows us to avoid creating log files until extraction actually runs
+     */
+    static void addFileAppender(String logFilePath) {
+        LoggerContext lc = (LoggerContext) LoggerFactory.getILoggerFactory()
+
+        // Create and configure the encoder
+        PatternLayoutEncoder ple = new PatternLayoutEncoder()
+        ple.pattern = '%d{HH:mm:ss.SSS} [%level] %msg%n'
+        ple.context = lc
+        ple.start()
+
+        // Create and configure the file appender
+        FileAppender<ILoggingEvent> fileAppender = new FileAppender<ILoggingEvent>()
+        fileAppender.file = logFilePath
+        fileAppender.append = false
+        fileAppender.encoder = ple
+        fileAppender.context = lc
+        fileAppender.start()
+
+        // Add to root logger
+        ch.qos.logback.classic.Logger rootLogger = lc.getLogger(Logger.ROOT_LOGGER_NAME)
+        rootLogger.addAppender(fileAppender)
     }
 
     /**
@@ -246,6 +275,105 @@ class Main implements Runnable {
         }
 
         return escaped
+    }
+
+    /**
+     * Escape text for Minecraft commands based on version
+     * @param text The text to escape
+     * @param version The Minecraft version ('1_13', '1_14', '1_20_5', '1_21')
+     */
+    static String escapeForMinecraftCommand(String text, String version) {
+        if (!text) {
+            return ''
+        }
+
+        String escaped = text
+
+        // Version-specific escaping
+        if (version in ['1_13', '1_14']) {
+            // Older versions need double backslash escaping
+            escaped = escaped.replace('\\', '\\\\\\\\')
+            escaped = escaped.replace('"', '\\\\"')
+            escaped = escaped.replace("'", "\\'")
+            escaped = escaped.replace('\n', '\\\\n')
+        } else {
+            // 1.20.5+ uses single backslash escaping
+            escaped = escaped.replace('\\', '\\\\')
+            escaped = escaped.replace('"', '\\"')
+            escaped = escaped.replace("'", "\\'")
+            escaped = escaped.replace('\n', '\\n')
+        }
+
+        return escaped
+    }
+
+    /**
+     * Generate a Minecraft /give command for a written book
+     * Supports versions: 1.13+, 1.14+, 1.20.5+, 1.21+
+     */
+    static String generateBookCommand(String title, String author, List<String> pages, String version) {
+        String escapedTitle = escapeForMinecraftCommand(title ?: 'Untitled', version)
+        String escapedAuthor = escapeForMinecraftCommand(author ?: 'Unknown', version)
+
+        String pagesStr
+
+        switch (version) {
+            case '1_13':
+                // 1.13: /give @p written_book{title:"Title",author:"Author",pages:['{"text":"page1"}','{"text":"page2"}']}
+                pagesStr = pages.collect { String page ->
+                    String escapedPage = escapeForMinecraftCommand(page, version)
+                    "'{\"text\":\"${escapedPage}\"}'"
+                }.join(',')
+                return "give @p written_book{title:\"${escapedTitle}\",author:\"${escapedAuthor}\",pages:[${pagesStr}]}"
+
+            case '1_14':
+                // 1.14: /give @p written_book{title:"Title",author:"Author",pages:['["page1"]','["page2"]']}
+                pagesStr = pages.collect { String page ->
+                    String escapedPage = escapeForMinecraftCommand(page, version)
+                    "'[\"${escapedPage}\"]'"
+                }.join(',')
+                return "give @p written_book{title:\"${escapedTitle}\",author:\"${escapedAuthor}\",pages:[${pagesStr}]}"
+
+            case '1_20_5':
+                // 1.20.5: /give @p written_book[minecraft:written_book_content={title:"Title",author:"Author",pages:["page1","page2"]}]
+                pagesStr = pages.collect { String page ->
+                    String escapedPage = escapeForMinecraftCommand(page, version)
+                    "\"${escapedPage}\""
+                }.join(',')
+                return "give @p written_book[minecraft:written_book_content={title:\"${escapedTitle}\",author:\"${escapedAuthor}\",pages:[${pagesStr}]}]"
+
+            case '1_21':
+                // 1.21: /give @p written_book[written_book_content={title:"Title",author:"Author",pages:["page1","page2"]}]
+                pagesStr = pages.collect { String page ->
+                    String escapedPage = escapeForMinecraftCommand(page, version)
+                    "\"${escapedPage}\""
+                }.join(',')
+                return "give @p written_book[written_book_content={title:\"${escapedTitle}\",author:\"${escapedAuthor}\",pages:[${pagesStr}]}]"
+
+            default:
+                return ''
+        }
+    }
+
+    /**
+     * Write a book command to all mcfunction version files
+     */
+    static void writeBookToMcfunction(String title, String author, List<String> pages) {
+        if (!pages) {
+            return
+        }
+
+        ['1_13', '1_14', '1_20_5', '1_21'].each { String version ->
+            BufferedWriter writer = mcfunctionWriters[version]
+            if (writer) {
+                try {
+                    String command = generateBookCommand(title, author, pages, version)
+                    writer.writeLine(command)
+                } catch (Exception e) {
+                    LOGGER.warn("Failed to write book to ${version} mcfunction: ${e.message}")
+                }
+            }
+        }
     }
 
     static void printSummaryStatistics(long elapsedMillis) {
@@ -908,6 +1036,21 @@ class Main implements Runnable {
             writeLine('')
             flush() // Flush immediately to ensure streaming output
         }
+
+        // Write to mcfunction file - extract clean page text without formatting
+        List<String> cleanPages = []
+        (0..<pages.size()).each { int pc ->
+            String pageText = extractPageText(pages, pc)
+            if (pageText) {
+                String cleanText = removeFormatting ?
+                    extractTextContent(pageText) :
+                    extractTextContentPreserveFormatting(pageText)
+                cleanPages.add(cleanText)
+            }
+        }
+        if (cleanPages) {
+            writeBookToMcfunction(title, author, cleanPages)
+        }
     }
 
     /**
@@ -1053,6 +1196,21 @@ class Main implements Runnable {
             writeLine("#endregion ${filenameWithoutExtension}")
             writeLine('')
             flush() // Flush immediately to ensure streaming output
+        }
+
+        // Write to mcfunction file - extract clean page text
+        List<String> cleanPages = []
+        (0..<pages.size()).each { int pc ->
+            String pageText = extractPageText(pages, pc)
+            if (pageText) {
+                String cleanText = removeFormatting ?
+                    removeTextFormatting(pageText) :
+                    pageText
+                cleanPages.add(cleanText)
+            }
+        }
+        if (cleanPages) {
+            writeBookToMcfunction('Writable Book', '', cleanPages)
         }
     }
 
