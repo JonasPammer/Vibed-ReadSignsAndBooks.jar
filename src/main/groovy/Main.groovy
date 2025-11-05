@@ -57,6 +57,10 @@ class Main implements Runnable {
     static int emptySignsRemoved = 0
     static BufferedWriter combinedBooksWriter
     static Map<String, BufferedWriter> mcfunctionWriters = [:]
+    static Map<String, BufferedWriter> signsMcfunctionWriters = [:]  // Separate writers for sign mcfunction files
+    static Map<String, Map<String, Object>> signsByHash = [:]  // Tracks unique signs by hash with position tracking
+    static int signXCoordinate = 1  // Current X coordinate for sign placement
+
     static Map<String, List<Map<String, Object>>> booksByAuthor = [:]  // Tracks books by author for shulker generation
     
     // 16 Minecraft shulker box colors (deterministic mapping)
@@ -130,9 +134,10 @@ class Main implements Runnable {
 
     static void runExtraction() {
         // Reset state
-        [bookHashes, signHashes, booksByContainerType, booksByLocationType, bookMetadataList, bookCsvData, signCsvData, booksByAuthor].each { collection -> collection.clear() }
+        [bookHashes, signHashes, booksByContainerType, booksByLocationType, bookMetadataList, bookCsvData, signCsvData, booksByAuthor, signsByHash].each { collection -> collection.clear() }
         bookCounter = 0
         emptySignsRemoved = 0
+        signXCoordinate = 1  // Reset sign coordinate counter
 
         // Set directories
         baseDirectory = customWorldDirectory ?: System.getProperty('user.dir')
@@ -167,6 +172,12 @@ class Main implements Runnable {
                     "${outputFolder}${File.separator}all_books-${version}.mcfunction").newWriter()
             }
 
+            // Initialize mcfunction writers for signs
+            ['1_13', '1_14', '1_20_5', '1_21'].each { String version ->
+                signsMcfunctionWriters[version] = new File(baseDirectory,
+                    "${outputFolder}${File.separator}all_signs-${version}.mcfunction").newWriter()
+            }
+
             readPlayerData()
             readSignsAndBooks()
             readEntities()
@@ -177,6 +188,9 @@ class Main implements Runnable {
 
             // Close all mcfunction writers
             mcfunctionWriters.values().each { it?.close() }
+             // Close all sign mcfunction writers
+             signsMcfunctionWriters.values().each { it?.close() }
+
 
             // Write CSV exports
             writeBooksCSV()
@@ -526,6 +540,140 @@ class Main implements Runnable {
                 return ''
         }
     }
+
+    /**
+     * Allocate coordinates for a sign (once per unique text, regardless of versions)
+     * Returns a map with {x, z} coordinates
+     */
+    static Map<String, Object> allocateSignPosition(List<String> lines) {
+        String signKey = lines.join('|')  // Use text as unique key
+        if (!signsByHash.containsKey(signKey)) {
+            signsByHash[signKey] = [
+                x: signXCoordinate,
+                z: 0,  // First occurrence at Z 0, duplicates at Z+1, Z+2, etc.
+                lines: lines
+            ]
+            signXCoordinate++
+        } else {
+            // Duplicate sign - increment Z offset
+            Map<String, Object> existing = signsByHash[signKey]
+            existing.z++
+        }
+        return signsByHash[signKey]
+    }
+
+    /**
+     * Generate a Minecraft setblock command for a sign (all Minecraft versions)
+     * Supports versions: 1.12-1.19, 1.20, 1.21.5+
+     * Places signs at incrementing X coordinates, with Z offset for duplicates
+     */
+    static String generateSignCommand(List<String> lines, Map<String, Object> position, String version) {
+        if (!lines || lines.size() == 0) {
+            return ''
+        }
+
+        int x = position.x as int
+        int z = position.z as int
+
+        switch (version) {
+            case '1_13':
+                return generateSignCommand_1_13(lines, x, z)
+            case '1_14':
+                return generateSignCommand_1_14(lines, x, z)
+            case '1_20':
+                return generateSignCommand_1_20(lines, x, z)
+            case '1_20_5':
+                return generateSignCommand_1_20_5(lines, x, z)
+            case '1_21':
+                return generateSignCommand_1_21(lines, x, z)
+            default:
+                return ''
+        }
+    }
+
+    /**
+     * Generate sign for Minecraft 1.13-1.19 (old format with Text1-Text4)
+     */
+    static String generateSignCommand_1_13(List<String> lines, int x, int z) {
+        String text1 = escapeForMinecraftCommand(lines.size() > 0 ? lines[0] : '', '1_13')
+        String text2 = escapeForMinecraftCommand(lines.size() > 1 ? lines[1] : '', '1_13')
+        String text3 = escapeForMinecraftCommand(lines.size() > 2 ? lines[2] : '', '1_13')
+        String text4 = escapeForMinecraftCommand(lines.size() > 3 ? lines[3] : '', '1_13')
+        
+        return "setblock ~${x} ~ ~${z} oak_sign[rotation=0,waterlogged=false]{Text1:'{\"text\":\"${text1}\"}',Text2:'{\"text\":\"${text2}\"}',Text3:'{\"text\":\"${text3}\"}',Text4:'{\"text\":\"${text4}\"}',GlowingText:0} replace"
+    }
+
+    /**
+     * Generate sign for Minecraft 1.14-1.19 (old format)
+     */
+    static String generateSignCommand_1_14(List<String> lines, int x, int z) {
+        String text1 = escapeForMinecraftCommand(lines.size() > 0 ? lines[0] : '', '1_14')
+        String text2 = escapeForMinecraftCommand(lines.size() > 1 ? lines[1] : '', '1_14')
+        String text3 = escapeForMinecraftCommand(lines.size() > 2 ? lines[2] : '', '1_14')
+        String text4 = escapeForMinecraftCommand(lines.size() > 3 ? lines[3] : '', '1_14')
+        
+        return "setblock ~${x} ~ ~${z} oak_sign[rotation=0,waterlogged=false]{Text1:'[\\\"\\\":{\\\"text\\\":\\\"${text1}\\\"}]',Text2:'[\\\"\\\":{\\\"text\\\":\\\"${text2}\\\"}]',Text3:'[\\\"\\\":{\\\"text\\\":\\\"${text3}\\\"}]',Text4:'[\\\"\\\":{\\\"text\\\":\\\"${text4}\\\"}]',GlowingText:0} replace"
+    }
+
+    /**
+     * Generate sign for Minecraft 1.20 (new front_text/back_text format)
+     */
+    static String generateSignCommand_1_20(List<String> lines, int x, int z) {
+        String frontMessages = (0..3).collect { int i ->
+            String line = i < lines.size() ? lines[i] : ''
+            String escaped = escapeForMinecraftCommand(line, '1_20')
+            "'[\\\"\\\":{\\\"text\\\":\\\"${escaped}\\\"}]'"
+        }.join(',')
+        
+        return "setblock ~${x} ~ ~${z} oak_sign[rotation=0,waterlogged=false]{front_text:{messages:[${frontMessages}],has_glowing_text:0},back_text:{messages:[],has_glowing_text:0},is_waxed:0} replace"
+    }
+
+    /**
+     * Generate sign for Minecraft 1.20.5+ (new front_text/back_text with component format)
+     */
+    static String generateSignCommand_1_20_5(List<String> lines, int x, int z) {
+        String frontMessages = (0..3).collect { int i ->
+            String line = i < lines.size() ? lines[i] : ''
+            String escaped = escapeForMinecraftCommand(line, '1_20_5')
+            '[[{"text":"' + escaped + '"}]]'
+        }.join(',')
+        
+        return "setblock ~${x} ~ ~${z} oak_sign[rotation=0,waterlogged=false]{front_text:{messages:[${frontMessages}],has_glowing_text:0},back_text:{messages:[],has_glowing_text:0},is_waxed:0} replace"
+    }
+
+    /**
+     * Generate sign for Minecraft 1.21+ (same as 1.20.5)
+     */
+    static String generateSignCommand_1_21(List<String> lines, int x, int z) {
+        return generateSignCommand_1_20_5(lines, x, z)
+    }
+
+    /**
+     * Write a sign command to all sign mcfunction version files (with deduplication)
+     */
+    static void writeSignToMcfunction(List<String> lines) {
+        if (!lines || lines.size() == 0) {
+            return
+        }
+
+        // Allocate coordinates once for all versions
+        Map<String, Object> position = allocateSignPosition(lines)
+
+        ['1_13', '1_14', '1_20', '1_20_5', '1_21'].each { String version ->
+            BufferedWriter writer = signsMcfunctionWriters[version]
+            if (writer) {
+                try {
+                    String command = generateSignCommand(lines, position, version)
+                    if (command) {
+                        writer.writeLine(command)
+                    }
+                } catch (Exception e) {
+                    LOGGER.warn("Failed to write sign to ${version} mcfunction: ${e.message}")
+                }
+            }
+        }
+    }
+
 
     /**
      * Write a book command to all mcfunction version files AND collect for shulker boxes
@@ -1691,6 +1839,9 @@ class Main implements Runnable {
         String paddedLine4 = padSignLine(line4)
 
         // Write to file with delimiter between lines
+         // Write sign to mcfunction files
+         writeSignToMcfunction([line1, line2, line3, line4])
+
         signWriter.with {
             write(signInfo)
             write(paddedLine1)
@@ -1754,9 +1905,14 @@ class Main implements Runnable {
         }
 
         // Pad lines to 15 characters and write to file with delimiter
+        List<String> paddedLines = extractedLines.collect { String text -> padSignLine(text) }
+        
+        // Write sign to mcfunction files
+        writeSignToMcfunction(extractedLines)
+        
         signWriter.write(signInfo)
-        extractedLines.eachWithIndex { String text, int index ->
-            signWriter.write(padSignLine(text))
+        paddedLines.eachWithIndex { String text, int index ->
+            signWriter.write(text)
             if (index < 3) {
                 signWriter.write('│')  // Unicode box drawing pipe delimiter
             }
@@ -1766,8 +1922,6 @@ class Main implements Runnable {
         // Collect CSV data
         List<Object> coords = extractSignCoordinates(signInfo)
         String blockId = tileEntity.getString('id')
-        // Pad lines for CSV
-        List<String> paddedLines = extractedLines.collect { String text -> padSignLine(text) }
         signCsvData.add([
             x: coords[0],
             y: coords[1],

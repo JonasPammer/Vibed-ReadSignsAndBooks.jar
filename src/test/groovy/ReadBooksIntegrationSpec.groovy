@@ -620,8 +620,152 @@ class ReadBooksIntegrationSpec extends Specification {
 
         true
     }
+    def "should create sign mcfunction files for all Minecraft versions"() {
+        given: 'test worlds with signs'
+        List testWorlds = discoverTestWorlds()
 
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
 
+        and: 'sign mcfunction files are created for all versions'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+            runReadBooksProgram()
+
+            // Verify all 4 version files exist for signs
+            ['1_13', '1_14', '1_20_5', '1_21'].every { version ->
+                Path mcfunctionFile = outputDir.resolve("all_signs-${version}.mcfunction")
+                assert Files.exists(mcfunctionFile), "Missing sign mcfunction file for version ${version}"
+                assert Files.isRegularFile(mcfunctionFile)
+
+                // Verify file contains setblock commands if there are signs
+                if (worldInfo.signCount > 0) {
+                    String content = mcfunctionFile.text
+                    assert content.contains('setblock'), "Sign mcfunction file for ${version} missing setblock commands"
+                } else {
+                    // Even with 0 signs, file should exist (may be empty or have placeholder)
+                    assert Files.size(mcfunctionFile) >= 0, "Sign mcfunction file for ${version} should exist"
+                }
+            }
+
+            true
+        }
+    }
+
+    def "should place unique signs at incrementing X coordinates"() {
+        given: 'test worlds with known sign counts'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'unique signs are placed at incrementing X coordinates'
+        testWorlds.every { worldInfo ->
+            if (worldInfo.signCount == 0) {
+                // Skip test for worlds with no signs
+                return true
+            }
+
+            setupTestWorld(worldInfo)
+            runReadBooksProgram()
+
+            // Extract X coordinates from a version file to verify incrementing pattern
+            Path mcfunction21 = outputDir.resolve("all_signs-1_21.mcfunction")
+            assert Files.exists(mcfunction21)
+
+            String content = mcfunction21.text
+            List<String> setblockLines = content.readLines().findAll { it.contains('setblock') }
+
+            if (setblockLines.size() > 0) {
+                // Extract X coordinates from setblock commands
+                // Pattern: setblock ~X ~ ~ ... (X coordinate after ~)
+                List<Integer> xCoordinates = []
+                setblockLines.each { String line ->
+                    java.util.regex.Matcher matcher = line =~ /setblock ~(\d+) ~ /
+                    if (matcher.find()) {
+                        int x = matcher.group(1).toInteger()
+                        xCoordinates << x
+                    }
+                }
+
+                // Verify X coordinates are incrementing (at least monotonically increasing)
+                if (xCoordinates.size() > 1) {
+                    for (int i = 1; i < xCoordinates.size(); i++) {
+                        assert xCoordinates[i] >= xCoordinates[i-1],
+                            "X coordinates not monotonically increasing: ${xCoordinates}"
+                    }
+                }
+
+                println "  ✓ Found ${xCoordinates.size()} sign positions with X coordinates: ${xCoordinates.unique()}"
+            }
+
+            true
+        }
+    }
+
+    def "should offset duplicate signs in Z coordinate"() {
+        given: 'test worlds with potential duplicate signs'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'duplicate signs are offset in Z coordinate behind originals'
+        testWorlds.every { worldInfo ->
+            if (worldInfo.signCount == 0) {
+                // Skip test for worlds with no signs
+                return true
+            }
+
+            setupTestWorld(worldInfo)
+            runReadBooksProgram()
+
+            // Check Z coordinate offset pattern for duplicates
+            Path mcfunction21 = outputDir.resolve("all_signs-1_21.mcfunction")
+            assert Files.exists(mcfunction21)
+
+            String content = mcfunction21.text
+            List<String> setblockLines = content.readLines().findAll { it.contains('setblock') }
+
+            if (setblockLines.size() > 0) {
+                // REGRESSION TEST: Verify first line contains "~ ~0" and second line (if exists) contains "~ ~1"
+                assert setblockLines[0] =~ /~\d+ ~ ~0\b/, "First sign must be at Z coordinate 0 (format: '~ ~0'), got: ${setblockLines[0]}"
+                if (setblockLines.size() > 1) {
+                    assert setblockLines[1] =~ /~\d+ ~ ~1\b/, "Second sign must be at Z coordinate 1 (format: '~ ~1'), got: ${setblockLines[1]}"
+                }
+
+                // Extract (X, Z) coordinate pairs from setblock commands
+                // Pattern: setblock ~X ~ ~Z ... (X and Z coordinates)
+                Map<Integer, List<Integer>> xToZCoordinates = [:]
+                setblockLines.each { String line ->
+                    java.util.regex.Matcher matcher = line =~ /setblock ~(\d+) ~ ~(\d+)/
+                    if (matcher.find()) {
+                        int x = matcher.group(1).toInteger()
+                        int z = matcher.group(2).toInteger()
+                        if (!xToZCoordinates.containsKey(x)) {
+                            xToZCoordinates[x] = []
+                        }
+                        xToZCoordinates[x] << z
+                    }
+                }
+
+                // Verify that for each X coordinate, Z values either stay at 0 (first unique sign)
+                // or increment (duplicates placed behind)
+                xToZCoordinates.each { int x, List<Integer> zValues ->
+                    if (zValues.size() > 1) {
+                        // If multiple signs at same X, verify Z offsets are monotonically increasing
+                        List<Integer> sortedZ = zValues.sort()
+                        for (int i = 1; i < sortedZ.size(); i++) {
+                            assert sortedZ[i] > sortedZ[i-1],
+                                "Z offsets not properly incrementing for X=${x}: ${sortedZ}"
+                        }
+                        println "  ✓ X coordinate ${x} has ${zValues.size()} signs offset at Z: ${sortedZ}"
+                    }
+                }
+            }
+
+            true
+        }
     }
 
     /**
