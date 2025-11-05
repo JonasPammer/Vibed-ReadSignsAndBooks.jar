@@ -23,6 +23,14 @@
   - item_name component displaying author in container UI
   - 3 new integration tests validating JSON structure, slot capacity, color determinism
   - All 14 integration tests passing (11 existing + 3 new shulker tests)
+- ✅ **Sign mcfunction File Generation Feature** (Version 1.0.2)
+  - Multi-version setblock command generation (1.13, 1.14, 1.20, 1.20.5, 1.21)
+  - Sign position tracking: unique signs at incrementing X coordinates (~1, ~2, etc.), duplicates offset in Z (~0, ~1, ~2, etc.)
+  - Version-specific NBT formatting for each Minecraft version
+  - All sign NBT data preserved (front_text, back_text, block states, glowing, waxed status)
+  - 3 new integration tests validating sign mcfunction generation, X coordinate incrementing, Z offset deduplication
+  - Regression test assertions for Z coordinate format (line 1: "~ ~0", line 2: "~ ~1", etc.)
+  - All 17 integration tests passing (14 existing + 3 new sign tests)
 
 ## Current Focus / Active Areas
 - **Maintenance Mode**: Monitoring for new Minecraft version releases
