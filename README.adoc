@@ -1,6 +1,8 @@
 = Vibed-ReadSignsAndBooks.jar
 
 Full attribution go to the source code shared on 2020 by `Matt (/u/worldseed)` in the `r/MinecraftDataMining` 's Discord server.
+Additional Attributions go to https://github.com/TheWilley/Text2Book and https://github.com/ADP424/MinecraftBookConverter.
+
 All changes are just vibe coded with help of Claude 4.5.
 
 == Download
@@ -61,6 +63,10 @@ The tool creates output in `ReadBooks/YYYY-MM-DD/`:
 * `all_books.txt` - all books in Stendhal format, separated by `#region` and `#endregion` markers for VSCode folding
 * `all_books.csv` - CSV export of all books with metadata
 * `all_signs.csv` - CSV export of all signs with metadata
+* `all_books-1_13.mcfunction` - Minecraft 1.13+ commands to recreate all books via `/give` commands
+* `all_books-1_14.mcfunction` - Minecraft 1.14+ commands to recreate all books via `/give` commands
+* `all_books-1_20_5.mcfunction` - Minecraft 1.20.5+ commands to recreate all books via `/give` commands
+* `all_books-1_21.mcfunction` - Minecraft 1.21+ commands to recreate all books via `/give` commands
 * `logs.txt` - program debug logs
 * `summary.txt`
 ** Breakdown by container type (chests, shulker boxes, villagers, etc.)

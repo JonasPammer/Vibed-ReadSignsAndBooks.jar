@@ -91,6 +91,11 @@ Fallback logic: New format attempted first, old format on failure
 1. **Stendhal JSON** - Preserves metadata (author, title, pages, type, location)
 2. **CSV** - Tabular format (type, title, author, page_count, content_preview)
 3. **Combined Text** - Human-readable merged output
+4. **Minecraft Commands** - Four version-specific mcfunction files:
+   - `all_books-1_13.mcfunction` - Format: `give @p written_book{title:"...",author:"...",pages:['{"text":"..."}']}`
+   - `all_books-1_14.mcfunction` - Format: `give @p written_book{title:"...",author:"...",pages:['["..."]']}`
+   - `all_books-1_20_5.mcfunction` - Format: `give @p written_book[minecraft:written_book_content={...}]`
+   - `all_books-1_21.mcfunction` - Format: `give @p written_book[written_book_content={...}]`
 
 ## Architectural Decisions & Rationale
 
@@ -123,6 +128,22 @@ Fallback logic: New format attempted first, old format on failure
 - **Rationale**: NBT structures can have null/missing fields
 - **Implementation**: Custom getters that return Optional or default values
 - **Benefit**: Prevents NullPointerException crashes on corrupt data
+
+### Multi-Version Command Generation
+- **Decision**: Generate four separate mcfunction files for different Minecraft versions (1.13+, 1.14+, 1.20.5+, 1.21+)
+- **Rationale**: Minecraft command syntax changed significantly across versions; single format won't work universally
+- **Implementation**:
+  - `Map<String, BufferedWriter> mcfunctionWriters` maintains separate writers for each version
+  - `generateBookCommand(title, author, pages, version)` generates version-specific commands via switch statement
+  - `escapeForMinecraftCommand(text, version)` handles version-specific escaping (1.13/1.14 use `\\n`, 1.20.5+/1.21 use `\n`)
+  - All four files written simultaneously in single pass during extraction
+- **Format Differences**:
+  - **1.13**: `give @p written_book{title:"...",author:"...",pages:['{"text":"..."}']}`
+  - **1.14**: `give @p written_book{title:"...",author:"...",pages:['["..."]']}`
+  - **1.20.5**: `give @p written_book[minecraft:written_book_content={title:"...",author:"...",pages:["..."]}]`
+  - **1.21**: `give @p written_book[written_book_content={title:"...",author:"...",pages:["..."]}]` (no `minecraft:` prefix)
+- **Testing**: Three dedicated integration tests verify file creation, command count, and JSON structure validity for all versions
+- **Attribution**: Implementation inspired by https://github.com/TheWilley/Text2Book and https://github.com/ADP424/MinecraftBookConverter
 
 ## File Structure & Organization
 

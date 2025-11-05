@@ -10,23 +10,14 @@
         </encoder>
     </appender>
 
-    <!-- File appender for detailed logs - captures DEBUG and above -->
-    <appender name="FILE" class="ch.qos.logback.core.FileAppender">
-        <file>${LOG_FILE:-logs.txt}</file>
-        <append>false</append>
-        <encoder>
-            <pattern>%d{HH:mm:ss.SSS} [%level] %msg%n</pattern>
-        </encoder>
-    </appender>
-
     <!-- GUI appender for live log display in JavaFX TextArea -->
     <appender name="GUI" class="GuiLogAppender">
     </appender>
 
     <!-- Root logger configuration - DEBUG level for file, INFO for console -->
+    <!-- Note: FILE appender added dynamically during extraction -->
     <root level="DEBUG">
         <appender-ref ref="CONSOLE"/>
-        <appender-ref ref="FILE"/>
         <appender-ref ref="GUI"/>
     </root>
 

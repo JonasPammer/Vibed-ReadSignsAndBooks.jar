@@ -318,6 +318,116 @@ class ReadBooksIntegrationSpec extends Specification {
         }
     }
 
+    def "should create mcfunction files for all Minecraft versions"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'mcfunction files are created for all versions'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+            runReadBooksProgram()
+
+            // Verify all 4 version files exist
+            ['1_13', '1_14', '1_20_5', '1_21'].every { version ->
+                Path mcfunctionFile = outputDir.resolve("all_books-${version}.mcfunction")
+                assert Files.exists(mcfunctionFile), "Missing mcfunction file for version ${version}"
+                assert Files.isRegularFile(mcfunctionFile)
+
+                // Verify file is not empty
+                assert Files.size(mcfunctionFile) > 0, "Empty mcfunction file for version ${version}"
+            }
+
+            true
+        }
+    }
+
+    def "should have correct number of commands in each mcfunction file"() {
+        given: 'test worlds with known book counts'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'each mcfunction file has correct number of commands'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+            runReadBooksProgram()
+
+            int expectedBookCount = worldInfo.bookCount
+
+            ['1_13', '1_14', '1_20_5', '1_21'].every { version ->
+                Path mcfunctionFile = outputDir.resolve("all_books-${version}.mcfunction")
+                String content = mcfunctionFile.text
+
+                // Count lines that start with "give @p"
+                int commandCount = content.readLines().count { it.startsWith('give @p') }
+
+                assert commandCount == expectedBookCount,
+                    "Version ${version}: Expected ${expectedBookCount} commands but found ${commandCount}"
+            }
+
+            true
+        }
+    }
+
+    def "should generate valid JSON in mcfunction commands"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'each version has valid parseable command structure'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+            runReadBooksProgram()
+
+            // Test 1.13 format: give @p written_book{title:"...",author:"...",pages:[...]}
+            Path mcfunction13 = outputDir.resolve("all_books-1_13.mcfunction")
+            String firstCommand13 = mcfunction13.text.readLines().find { it.startsWith('give @p') }
+            assert firstCommand13 != null, "No commands found in 1.13 file"
+            assert firstCommand13.contains('written_book{title:'), "1.13 command missing title field"
+            assert firstCommand13.contains('author:'), "1.13 command missing author field"
+            assert firstCommand13.contains('pages:['), "1.13 command missing pages array"
+            assert firstCommand13.contains('\'{"text":"'), "1.13 command pages not in correct format"
+
+            // Test 1.14 format: give @p written_book{title:"...",author:"...",pages:[...]}
+            Path mcfunction14 = outputDir.resolve("all_books-1_14.mcfunction")
+            String firstCommand14 = mcfunction14.text.readLines().find { it.startsWith('give @p') }
+            assert firstCommand14 != null, "No commands found in 1.14 file"
+            assert firstCommand14.contains('written_book{title:'), "1.14 command missing title field"
+            assert firstCommand14.contains('author:'), "1.14 command missing author field"
+            assert firstCommand14.contains('pages:['), "1.14 command missing pages array"
+            assert firstCommand14.contains('\'["'), "1.14 command pages not in correct format"
+
+            // Test 1.20.5 format: give @p written_book[minecraft:written_book_content={title:"...",author:"...",pages:[...]}]
+            Path mcfunction205 = outputDir.resolve("all_books-1_20_5.mcfunction")
+            String firstCommand205 = mcfunction205.text.readLines().find { it.startsWith('give @p') }
+            assert firstCommand205 != null, "No commands found in 1.20.5 file"
+            assert firstCommand205.contains('written_book[minecraft:written_book_content={'), "1.20.5 command missing written_book_content"
+            assert firstCommand205.contains('title:'), "1.20.5 command missing title field"
+            assert firstCommand205.contains('author:'), "1.20.5 command missing author field"
+            assert firstCommand205.contains('pages:['), "1.20.5 command missing pages array"
+            assert firstCommand205.endsWith('}]'), "1.20.5 command not properly closed"
+
+            // Test 1.21 format: give @p written_book[written_book_content={title:"...",author:"...",pages:[...]}]
+            Path mcfunction21 = outputDir.resolve("all_books-1_21.mcfunction")
+            String firstCommand21 = mcfunction21.text.readLines().find { it.startsWith('give @p') }
+            assert firstCommand21 != null, "No commands found in 1.21 file"
+            assert firstCommand21.contains('written_book[written_book_content={'), "1.21 command missing written_book_content"
+            assert firstCommand21.contains('title:'), "1.21 command missing title field"
+            assert firstCommand21.contains('author:'), "1.21 command missing author field"
+            assert firstCommand21.contains('pages:['), "1.21 command missing pages array"
+            assert firstCommand21.endsWith('}]'), "1.21 command not properly closed"
+            assert !firstCommand21.contains('minecraft:written_book_content'), "1.21 should not have 'minecraft:' prefix"
+
+            true
+        }
+    }
+
     /**
      * Helper to set up a test world
      */
@@ -493,4 +603,3 @@ class ReadBooksIntegrationSpec extends Specification {
     }
 
 }
-
