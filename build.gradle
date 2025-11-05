@@ -3,6 +3,7 @@ plugins {
     id 'application'
     id 'groovy'
     id 'org.openjfx.javafxplugin' version '0.1.0'
+    id 'com.github.jk1.dependency-license-report' version '3.0.1'
 }
 
 group = 'com.minecraftdatamining'
@@ -141,4 +142,29 @@ test {
 
     // Increase test timeout for integration tests
     timeout = java.time.Duration.ofMinutes(10)
+}
+
+// License report configuration
+import com.github.jk1.license.render.*
+
+licenseReport {
+    outputDir = "$projectDir/src/main/resources/licenses"
+    renderers = [new TextReportRenderer('THIRD-PARTY-LICENSES.txt')]
+    configurations = ['runtimeClasspath']
+}
+
+// Ensure licenses directory exists before generating report
+tasks.register('ensureLicensesDir') {
+    doLast {
+        file("$projectDir/src/main/resources/licenses").mkdirs()
+    }
+}
+
+// Generate license report before building JAR
+tasks.named('generateLicenseReport') {
+    dependsOn 'ensureLicensesDir'
+}
+
+tasks.named('processResources') {
+    dependsOn 'generateLicenseReport'
 }

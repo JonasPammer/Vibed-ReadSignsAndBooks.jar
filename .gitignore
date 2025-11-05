@@ -1,6 +1,9 @@
 *.log
 logs.txt
 
+# Generated license reports (auto-generated during build)
+src/main/resources/licenses/
+
 # Created by https://www.toptal.com/developers/gitignore/api/gradle,java,groovy
 # Edit at https://www.toptal.com/developers/gitignore?templates=gradle,java,groovy
 
