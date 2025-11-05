@@ -7,6 +7,8 @@ src/main/resources/licenses/
 # Created by https://www.toptal.com/developers/gitignore/api/gradle,java,groovy
 # Edit at https://www.toptal.com/developers/gitignore?templates=gradle,java,groovy
 
+.claude/settings.local.json
+
 ### Groovy ###
 # .gitignore created from Groovy contributors in https://github.com/apache/groovy/blob/master/.gitignore
 
