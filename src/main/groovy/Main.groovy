@@ -57,6 +57,15 @@ class Main implements Runnable {
     static int emptySignsRemoved = 0
     static BufferedWriter combinedBooksWriter
     static Map<String, BufferedWriter> mcfunctionWriters = [:]
+    static Map<String, List<Map<String, Object>>> booksByAuthor = [:]  // Tracks books by author for shulker generation
+    
+    // 16 Minecraft shulker box colors (deterministic mapping)
+    private static final List<String> SHULKER_COLORS = [
+        'white', 'orange', 'magenta', 'light_blue',
+        'yellow', 'lime', 'pink', 'gray',
+        'light_gray', 'cyan', 'purple', 'blue',
+        'brown', 'green', 'red', 'black'
+    ]
 
     @Option(names = ['-w', '--world'], description = 'Specify custom world directory')
     static String customWorldDirectory
@@ -107,9 +116,21 @@ class Main implements Runnable {
         }
     }
 
+    /**
+     * Map author name to a shulker box color deterministically using hash
+     * Uses author name's hash code to select one of 16 colors consistently
+     */
+    static String getShulkerColorForAuthor(String author) {
+        if (!author || author.trim().isEmpty()) {
+            author = 'Unknown'
+        }
+        int colorIndex = Math.abs(author.hashCode() % SHULKER_COLORS.size())
+        return SHULKER_COLORS[colorIndex]
+    }
+
     static void runExtraction() {
         // Reset state
-        [bookHashes, signHashes, booksByContainerType, booksByLocationType, bookMetadataList, bookCsvData, signCsvData].each { collection -> collection.clear() }
+        [bookHashes, signHashes, booksByContainerType, booksByLocationType, bookMetadataList, bookCsvData, signCsvData, booksByAuthor].each { collection -> collection.clear() }
         bookCounter = 0
         emptySignsRemoved = 0
 
@@ -150,6 +171,9 @@ class Main implements Runnable {
             readSignsAndBooks()
             readEntities()
             combinedBooksWriter?.close()
+
+            // Generate shulker box commands organized by author
+            writeShulkerBoxesToMcfunction()
 
             // Close all mcfunction writers
             mcfunctionWriters.values().each { it?.close() }
@@ -308,6 +332,154 @@ class Main implements Runnable {
     }
 
     /**
+     * Generate book NBT tag (pre-1.20.5 format)
+     * Used for creating book entries in shulker boxes for versions 1.13-1.20.4
+     */
+    static String generateBookNBT(String title, String author, List<String> pages, String version) {
+        String escapedTitle = escapeForMinecraftCommand(title ?: 'Untitled', version)
+        String escapedAuthor = escapeForMinecraftCommand(author ?: 'Unknown', version)
+        
+        String pagesStr = pages.collect { String page ->
+            String escapedPage = escapeForMinecraftCommand(page, version)
+            "'${escapedPage}'"
+        }.join(',')
+        
+        return "{title:\"${escapedTitle}\",author:\"${escapedAuthor}\",pages:[${pagesStr}]}"
+    }
+
+    /**
+     * Generate book components (1.20.5+ format)
+     * Used for creating book entries in shulker boxes for versions 1.20.5+
+     */
+    static String generateBookComponents(String title, String author, List<String> pages, String version) {
+        String escapedTitle = escapeForMinecraftCommand(title ?: 'Untitled', version)
+        String escapedAuthor = escapeForMinecraftCommand(author ?: 'Unknown', version)
+        
+        String pagesStr = pages.collect { String page ->
+            String escapedPage = escapeForMinecraftCommand(page, version)
+            "\"${escapedPage}\""
+        }.join(',')
+        
+        return "{title:\"${escapedTitle}\",author:\"${escapedAuthor}\",pages:[${pagesStr}]}"
+    }
+
+    /**
+     * Generate a Minecraft /give command for a shulker box containing books (organized by author)
+     * Supports versions: 1.13, 1.14, 1.20.5, 1.21
+     *
+     * @param authorName Author name to display on shulker box
+     * @param books List of book maps [{title, author, pages}, ...]
+     * @param boxIndex Index for this author's shulker box (0 for first, 1+ for overflow)
+     * @param version Minecraft version ('1_13', '1_14', '1_20_5', '1_21')
+     */
+    static String generateShulkerBoxCommand(String authorName, List<Map<String, Object>> books, int boxIndex, String version) {
+        String boxColor = getShulkerColorForAuthor(authorName)
+        
+        // Cap at 27 books per shulker (slots 0-26)
+        List<Map<String, Object>> booksForBox = books.drop(boxIndex * 27).take(27)
+        
+        if (booksForBox.isEmpty()) {
+            return ''
+        }
+        
+        String displayName = "Author: ${authorName}${boxIndex > 0 ? " (${boxIndex + 1})" : ''}"
+        
+        switch (version) {
+            case '1_13':
+                return generateShulkerBox_1_13(boxColor, authorName, displayName, booksForBox)
+            case '1_14':
+                return generateShulkerBox_1_14(boxColor, authorName, displayName, booksForBox)
+            case '1_20_5':
+                return generateShulkerBox_1_20_5(boxColor, authorName, displayName, booksForBox)
+            case '1_21':
+                return generateShulkerBox_1_21(boxColor, authorName, displayName, booksForBox)
+            default:
+                return ''
+        }
+    }
+
+    /**
+     * Generate shulker box command for Minecraft 1.13
+     * Format: /give @a color_shulker_box{BlockEntityTag:{Items:[{Slot:N,id:written_book,Count:1,tag:...}]},display:{Name:"..."}}
+     */
+    static String generateShulkerBox_1_13(String color, String author, String displayName, List<Map<String, Object>> books) {
+        StringBuilder itemsStr = new StringBuilder()
+        
+        books.eachWithIndex { Map<String, Object> book, int index ->
+            if (index > 0) itemsStr.append(',')
+            String bookNBT = generateBookNBT(book.title as String, book.author as String, book.pages as List<String>, '1_13')
+            itemsStr.append("{Slot:${index},id:written_book,Count:1,tag:${bookNBT}}")
+        }
+        
+        // Escape display name for JSON (1.13 uses double-escaped quotes)
+        String escapedDisplayName = displayName.replace('"', '\\"').replace('\\', '\\\\')
+        String displayJson = "[\\\"\\\":{\\\"text\\\":\\\"${escapedDisplayName}\\\",\\\"italic\\\":false}]"
+        
+        return "give @a ${color}_shulker_box{BlockEntityTag:{Items:[${itemsStr}]},display:{Name:\"{${displayJson}}\"}} 1 0"
+    }
+
+    /**
+     * Generate shulker box command for Minecraft 1.14
+     * Format: /give @a color_shulker_box{BlockEntityTag:{Items:[{Slot:N,id:written_book,Count:1,tag:...}]},display:{Name:'["",{"text":"...","italic":false}]'}}
+     */
+    static String generateShulkerBox_1_14(String color, String author, String displayName, List<Map<String, Object>> books) {
+        StringBuilder itemsStr = new StringBuilder()
+        
+        books.eachWithIndex { Map<String, Object> book, int index ->
+            if (index > 0) itemsStr.append(',')
+            String bookNBT = generateBookNBT(book.title as String, book.author as String, book.pages as List<String>, '1_14')
+            itemsStr.append("{Slot:${index},id:written_book,Count:1,tag:${bookNBT}}")
+        }
+        
+        // 1.14 uses single quotes with JSON inside
+        String escapedDisplayName = displayName.replace('"', '\\"')
+        String displayJson = '["",{"text":"' + escapedDisplayName + '","italic":false}]'
+        
+        return "give @a ${color}_shulker_box{BlockEntityTag:{Items:[${itemsStr}]},display:{Name:'${displayJson}'}}"
+    }
+
+    /**
+     * Generate shulker box command for Minecraft 1.20.5+
+     * Format: /give @a color_shulker_box[container=[{slot:N,item:{id:written_book,count:1,components:...}}],item_name="''["",{"text":"...","italic":false}]''"]
+     */
+    static String generateShulkerBox_1_20_5(String color, String author, String displayName, List<Map<String, Object>> books) {
+        StringBuilder containerStr = new StringBuilder()
+        
+        books.eachWithIndex { Map<String, Object> book, int index ->
+            if (index > 0) containerStr.append(',')
+            String bookComponents = generateBookComponents(book.title as String, book.author as String, book.pages as List<String>, '1_20_5')
+            containerStr.append("{slot:${index},item:{id:written_book,count:1,components:${bookComponents}}}")
+        }
+        
+        // 1.20.5+ uses escaped JSON for item_name
+        String escapedDisplayName = displayName.replace('"', '\\"')
+        String nameJson = "'[\\\"\\\":{\\\"text\\\":\\\"${escapedDisplayName}\\\",\\\"italic\\\":false}]'"
+        
+        return "give @a minecraft:${color}_shulker_box[minecraft:container=[${containerStr}],item_name=${nameJson}]"
+    }
+
+    /**
+     * Generate shulker box command for Minecraft 1.21+
+     * Format: /give @a color_shulker_box[container=[{slot:N,item:{id:written_book,count:1,components:...}}],item_name="''["",{"text":"...","italic":false}]''"]
+     * (Same as 1.20.5 but without minecraft: prefix for shulker_box)
+     */
+    static String generateShulkerBox_1_21(String color, String author, String displayName, List<Map<String, Object>> books) {
+        StringBuilder containerStr = new StringBuilder()
+        
+        books.eachWithIndex { Map<String, Object> book, int index ->
+            if (index > 0) containerStr.append(',')
+            String bookComponents = generateBookComponents(book.title as String, book.author as String, book.pages as List<String>, '1_21')
+            containerStr.append("{slot:${index},item:{id:written_book,count:1,components:${bookComponents}}}")
+        }
+        
+        // 1.21 uses same escaping as 1.20.5
+        String escapedDisplayName = displayName.replace('"', '\\"')
+        String nameJson = "'[\\\"\\\":{\\\"text\\\":\\\"${escapedDisplayName}\\\",\\\"italic\\\":false}]'"
+        
+        return "give @a ${color}_shulker_box[container=[${containerStr}],item_name=${nameJson}]"
+    }
+
+    /**
      * Generate a Minecraft /give command for a written book
      * Supports versions: 1.13+, 1.14+, 1.20.5+, 1.21+
      */
@@ -356,12 +528,23 @@ class Main implements Runnable {
     }
 
     /**
-     * Write a book command to all mcfunction version files
+     * Write a book command to all mcfunction version files AND collect for shulker boxes
      */
     static void writeBookToMcfunction(String title, String author, List<String> pages) {
         if (!pages) {
             return
         }
+
+        // Collect book data by author for shulker box generation
+        String authorName = author ?: 'Unknown'
+        if (!booksByAuthor.containsKey(authorName)) {
+            booksByAuthor[authorName] = []
+        }
+        booksByAuthor[authorName].add([
+            title: title ?: 'Untitled',
+            author: authorName,
+            pages: pages
+        ])
 
         ['1_13', '1_14', '1_20_5', '1_21'].each { String version ->
             BufferedWriter writer = mcfunctionWriters[version]
@@ -375,6 +558,53 @@ class Main implements Runnable {
             }
         }
     }
+
+    /**
+     * Write all author-organized shulker boxes to mcfunction files
+     * Called after all books have been extracted and collected by author
+     */
+    static void writeShulkerBoxesToMcfunction() {
+        if (booksByAuthor.isEmpty()) {
+            LOGGER.debug('No books collected by author, skipping shulker box generation')
+            return
+        }
+
+        LOGGER.info("Generating shulker boxes for ${booksByAuthor.size()} author(s)")
+
+        // Sort authors for consistent output
+        List<String> sortedAuthors = booksByAuthor.keySet().sort()
+
+        sortedAuthors.each { String author ->
+            List<Map<String, Object>> authorBooks = booksByAuthor[author]
+            int boxCount = (authorBooks.size() + 26) / 27  // Ceiling division for boxes needed
+
+            LOGGER.debug("Author '${author}' has ${authorBooks.size()} books requiring ${boxCount} shulker box(es)")
+
+            (0..<boxCount).each { int boxIndex ->
+                ['1_13', '1_14', '1_20_5', '1_21'].each { String version ->
+                    BufferedWriter writer = mcfunctionWriters[version]
+                    if (writer) {
+                        try {
+                            String command = generateShulkerBoxCommand(author, authorBooks, boxIndex, version)
+                            if (command) {
+                                // Add separator comment before first shulker box of an author
+                                if (boxIndex == 0) {
+                                    writer.writeLine("# ========== Shulker Boxes by Author: ${author} ==========")
+                                }
+                                writer.writeLine(command)
+                            }
+                        } catch (Exception e) {
+                            LOGGER.warn("Failed to write shulker box command for author '${author}' (box ${boxIndex}) to ${version}: ${e.message}", e)
+                        }
+                    }
+                }
+            }
+        }
+
+        LOGGER.info('Shulker box generation complete')
+    }
+
+
 
     static void printSummaryStatistics(long elapsedMillis) {
         File summaryFile = new File(baseDirectory, "${outputFolder}${File.separator}summary.txt")
