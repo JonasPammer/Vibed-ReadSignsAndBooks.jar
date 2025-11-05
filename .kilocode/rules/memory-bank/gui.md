@@ -47,7 +47,8 @@ static boolean shouldUseGui(String[] args) {
 #### 1. Menu Bar
 - **Help Menu:**
   - "View on GitHub" - Opens project repository in browser
-  - "About" - Shows version and attribution (Matt /u/worldseed, Querz NBT, Claude 4.5)
+  - "About" - Shows version, attribution (Matt /u/worldseed, Querz NBT, Claude 4.5), and legal disclaimers
+  - "Third-Party Licenses" - Opens dialog displaying all dependency licenses (italic monospace font)
 
 #### 2. Input Controls
 - **World Directory:** Optional - uses current working directory if not set (same as CLI `-w`)
@@ -214,11 +215,33 @@ jar {
 ### Integration Tests
 Existing Spock tests (`ReadBooksIntegrationSpec.groovy`) still test CLI functionality. GUI does not interfere with tests as they pass arguments (triggering CLI mode).
 
-## Attribution
-Full attribution visible in Help → About dialog:
+## Legal & Attribution
+
+### About Dialog
+Full attribution and legal disclaimers visible in Help → About dialog:
 - Original code: Matt (/u/worldseed) from r/MinecraftDataMining Discord (2020)
 - NBT library: Querz NBT Library
 - Current implementation: Vibe coded with Claude 4.5
+- **Legal Disclaimers:**
+  - NOT affiliated with Mojang Studios or Microsoft Corporation
+  - Provided "AS IS" without warranty
+  - No liability for world corruption or data loss
+  - Users advised to backup worlds before processing
+
+### Third-Party Licenses Dialog
+**Location:** Help → Third-Party Licenses (bottom of menu)
+
+**Implementation:**
+- `showLicensesDialog()` method in `GUI.groovy`
+- Opens 800x600 dialog window with scrollable license text
+- Displays auto-generated license report from all runtime dependencies
+- Styled in italic Courier New font for readability
+- License file: `src/main/resources/licenses/THIRD-PARTY-LICENSES.txt`
+- Auto-generated during build via `com.github.jk1.dependency-license-report` plugin v3.0.1
+- Embedded in JAR resources, excluded from git (auto-generated on each build)
+
+**Fallback Behavior:**
+If license file not found, displays manual list of major dependencies with known licenses.
 
 ## Future Considerations
 
@@ -229,6 +252,7 @@ Full attribution visible in Help → About dialog:
 
 ### Potential Enhancements
 - Add cancel button (requires safely accounted-for interruptible CLI execution)
+- Integration Tests
 
 ### Not Planned
 - GroovyFX migration (library is unmaintained, Java 8-only)

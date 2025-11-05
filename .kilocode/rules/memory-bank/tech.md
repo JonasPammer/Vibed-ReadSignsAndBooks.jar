@@ -6,6 +6,15 @@
 - **Build System:** Gradle 8.14.2
 - **Gradle Wrapper:** Included in repository
 
+## Build-Time Plugins
+- **JavaFX Plugin** 0.1.0 - Manages JavaFX dependencies and modules
+- **Dependency License Report** 3.0.1 - Auto-generates third-party license reports
+  - Plugin: `com.github.jk1.dependency-license-report`
+  - Outputs to: `src/main/resources/licenses/THIRD-PARTY-LICENSES.txt`
+  - Runs automatically before `processResources` task
+  - Generates human-readable text report of all runtime dependency licenses
+  - Report embedded in JAR for GUI display via Help menu
+
 ## Core Dependencies
 
 ### NBT Processing

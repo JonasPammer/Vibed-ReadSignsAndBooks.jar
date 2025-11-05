@@ -177,13 +177,27 @@ class GUI extends Application {
                 'This project would not exist without the code shared in 2020\n' +
                 'by Matt (/u/worldseed) in the r/MinecraftDataMining Discord server,\n' +
                 'and it would be more than one file if not for the Querz NBT Library.\n\n' +
-                'All changes are just vibe coded with help of Claude 4.5.',
+                'All changes are just vibe coded with help of Claude 4.5.\n\n' +
+                '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n' +
+                'DISCLAIMER:\n' +
+                'This software is NOT affiliated with, endorsed by, or associated with\n' +
+                'Mojang Studios, Microsoft Corporation, or any of their subsidiaries.\n\n' +
+                'This program is provided "AS IS" without warranty of any kind.\n' +
+                'Although the program aims to only write to its destination/output folder, ' +
+                'neither the program nor the author is responsible for any corruption of world files,\n' +
+                'data loss, or any other damages that may occur from using this software.\n\n' +
+                'Use at your own risk. Always backup your worlds before processing.',
                 Alert.AlertType.INFORMATION)
         }
 
         def separator = new SeparatorMenuItem()
 
-        helpMenu.items.addAll(githubItem, separator, aboutItem)
+        def licensesItem = new MenuItem('Third-Party Licenses')
+        licensesItem.onAction = {
+            showLicensesDialog()
+        }
+
+        helpMenu.items.addAll(githubItem, separator, aboutItem, licensesItem)
         menuBar.menus.add(helpMenu)
 
         return menuBar
@@ -387,6 +401,61 @@ class GUI extends Application {
             // Default to light theme if detection fails
             Application.setUserAgentStylesheet(new PrimerLight().getUserAgentStylesheet())
         }
+    }
+
+    void showLicensesDialog() {
+        // Create a new stage for the licenses dialog
+        def dialog = new Stage()
+        dialog.title = 'Third-Party Licenses'
+        dialog.initOwner(statusLabel.scene.window)
+
+        // Create TextArea to display license content
+        def licenseText = new TextArea()
+        licenseText.editable = false
+        licenseText.wrapText = true
+        licenseText.style = '-fx-font-family: "Courier New"; -fx-font-size: 11px; -fx-font-style: italic;'
+
+        // Try to load the license file from resources
+        try {
+            def licenseStream = getClass().getResourceAsStream('/licenses/THIRD-PARTY-LICENSES.txt')
+            if (licenseStream) {
+                licenseText.text = licenseStream.text
+            } else {
+                licenseText.text = 'License information not available.\n\n' +
+                    'The license report should be generated during the build process.\n' +
+                    'Please rebuild the project with: ./gradlew clean build\n\n' +
+                    'Main dependencies:\n' +
+                    '- Apache Groovy (Apache License 2.0)\n' +
+                    '- Querz NBT Library (MIT License)\n' +
+                    '- Picocli (Apache License 2.0)\n' +
+                    '- JavaFX (GPL v2 + Classpath Exception)\n' +
+                    '- AtlantaFX (MIT License)\n' +
+                    '- Apache Commons (Apache License 2.0)\n' +
+                    '- SLF4J & Logback (MIT & EPL/LGPL)\n' +
+                    '- Other dependencies as listed in build.gradle'
+            }
+        } catch (Exception e) {
+            licenseText.text = "Error loading license information: ${e.message}\n\n" +
+                'Please check that the project was built correctly.'
+        }
+
+        // Create close button
+        def closeBtn = new Button('Close')
+        closeBtn.onAction = { dialog.close() }
+        closeBtn.minWidth = 100
+
+        // Layout
+        def btnBox = new HBox(closeBtn)
+        btnBox.alignment = Pos.CENTER
+        btnBox.padding = new Insets(10)
+
+        def root = new BorderPane()
+        root.center = licenseText
+        root.bottom = btnBox
+        BorderPane.setMargin(licenseText, new Insets(10))
+
+        dialog.scene = new Scene(root, 800, 600)
+        dialog.show()
     }
 
     static void showAlert(String title, String message, Alert.AlertType type) {
