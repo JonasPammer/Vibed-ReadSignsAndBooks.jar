@@ -23,9 +23,16 @@ This tool scans Minecraft world files and extracts:
 
 == Usage
 
-=== Quick Start (The Easy Way)
-
 . link:https://github.com/JonasPammer/Vibed-ReadSignsAndBooks.jar/releases/latest/download/ReadSignsAndBooks.jar[*Download ReadSignsAndBooks.jar*]
+
+=== Quick Start (The Easiest Way)
+
+Double Click or run without arguments to open the GUI Wrapper.
+
+image:.github/GUI.png[]
+image:.github/GUI-About.png[]
+
+=== Quick Start (The Easy Way)
 
 . *Find your Minecraft world folder:*
 +
@@ -40,12 +47,7 @@ This tool scans Minecraft world files and extracts:
 java -jar ReadSignsAndBooks.jar --world "C:\Users\YourName\AppData\Roaming\.minecraft\saves\YourWorldName"
 ----
 +
-Or simply drag and drop your world folder into the same directory as the JAR and run:
-+
-[source,bash]
-----
-java -jar ReadSignsAndBooks.jar --world YourWorldName
-----
+Or simply drag and drop your world folder into the same directory as the JAR and run it.
 
 . *Find your results* in the newly created `ReadBooks/` folder!
 
