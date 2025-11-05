@@ -44,9 +44,14 @@ class Main implements Runnable {
 
     static String baseDirectory = System.getProperty('user.dir')
     static String outputFolder, booksFolder, duplicatesFolder, dateStamp
+    static String outputFolderParent  // Top-level output folder (e.g., "ReadBooks") without date stamp
 
     static Set<Integer> bookHashes = [] as Set
     static Set<String> signHashes = [] as Set
+    
+    // State file management for tracking failed region files
+    static Map<String, Set<String>> failedRegionsByWorld = [:]  // worldFolderName -> Set of failed region filenames
+    static Set<String> recoveredRegions = [] as Set  // Regions that recovered in this run
 
     static int bookCounter = 0
     static Map<String, Integer> booksByContainerType = [:]
@@ -132,6 +137,89 @@ class Main implements Runnable {
         return SHULKER_COLORS[colorIndex]
     }
 
+    /**
+     * Load failed regions state from persistent state file
+     * State file tracks region files that have repeatedly failed across multiple runs
+     * Keyed by world folder name to support processing multiple worlds
+     */
+    static void loadFailedRegionsState() {
+        String worldFolderName = new File(baseDirectory).name
+        File stateFile = new File(baseDirectory, "${outputFolderParent}${File.separator}.failed_regions_state.json")
+        
+        failedRegionsByWorld.clear()
+        recoveredRegions.clear()
+        
+        if (!stateFile.exists()) {
+            LOGGER.debug("No existing state file found at: ${stateFile.absolutePath}")
+            return
+        }
+        
+        try {
+            String content = stateFile.text
+            Map<String, Object> stateData = new JsonSlurper().parseText(content) as Map<String, Object>
+            
+            if (stateData.containsKey(worldFolderName)) {
+                List<String> failedRegions = stateData[worldFolderName] as List<String>
+                failedRegionsByWorld[worldFolderName] = failedRegions.toSet()
+                LOGGER.debug("Loaded ${failedRegions.size()} previously failed regions for world: ${worldFolderName}")
+            }
+        } catch (Exception e) {
+            LOGGER.warn("Failed to load state file ${stateFile.absolutePath}: ${e.message}")
+        }
+    }
+
+    /**
+     * Save failed regions state to persistent state file
+     * Updates entries for the current world and removes regions that recovered
+     */
+    static void saveFailedRegionsState() {
+        String worldFolderName = new File(baseDirectory).name
+        File stateFileDir = new File(baseDirectory, outputFolderParent)
+        stateFileDir.mkdirs()
+        File stateFile = new File(stateFileDir, ".failed_regions_state.json")
+        
+        try {
+            // Load existing state
+            Map<String, Object> stateData = [:]
+            if (stateFile.exists()) {
+                try {
+                    String content = stateFile.text
+                    stateData = new JsonSlurper().parseText(content) as Map<String, Object>
+                } catch (Exception e) {
+                    LOGGER.warn("Could not parse existing state file, starting fresh: ${e.message}")
+                    stateData = [:]
+                }
+            }
+            
+            // Update state for current world: add failed regions, remove recovered ones
+            if (failedRegionsByWorld.containsKey(worldFolderName)) {
+                Set<String> failedRegions = failedRegionsByWorld[worldFolderName]
+                failedRegions.removeAll(recoveredRegions)  // Remove regions that recovered
+                
+                if (failedRegions.isEmpty()) {
+                    stateData.remove(worldFolderName)
+                    LOGGER.info("All previously failed regions recovered! Removing state for world: ${worldFolderName}")
+                } else {
+                    stateData[worldFolderName] = failedRegions.toList().sort()
+                    LOGGER.debug("Saved ${failedRegions.size()} failed regions for world: ${worldFolderName}")
+                }
+            }
+            
+            // Write state file as JSON
+            if (stateData.isEmpty()) {
+                if (stateFile.exists()) {
+                    stateFile.delete()
+                }
+            } else {
+                stateFile.withWriter('UTF-8') { BufferedWriter writer ->
+                    writer.write(new groovy.json.JsonOutput().toJson(stateData))
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.warn("Failed to save state file: ${e.message}", e)
+        }
+    }
+
     static void runExtraction() {
         // Reset state
         [bookHashes, signHashes, booksByContainerType, booksByLocationType, bookMetadataList, bookCsvData, signCsvData, booksByAuthor, signsByHash].each { collection -> collection.clear() }
@@ -143,6 +231,17 @@ class Main implements Runnable {
         baseDirectory = customWorldDirectory ?: System.getProperty('user.dir')
         dateStamp = new SimpleDateFormat('yyyy-MM-dd', Locale.US).format(new Date())
         outputFolder = customOutputDirectory ?: "ReadBooks${File.separator}${dateStamp}"
+        
+        // Extract parent folder for state file (top-level output folder without date stamp)
+        if (customOutputDirectory) {
+            // If custom directory given, extract parent folder
+            File customFile = new File(customOutputDirectory)
+            outputFolderParent = customFile.parentFile?.absolutePath ?: customOutputDirectory
+        } else {
+            // Default is ReadBooks
+            outputFolderParent = "ReadBooks"
+        }
+        
         booksFolder = "${outputFolder}${File.separator}books"
         duplicatesFolder = "${booksFolder}${File.separator}.duplicates"
 
@@ -160,6 +259,21 @@ class Main implements Runnable {
         LOGGER.info("World directory: ${baseDirectory}")
         LOGGER.info("Output folder: ${outputFolder}")
         LOGGER.info('=' * 80)
+        
+        // Load state file with previously failed regions
+        loadFailedRegionsState()
+        
+        // Print message about suppressed regions if any known failures exist
+        String worldFolderName = new File(baseDirectory).name
+        if (failedRegionsByWorld.containsKey(worldFolderName)) {
+            Set<String> failedRegions = failedRegionsByWorld[worldFolderName]
+            LOGGER.info("")
+            LOGGER.info("⚠️  NOTICE: ${failedRegions.size()} region file(s) have previously failed to read. Error messages for these known problematic regions will be suppressed in this run's output:")
+            failedRegions.toList().sort().each { String regionFile ->
+                LOGGER.info("  - ${regionFile}")
+            }
+            LOGGER.info("")
+        }
 
         long startTime = System.currentTimeMillis()
 
@@ -199,10 +313,15 @@ class Main implements Runnable {
             long elapsed = System.currentTimeMillis() - startTime
             printSummaryStatistics(elapsed)
             LOGGER.info("${elapsed / 1000} seconds to complete.")
+            
+            // Save state file with any new failures discovered
+            saveFailedRegionsState()
         } catch (IllegalStateException | IOException e) {
             LOGGER.error("Fatal error: ${e.message}", e)
             combinedBooksWriter?.close()
             mcfunctionWriters.values().each { it?.close() }
+            // Still save state file even if extraction had errors
+            saveFailedRegionsState()
             throw e
         }
     }
@@ -910,110 +1029,129 @@ class Main implements Runnable {
                     .setStyle(ProgressBarStyle.ASCII)
                     .build().withCloseable { pb ->
                                 files.each { File file ->
-                        LOGGER.debug("Processing region file: ${file.name}")
+                         LOGGER.debug("Processing region file: ${file.name}")
 
-                        try {
-                            net.querz.mca.MCAFile mcaFile = MCAUtil.read(file, LoadFlags.RAW)
+                         try {
+                             net.querz.mca.MCAFile mcaFile = MCAUtil.read(file, LoadFlags.RAW)
+                             
+                             // Check if this region was previously marked as failed - if so, mark it as recovered
+                             String worldFolderName = new File(baseDirectory).name
+                             if (failedRegionsByWorld.containsKey(worldFolderName) && failedRegionsByWorld[worldFolderName].contains(file.name)) {
+                                 recoveredRegions.add(file.name)
+                             }
 
-                            (0..31).each { int x ->
-                                (0..31).each { int z ->
-                                    net.querz.mca.Chunk chunk = mcaFile.getChunk(x, z)
-                                    if (!chunk) {
-                                        return
-                                    }
+                             (0..31).each { int x ->
+                                 (0..31).each { int z ->
+                                     net.querz.mca.Chunk chunk = mcaFile.getChunk(x, z)
+                                     if (!chunk) {
+                                         return
+                                     }
 
-                                    CompoundTag chunkData = chunk.handle
-                                    if (!chunkData) {
-                                        return
-                                    }
+                                     CompoundTag chunkData = chunk.handle
+                                     if (!chunkData) {
+                                         return
+                                     }
 
-                                    // Handle both old and new chunk formats
-                                    CompoundTag level = chunkData.getCompoundTag('Level')
-                                    CompoundTag chunkRoot = level ?: chunkData
+                                     // Handle both old and new chunk formats
+                                     CompoundTag level = chunkData.getCompoundTag('Level')
+                                     CompoundTag chunkRoot = level ?: chunkData
 
-                                    // Process block entities (chests, signs, etc.)
-                                    ListTag<CompoundTag> tileEntities = chunkRoot.containsKey('block_entities') ?
-                                        getCompoundTagList(chunkRoot, 'block_entities') :
-                                        getCompoundTagList(chunkRoot, 'TileEntities')
+                                     // Process block entities (chests, signs, etc.)
+                                     ListTag<CompoundTag> tileEntities = chunkRoot.containsKey('block_entities') ?
+                                         getCompoundTagList(chunkRoot, 'block_entities') :
+                                         getCompoundTagList(chunkRoot, 'TileEntities')
 
-                                    tileEntities.each { CompoundTag tileEntity ->
-                                        String blockId = tileEntity.getString('id')
+                                     tileEntities.each { CompoundTag tileEntity ->
+                                         String blockId = tileEntity.getString('id')
 
-                                        // Process containers with items
-                                        if (hasKey(tileEntity, 'id')) {
-                                            getCompoundTagList(tileEntity, 'Items').each { CompoundTag item ->
-                                                String bookInfo = "Chunk [${x}, ${z}] Inside ${blockId} at (${tileEntity.getInt('x')} ${tileEntity.getInt('y')} ${tileEntity.getInt('z')}) ${file.name}"
-                                                int booksBefore = bookCounter
-                                                parseItem(item, bookInfo)
-                                                if (bookCounter > booksBefore) {
-                                                    incrementBookStats(blockId, 'Block Entity')
-                                                }
-                                            }
-                                        }
+                                         // Process containers with items
+                                         if (hasKey(tileEntity, 'id')) {
+                                             getCompoundTagList(tileEntity, 'Items').each { CompoundTag item ->
+                                                 String bookInfo = "Chunk [${x}, ${z}] Inside ${blockId} at (${tileEntity.getInt('x')} ${tileEntity.getInt('y')} ${tileEntity.getInt('z')}) ${file.name}"
+                                                 int booksBefore = bookCounter
+                                                 parseItem(item, bookInfo)
+                                                 if (bookCounter > booksBefore) {
+                                                     incrementBookStats(blockId, 'Block Entity')
+                                                 }
+                                             }
+                                         }
 
-                                        // Process lecterns (single book)
-                                        if (hasKey(tileEntity, 'Book')) {
-                                            CompoundTag book = getCompoundTag(tileEntity, 'Book')
-                                            String bookInfo = "Chunk [${x}, ${z}] Inside ${blockId} at (${tileEntity.getInt('x')} ${tileEntity.getInt('y')} ${tileEntity.getInt('z')}) ${file.name}"
-                                            int booksBefore = bookCounter
-                                            parseItem(book, bookInfo)
-                                            if (bookCounter > booksBefore) {
-                                                incrementBookStats('Lectern', 'Block Entity')
-                                            }
-                                        }
+                                         // Process lecterns (single book)
+                                         if (hasKey(tileEntity, 'Book')) {
+                                             CompoundTag book = getCompoundTag(tileEntity, 'Book')
+                                             String bookInfo = "Chunk [${x}, ${z}] Inside ${blockId} at (${tileEntity.getInt('x')} ${tileEntity.getInt('y')} ${tileEntity.getInt('z')}) ${file.name}"
+                                             int booksBefore = bookCounter
+                                             parseItem(book, bookInfo)
+                                             if (bookCounter > booksBefore) {
+                                                 incrementBookStats('Lectern', 'Block Entity')
+                                             }
+                                         }
 
-                                        // Process signs
-                                        String signInfo = "Chunk [${x}, ${z}]\t(${tileEntity.getInt('x')} ${tileEntity.getInt('y')} ${tileEntity.getInt('z')})\t\t"
-                                        if (hasKey(tileEntity, 'Text1')) {
-                                            parseSign(tileEntity, signWriter, signInfo)
-                                        } else if (hasKey(tileEntity, 'front_text')) {
-                                            parseSignNew(tileEntity, signWriter, signInfo)
-                                        }
-                                    }
+                                         // Process signs
+                                         String signInfo = "Chunk [${x}, ${z}]\t(${tileEntity.getInt('x')} ${tileEntity.getInt('y')} ${tileEntity.getInt('z')})\t\t"
+                                         if (hasKey(tileEntity, 'Text1')) {
+                                             parseSign(tileEntity, signWriter, signInfo)
+                                         } else if (hasKey(tileEntity, 'front_text')) {
+                                             parseSignNew(tileEntity, signWriter, signInfo)
+                                         }
+                                     }
 
-                                    // Process entities in chunk (for proto-chunks)
-                                    ListTag<CompoundTag> entities = chunkRoot.containsKey('entities') ?
-                                        getCompoundTagList(chunkRoot, 'entities') :
-                                        getCompoundTagList(chunkRoot, 'Entities')
+                                     // Process entities in chunk (for proto-chunks)
+                                     ListTag<CompoundTag> entities = chunkRoot.containsKey('entities') ?
+                                         getCompoundTagList(chunkRoot, 'entities') :
+                                         getCompoundTagList(chunkRoot, 'Entities')
 
-                                    entities.each { CompoundTag entity ->
-                                        String entityId = entity.getString('id')
-                                        ListTag<?> entityPos = getListTag(entity, 'Pos')
-                                        int xPos = getDoubleAt(entityPos, 0) as int
-                                        int yPos = getDoubleAt(entityPos, 1) as int
-                                        int zPos = getDoubleAt(entityPos, 2) as int
+                                     entities.each { CompoundTag entity ->
+                                         String entityId = entity.getString('id')
+                                         ListTag<?> entityPos = getListTag(entity, 'Pos')
+                                         int xPos = getDoubleAt(entityPos, 0) as int
+                                         int yPos = getDoubleAt(entityPos, 1) as int
+                                         int zPos = getDoubleAt(entityPos, 2) as int
 
-                                        // Entities with inventory
-                                        if (hasKey(entity, 'Items')) {
-                                            getCompoundTagList(entity, 'Items').each { CompoundTag item ->
-                                                String bookInfo = "Chunk [${x}, ${z}] In ${entityId} at (${xPos} ${yPos} ${zPos}) ${file.name}"
-                                                int booksBefore = bookCounter
-                                                parseItem(item, bookInfo)
-                                                if (bookCounter > booksBefore) {
-                                                    incrementBookStats(entityId, 'Entity')
-                                                }
-                                            }
-                                        }
+                                         // Entities with inventory
+                                         if (hasKey(entity, 'Items')) {
+                                             getCompoundTagList(entity, 'Items').each { CompoundTag item ->
+                                                 String bookInfo = "Chunk [${x}, ${z}] In ${entityId} at (${xPos} ${yPos} ${zPos}) ${file.name}"
+                                                 int booksBefore = bookCounter
+                                                 parseItem(item, bookInfo)
+                                                 if (bookCounter > booksBefore) {
+                                                     incrementBookStats(entityId, 'Entity')
+                                                 }
+                                             }
+                                         }
 
-                                        // Item frames and items on ground
-                                        if (hasKey(entity, 'Item')) {
-                                            CompoundTag item = getCompoundTag(entity, 'Item')
-                                            String bookInfo = "Chunk [${x}, ${z}] In ${entityId} at (${xPos} ${yPos} ${zPos}) ${file.name}"
-                                            int booksBefore = bookCounter
-                                            parseItem(item, bookInfo)
-                                            if (bookCounter > booksBefore) {
-                                                incrementBookStats(entityId, 'Entity')
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        } catch (IOException e) {
-                            LOGGER.debug("Failed to read region file ${file.name}: ${e.message}")
-                        }
+                                         // Item frames and items on ground
+                                         if (hasKey(entity, 'Item')) {
+                                             CompoundTag item = getCompoundTag(entity, 'Item')
+                                             String bookInfo = "Chunk [${x}, ${z}] In ${entityId} at (${xPos} ${yPos} ${zPos}) ${file.name}"
+                                             int booksBefore = bookCounter
+                                             parseItem(item, bookInfo)
+                                             if (bookCounter > booksBefore) {
+                                                 incrementBookStats(entityId, 'Entity')
+                                             }
+                                         }
+                                     }
+                                 }
+                             }
+                         } catch (IOException e) {
+                             // Check if this region is known to have failed before - if so, suppress the error message
+                             String worldFolderName = new File(baseDirectory).name
+                             boolean isKnownFailure = failedRegionsByWorld.containsKey(worldFolderName) && failedRegionsByWorld[worldFolderName].contains(file.name)
+                             
+                             if (isKnownFailure) {
+                                 LOGGER.debug("(Previously failed region, error suppressed) ${file.name}: ${e.message}")
+                             } else {
+                                 LOGGER.warn("Failed to read region file ${file.name}: ${e.message}")
+                                 // Track this as a new failure
+                                 if (!failedRegionsByWorld.containsKey(worldFolderName)) {
+                                     failedRegionsByWorld[worldFolderName] = [] as Set
+                                 }
+                                 failedRegionsByWorld[worldFolderName].add(file.name)
+                             }
+                         }
 
-                        pb.step()
-                                }
+                         pb.step()
+                                 }
                     }
 
             signWriter.writeLine('\nCompleted.')
@@ -1056,68 +1194,87 @@ class Main implements Runnable {
                 .setStyle(ProgressBarStyle.ASCII)
                 .build().withCloseable { pb ->
                             files.each { File file ->
-                    LOGGER.debug("Processing entity file: ${file.name}")
+                     LOGGER.debug("Processing entity file: ${file.name}")
 
-                    try {
-                        net.querz.mca.MCAFile mcaFile = MCAUtil.read(file, LoadFlags.RAW)
+                     try {
+                         net.querz.mca.MCAFile mcaFile = MCAUtil.read(file, LoadFlags.RAW)
+                         
+                         // Check if this entity file was previously marked as failed - if so, mark it as recovered
+                         String worldFolderName = new File(baseDirectory).name
+                         if (failedRegionsByWorld.containsKey(worldFolderName) && failedRegionsByWorld[worldFolderName].contains(file.name)) {
+                             recoveredRegions.add(file.name)
+                         }
 
-                        (0..31).each { int x ->
-                            (0..31).each { int z ->
-                                net.querz.mca.Chunk chunk = mcaFile.getChunk(x, z)
-                                if (!chunk) {
-                                    return
-                                }
+                         (0..31).each { int x ->
+                             (0..31).each { int z ->
+                                 net.querz.mca.Chunk chunk = mcaFile.getChunk(x, z)
+                                 if (!chunk) {
+                                     return
+                                 }
 
-                                CompoundTag chunkData = chunk.handle
-                                if (!chunkData) {
-                                    return
-                                }
+                                 CompoundTag chunkData = chunk.handle
+                                 if (!chunkData) {
+                                     return
+                                 }
 
-                                CompoundTag level = chunkData.getCompoundTag('Level')
-                                CompoundTag chunkRoot = level ?: chunkData
+                                 CompoundTag level = chunkData.getCompoundTag('Level')
+                                 CompoundTag chunkRoot = level ?: chunkData
 
-                                ListTag<CompoundTag> entities = chunkRoot.containsKey('entities') ?
-                                    getCompoundTagList(chunkRoot, 'entities') :
-                                    getCompoundTagList(chunkRoot, 'Entities')
+                                 ListTag<CompoundTag> entities = chunkRoot.containsKey('entities') ?
+                                     getCompoundTagList(chunkRoot, 'entities') :
+                                     getCompoundTagList(chunkRoot, 'Entities')
 
-                                entities.each { CompoundTag entity ->
-                                    String entityId = entity.getString('id')
-                                    ListTag<?> entityPos = getListTag(entity, 'Pos')
-                                    int xPos = entityPos.size() >= 3 ? getDoubleAt(entityPos, 0) as int : 0
-                                    int yPos = entityPos.size() >= 3 ? getDoubleAt(entityPos, 1) as int : 0
-                                    int zPos = entityPos.size() >= 3 ? getDoubleAt(entityPos, 2) as int : 0
+                                 entities.each { CompoundTag entity ->
+                                     String entityId = entity.getString('id')
+                                     ListTag<?> entityPos = getListTag(entity, 'Pos')
+                                     int xPos = entityPos.size() >= 3 ? getDoubleAt(entityPos, 0) as int : 0
+                                     int yPos = entityPos.size() >= 3 ? getDoubleAt(entityPos, 1) as int : 0
+                                     int zPos = entityPos.size() >= 3 ? getDoubleAt(entityPos, 2) as int : 0
 
-                                    // Entities with inventory
-                                    if (hasKey(entity, 'Items')) {
-                                        getCompoundTagList(entity, 'Items').each { CompoundTag item ->
-                                            String bookInfo = "Chunk [${x}, ${z}] In ${entityId} at (${xPos} ${yPos} ${zPos}) ${file.name}"
-                                            int booksBefore = bookCounter
-                                            parseItem(item, bookInfo)
-                                            if (bookCounter > booksBefore) {
-                                                incrementBookStats(entityId, 'Entity')
-                                            }
-                                        }
-                                    }
+                                     // Entities with inventory
+                                     if (hasKey(entity, 'Items')) {
+                                         getCompoundTagList(entity, 'Items').each { CompoundTag item ->
+                                             String bookInfo = "Chunk [${x}, ${z}] In ${entityId} at (${xPos} ${yPos} ${zPos}) ${file.name}"
+                                             int booksBefore = bookCounter
+                                             parseItem(item, bookInfo)
+                                             if (bookCounter > booksBefore) {
+                                                 incrementBookStats(entityId, 'Entity')
+                                             }
+                                         }
+                                     }
 
-                                    // Item frames and items on ground
-                                    if (hasKey(entity, 'Item')) {
-                                        CompoundTag item = getCompoundTag(entity, 'Item')
-                                        String bookInfo = "Chunk [${x}, ${z}] In ${entityId} at (${xPos} ${yPos} ${zPos}) ${file.name}"
-                                        int booksBefore = bookCounter
-                                        parseItem(item, bookInfo)
-                                        if (bookCounter > booksBefore) {
-                                            incrementBookStats(entityId, 'Entity')
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } catch (IOException e) {
-                        LOGGER.debug("Error processing entity file ${file.name}: ${e.message}")
-                    }
+                                     // Item frames and items on ground
+                                     if (hasKey(entity, 'Item')) {
+                                         CompoundTag item = getCompoundTag(entity, 'Item')
+                                         String bookInfo = "Chunk [${x}, ${z}] In ${entityId} at (${xPos} ${yPos} ${zPos}) ${file.name}"
+                                         int booksBefore = bookCounter
+                                         parseItem(item, bookInfo)
+                                         if (bookCounter > booksBefore) {
+                                             incrementBookStats(entityId, 'Entity')
+                                         }
+                                     }
+                                 }
+                             }
+                         }
+                     } catch (IOException e) {
+                         // Check if this entity file is known to have failed before - if so, suppress the error message
+                         String worldFolderName = new File(baseDirectory).name
+                         boolean isKnownFailure = failedRegionsByWorld.containsKey(worldFolderName) && failedRegionsByWorld[worldFolderName].contains(file.name)
+                         
+                         if (isKnownFailure) {
+                             LOGGER.debug("(Previously failed entity file, error suppressed) ${file.name}: ${e.message}")
+                         } else {
+                             LOGGER.warn("Failed to read entity file ${file.name}: ${e.message}")
+                             // Track this as a new failure
+                             if (!failedRegionsByWorld.containsKey(worldFolderName)) {
+                                 failedRegionsByWorld[worldFolderName] = [] as Set
+                             }
+                             failedRegionsByWorld[worldFolderName].add(file.name)
+                         }
+                     }
 
-                    pb.step()
-                            }
+                     pb.step()
+                             }
                 }
 
         LOGGER.debug('Entity processing complete!')
