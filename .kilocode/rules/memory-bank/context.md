@@ -31,6 +31,15 @@
   - 3 new integration tests validating sign mcfunction generation, X coordinate incrementing, Z offset deduplication
   - Regression test assertions for Z coordinate format (line 1: "~ ~0", line 2: "~ ~1", etc.)
   - All 17 integration tests passing (14 existing + 3 new sign tests)
+- ✅ **Failed Region State File Tracking** (Version 1.0.3)
+  - Persistent state file `.failed_regions_state.json` in output folder
+  - Tracks region/entity files that fail to read across multiple runs
+  - World-aware key system supports processing multiple worlds
+  - Consolidated startup notice displays all known problematic regions
+  - Error suppression: Known failures logged at debug level, new failures at warning level
+  - Automatic recovery tracking: Successfully read regions removed from state file
+  - Dynamic state persistence: State updated only with remaining failures
+  - 16/17 integration tests passing (pre-existing failure unrelated to feature)
 
 ## Current Focus / Active Areas
 - **Maintenance Mode**: Monitoring for new Minecraft version releases
