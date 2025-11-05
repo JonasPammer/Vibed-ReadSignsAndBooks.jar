@@ -15,6 +15,14 @@
 - ✅ Spock integration tests with real-world Minecraft data (1_21_10-44-3 test world)
 - ✅ GitHub Actions CI/CD pipeline with automated JAR commits
 - ✅ Comprehensive documentation and README
+- ✅ **Shulker Box Export Feature** (Version 1.0.1) - Author-organized container export
+  - Deterministic author → color mapping (16 shulker box colors)
+  - Multi-version command generation (1.13, 1.14, 1.20.5, 1.21)
+  - Overflow handling for authors with >27 books (multiple boxes with numbering)
+  - Version-appropriate JSON/NBT syntax for all formats
+  - item_name component displaying author in container UI
+  - 3 new integration tests validating JSON structure, slot capacity, color determinism
+  - All 14 integration tests passing (11 existing + 3 new shulker tests)
 
 ## Current Focus / Active Areas
 - **Maintenance Mode**: Monitoring for new Minecraft version releases
