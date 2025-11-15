@@ -104,3 +104,5 @@ The integration test uses real minecraft world(s).
 ----
 gradle test
 ----
+
+Afterwards, you can look at the generated files in the `build/test-worlds/*/ReadBooks/` folder, e.g. link:./build/test-worlds/1_21_10-44-3/ReadBooks/[]
