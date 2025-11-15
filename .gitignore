@@ -86,3 +86,8 @@ gradle-app.setting
 *.hprof
 
 # End of https://www.toptal.com/developers/gitignore/api/gradle,java,groovy
+
+# Vendor dependencies for offline builds (committed to repository)
+!gradle/
+!gradle/repository/
+!gradle/repository/**

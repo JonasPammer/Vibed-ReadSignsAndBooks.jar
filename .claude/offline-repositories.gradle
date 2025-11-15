@@ -1,0 +1,46 @@
+// Gradle configuration to use vendored dependencies for offline builds
+// Apply this in build.gradle: apply from: '.claude/offline-repositories.gradle'
+
+def localMavenRepo = file('gradle/repository')
+
+if (localMavenRepo.exists()) {
+    println "🔌 Using offline repository: ${localMavenRepo}"
+
+    // Configure plugin repositories
+    settingsEvaluated { settings ->
+        settings.pluginManagement {
+            repositories {
+                maven {
+                    url localMavenRepo
+                    name 'VendoredDependencies'
+                }
+                gradlePluginPortal()
+                mavenCentral()
+            }
+        }
+    }
+
+    // Configure project repositories
+    allprojects {
+        buildscript {
+            repositories {
+                maven {
+                    url localMavenRepo
+                    name 'VendoredDependencies'
+                }
+                gradlePluginPortal()
+                mavenCentral()
+                maven { url 'https://jitpack.io' }
+            }
+        }
+
+        repositories {
+            maven {
+                url localMavenRepo
+                name 'VendoredDependencies'
+            }
+            mavenCentral()
+            maven { url 'https://jitpack.io' }
+        }
+    }
+}
