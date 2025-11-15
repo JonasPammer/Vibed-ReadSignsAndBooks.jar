@@ -467,14 +467,19 @@ class Main implements Runnable {
     /**
      * Generate book NBT tag (pre-1.20.5 format)
      * Used for creating book entries in shulker boxes for versions 1.13-1.20.4
+     * Now uses raw NBT ListTag to preserve JSON text components
      */
-    static String generateBookNBT(String title, String author, List<String> pages, String version) {
+    static String generateBookNBT(String title, String author, ListTag<?> pages, String version) {
         String escapedTitle = escapeForMinecraftCommand(title ?: 'Untitled', version)
         String escapedAuthor = escapeForMinecraftCommand(author ?: 'Unknown', version)
         
-        String pagesStr = pages.collect { String page ->
-            String escapedPage = escapeForMinecraftCommand(page, version)
-            "'${escapedPage}'"
+        String pagesStr = (0..<pages.size()).collect { int i ->
+            String rawText = getStringAt(pages, i)
+            // Convert § formatting codes to JSON text components if needed
+            String jsonComponent = rawText.startsWith('{') ? rawText : "{\"text\":\"${rawText}\"}"
+            // Only escape backslashes and single quotes for NBT syntax, not quotes (they're inside JSON)
+            String escaped = jsonComponent.replace('\\', '\\\\').replace("'", "\\'")
+            "'${escaped}'"
         }.join(',')
         
         return "{title:\"${escapedTitle}\",author:\"${escapedAuthor}\",pages:[${pagesStr}]}"
@@ -483,14 +488,19 @@ class Main implements Runnable {
     /**
      * Generate book components (1.20.5+ format)
      * Used for creating book entries in shulker boxes for versions 1.20.5+
+     * Now uses raw NBT ListTag to preserve JSON text components
      */
-    static String generateBookComponents(String title, String author, List<String> pages, String version) {
+    static String generateBookComponents(String title, String author, ListTag<?> pages, String version) {
         String escapedTitle = escapeForMinecraftCommand(title ?: 'Untitled', version)
         String escapedAuthor = escapeForMinecraftCommand(author ?: 'Unknown', version)
         
-        String pagesStr = pages.collect { String page ->
-            String escapedPage = escapeForMinecraftCommand(page, version)
-            "\"${escapedPage}\""
+        String pagesStr = (0..<pages.size()).collect { int i ->
+            String rawText = getStringAt(pages, i)
+            // Convert § formatting codes to JSON text components if needed
+            String jsonComponent = rawText.startsWith('{') ? rawText : "{\"text\":\"${rawText}\"}"
+            // Only escape backslashes and double quotes for component syntax
+            String escaped = jsonComponent.replace('\\', '\\\\').replace('"', '\\"')
+            "\"${escaped}\""
         }.join(',')
         
         return "{title:\"${escapedTitle}\",author:\"${escapedAuthor}\",pages:[${pagesStr}]}"
@@ -533,22 +543,22 @@ class Main implements Runnable {
 
     /**
      * Generate shulker box command for Minecraft 1.13
-     * Format: /give @a color_shulker_box{BlockEntityTag:{Items:[{Slot:N,id:written_book,Count:1,tag:...}]},display:{Name:"..."}}
+     * Format: /give @a color_shulker_box{BlockEntityTag:{Items:[{Slot:N,id:written_book,Count:1,tag:...}]},display:{Name:'{...}'}}
      */
     static String generateShulkerBox_1_13(String color, String author, String displayName, List<Map<String, Object>> books) {
         StringBuilder itemsStr = new StringBuilder()
         
         books.eachWithIndex { Map<String, Object> book, int index ->
             if (index > 0) itemsStr.append(',')
-            String bookNBT = generateBookNBT(book.title as String, book.author as String, book.pages as List<String>, '1_13')
+            String bookNBT = generateBookNBT(book.title as String, book.author as String, book.pages as ListTag<?>, '1_13')
             itemsStr.append("{Slot:${index},id:written_book,Count:1,tag:${bookNBT}}")
         }
         
-        // Escape display name for JSON (1.13 uses double-escaped quotes)
-        String escapedDisplayName = displayName.replace('"', '\\"').replace('\\', '\\\\')
-        String displayJson = "[\\\"\\\":{\\\"text\\\":\\\"${escapedDisplayName}\\\",\\\"italic\\\":false}]"
+        // 1.13 display name uses single-quoted JSON
+        String escapedDisplayName = displayName.replace('\\', '\\\\').replace('"', '\\"')
+        String displayJson = '{"text":"' + escapedDisplayName + '","italic":false}'
         
-        return "give @a ${color}_shulker_box{BlockEntityTag:{Items:[${itemsStr}]},display:{Name:\"{${displayJson}}\"}} 1 0"
+        return "give @a ${color}_shulker_box{BlockEntityTag:{Items:[${itemsStr}]},display:{Name:'${displayJson}'}}"
     }
 
     /**
@@ -560,7 +570,7 @@ class Main implements Runnable {
         
         books.eachWithIndex { Map<String, Object> book, int index ->
             if (index > 0) itemsStr.append(',')
-            String bookNBT = generateBookNBT(book.title as String, book.author as String, book.pages as List<String>, '1_14')
+            String bookNBT = generateBookNBT(book.title as String, book.author as String, book.pages as ListTag<?>, '1_14')
             itemsStr.append("{Slot:${index},id:written_book,Count:1,tag:${bookNBT}}")
         }
         
@@ -580,7 +590,7 @@ class Main implements Runnable {
         
         books.eachWithIndex { Map<String, Object> book, int index ->
             if (index > 0) containerStr.append(',')
-            String bookComponents = generateBookComponents(book.title as String, book.author as String, book.pages as List<String>, '1_20_5')
+            String bookComponents = generateBookComponents(book.title as String, book.author as String, book.pages as ListTag<?>, '1_20_5')
             containerStr.append("{slot:${index},item:{id:written_book,count:1,components:${bookComponents}}}")
         }
         
@@ -601,7 +611,7 @@ class Main implements Runnable {
         
         books.eachWithIndex { Map<String, Object> book, int index ->
             if (index > 0) containerStr.append(',')
-            String bookComponents = generateBookComponents(book.title as String, book.author as String, book.pages as List<String>, '1_21')
+            String bookComponents = generateBookComponents(book.title as String, book.author as String, book.pages as ListTag<?>, '1_21')
             containerStr.append("{slot:${index},item:{id:written_book,count:1,components:${bookComponents}}}")
         }
         
@@ -613,10 +623,53 @@ class Main implements Runnable {
     }
 
     /**
+     * Convert Minecraft formatting codes (§) to JSON text components
+     * For now, we extract just the text content and lose formatting.
+     * Formats like §lBold§r become a simple JSON wrapper: {"text":"Bold"}
+     */
+    static String convertFormattingCodesToJson(String text) {
+        if (!text || !text.contains('§')) {
+            // Already plain text - wrap in JSON
+            return "{\"text\":\"${text}\"}"
+        }
+
+        // Remove all § formatting codes
+        String plainText = text.replaceAll(/§./, '')
+        
+        // Return as plain text in JSON wrapper
+        return "{\"text\":\"${plainText}\"}"
+    }
+
+    /**
+     * Map Minecraft color code to Minecraft color name
+     */
+    static String mapColorCode(char code) {
+        switch (code) {
+            case '0': return 'black'
+            case '1': return 'dark_blue'
+            case '2': return 'dark_green'
+            case '3': return 'dark_aqua'
+            case '4': return 'dark_red'
+            case '5': return 'dark_purple'
+            case '6': return 'gold'
+            case '7': return 'gray'
+            case '8': return 'dark_gray'
+            case '9': return 'blue'
+            case 'a': return 'green'
+            case 'b': return 'aqua'
+            case 'c': return 'red'
+            case 'd': return 'light_purple'
+            case 'e': return 'yellow'
+            case 'f': return 'white'
+            default: return null
+        }
+    }
+
+    /**
      * Generate a Minecraft /give command for a written book
      * Supports versions: 1.13+, 1.14+, 1.20.5+, 1.21+
      */
-    static String generateBookCommand(String title, String author, List<String> pages, String version) {
+    static String generateBookCommand(String title, String author, ListTag<?> pages, String version) {
         String escapedTitle = escapeForMinecraftCommand(title ?: 'Untitled', version)
         String escapedAuthor = escapeForMinecraftCommand(author ?: 'Unknown', version)
 
@@ -625,33 +678,60 @@ class Main implements Runnable {
         switch (version) {
             case '1_13':
                 // 1.13: /give @p written_book{title:"Title",author:"Author",pages:['{"text":"page1"}','{"text":"page2"}']}
-                pagesStr = pages.collect { String page ->
-                    String escapedPage = escapeForMinecraftCommand(page, version)
-                    "'{\"text\":\"${escapedPage}\"}'"
+                pagesStr = (0..<pages.size()).collect { int i ->
+                    String rawText = getStringAt(pages, i)
+                    // Convert § formatting codes to JSON text components if needed
+                    String jsonComponent = rawText.startsWith('{') ? rawText : "{\"text\":\"${rawText}\"}"
+                    // Single quotes don't require internal quote escaping, only backslashes
+                    String escaped = jsonComponent.replace('\\', '\\\\')
+                    "'${escaped}'"
                 }.join(',')
                 return "give @p written_book{title:\"${escapedTitle}\",author:\"${escapedAuthor}\",pages:[${pagesStr}]}"
 
             case '1_14':
                 // 1.14: /give @p written_book{title:"Title",author:"Author",pages:['["page1"]','["page2"]']}
-                pagesStr = pages.collect { String page ->
-                    String escapedPage = escapeForMinecraftCommand(page, version)
-                    "'[\"${escapedPage}\"]'"
+                // 1.14 wraps JSON in array brackets - note: uses single quotes so internal quotes don't need escaping
+                pagesStr = (0..<pages.size()).collect { int i ->
+                    String rawText = getStringAt(pages, i)
+                    // If rawText is JSON (starts with '[' or '{'), use it directly
+                    // If it's plain text, wrap in JSON array format
+                    String jsonArray
+                    if (rawText.startsWith('[')) {
+                        jsonArray = rawText  // Already a JSON array
+                    } else if (rawText.startsWith('{')) {
+                        jsonArray = "[${rawText}]"  // Wrap JSON object in array
+                    } else {
+                        // Plain text: wrap in JSON array format ["text"]
+                        // Note: Inside single quotes, we can use \" directly without escaping
+                        jsonArray = "[\"${rawText}\"]"
+                    }
+                    // Escape backslashes only (single quotes don't need quote escaping)
+                    String escaped = jsonArray.replace('\\', '\\\\')
+                    "'${escaped}'"
                 }.join(',')
                 return "give @p written_book{title:\"${escapedTitle}\",author:\"${escapedAuthor}\",pages:[${pagesStr}]}"
 
             case '1_20_5':
                 // 1.20.5: /give @p written_book[minecraft:written_book_content={title:"Title",author:"Author",pages:["page1","page2"]}]
-                pagesStr = pages.collect { String page ->
-                    String escapedPage = escapeForMinecraftCommand(page, version)
-                    "\"${escapedPage}\""
+                pagesStr = (0..<pages.size()).collect { int i ->
+                    String rawText = getStringAt(pages, i)
+                    // Convert § formatting codes to JSON text components if needed
+                    String jsonComponent = rawText.startsWith('{') ? rawText : "{\"text\":\"${rawText}\"}"
+                    // Escape for NBT syntax
+                    String escaped = jsonComponent.replace('\\', '\\\\').replace('"', '\\"')
+                    "\"${escaped}\""
                 }.join(',')
                 return "give @p written_book[minecraft:written_book_content={title:\"${escapedTitle}\",author:\"${escapedAuthor}\",pages:[${pagesStr}]}]"
 
             case '1_21':
                 // 1.21: /give @p written_book[written_book_content={title:"Title",author:"Author",pages:["page1","page2"]}]
-                pagesStr = pages.collect { String page ->
-                    String escapedPage = escapeForMinecraftCommand(page, version)
-                    "\"${escapedPage}\""
+                pagesStr = (0..<pages.size()).collect { int i ->
+                    String rawText = getStringAt(pages, i)
+                    // Convert § formatting codes to JSON text components if needed
+                    String jsonComponent = rawText.startsWith('{') ? rawText : "{\"text\":\"${rawText}\"}"
+                    // Escape for NBT syntax
+                    String escaped = jsonComponent.replace('\\', '\\\\').replace('"', '\\"')
+                    "\"${escaped}\""
                 }.join(',')
                 return "give @p written_book[written_book_content={title:\"${escapedTitle}\",author:\"${escapedAuthor}\",pages:[${pagesStr}]}]"
 
@@ -797,8 +877,8 @@ class Main implements Runnable {
     /**
      * Write a book command to all mcfunction version files AND collect for shulker boxes
      */
-    static void writeBookToMcfunction(String title, String author, List<String> pages) {
-        if (!pages) {
+    static void writeBookToMcfunction(String title, String author, ListTag<?> pages) {
+        if (!pages || pages.size() == 0) {
             return
         }
 
@@ -810,7 +890,7 @@ class Main implements Runnable {
         booksByAuthor[authorName].add([
             title: title ?: 'Untitled',
             author: authorName,
-            pages: pages
+            pages: pages  // Store the raw NBT ListTag
         ])
 
         ['1_13', '1_14', '1_20_5', '1_21'].each { String version ->
@@ -1572,19 +1652,10 @@ class Main implements Runnable {
             flush() // Flush immediately to ensure streaming output
         }
 
-        // Write to mcfunction file - extract clean page text without formatting
-        List<String> cleanPages = []
-        (0..<pages.size()).each { int pc ->
-            String pageText = extractPageText(pages, pc)
-            if (pageText) {
-                String cleanText = removeFormatting ?
-                    extractTextContent(pageText) :
-                    extractTextContentPreserveFormatting(pageText)
-                cleanPages.add(cleanText)
-            }
-        }
-        if (cleanPages) {
-            writeBookToMcfunction(title, author, cleanPages)
+        // Write to mcfunction file - pass raw NBT pages to preserve JSON text components
+        // IMPORTANT: Pass the raw NBT ListTag directly, not extracted text
+        if (pages && pages.size() > 0) {
+            writeBookToMcfunction(title, author, pages)
         }
     }
 
@@ -1733,19 +1804,9 @@ class Main implements Runnable {
             flush() // Flush immediately to ensure streaming output
         }
 
-        // Write to mcfunction file - extract clean page text
-        List<String> cleanPages = []
-        (0..<pages.size()).each { int pc ->
-            String pageText = extractPageText(pages, pc)
-            if (pageText) {
-                String cleanText = removeFormatting ?
-                    removeTextFormatting(pageText) :
-                    pageText
-                cleanPages.add(cleanText)
-            }
-        }
-        if (cleanPages) {
-            writeBookToMcfunction('Writable Book', '', cleanPages)
+        // Write to mcfunction file - pass raw NBT pages to preserve formatting
+        if (pages && pages.size() > 0) {
+            writeBookToMcfunction('Writable Book', '', pages)
         }
     }
 
@@ -2240,7 +2301,16 @@ class Main implements Runnable {
                 case StringTag:
                     return ((StringTag) tag).value
                 case CompoundTag:
-                    // Convert CompoundTag to JSON using org.json library
+                    // For 1.20.5+ page CompoundTags, extract the 'raw' field directly
+                    // which already contains the properly formatted JSON text components
+                    CompoundTag compound = (CompoundTag) tag
+                    if (compound.containsKey('raw')) {
+                        net.querz.nbt.tag.Tag<?> rawTag = compound.get('raw')
+                        if (rawTag instanceof StringTag) {
+                            return ((StringTag) rawTag).value
+                        }
+                    }
+                    // Fallback: convert entire CompoundTag to JSON
                     return convertNbtToJson((CompoundTag) tag).toString()
                 default:
                     return tag.valueToString()
