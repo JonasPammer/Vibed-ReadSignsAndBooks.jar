@@ -1,2 +1,8 @@
-rootProject.name = 'ReadBooksExecutable'
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+    }
+}
 
+rootProject.name = 'ReadBooksExecutable'
