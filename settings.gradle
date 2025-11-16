@@ -1,5 +1,13 @@
 pluginManagement {
     repositories {
+        def localMavenRepo = file('gradle/repository')
+        if (localMavenRepo.exists()) {
+            println "🔌 Using offline plugin repository: ${localMavenRepo}"
+            maven {
+                url localMavenRepo
+                name 'VendoredPlugins'
+            }
+        }
         gradlePluginPortal()
         mavenCentral()
     }
