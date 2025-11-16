@@ -87,7 +87,7 @@ gradle-app.setting
 
 # End of https://www.toptal.com/developers/gitignore/api/gradle,java,groovy
 
-# Vendor dependencies for offline builds (committed to repository)
-!gradle/
+# Vendored Gradle dependencies for offline builds
+# Commit the raw directory structure (Git handles deduplication efficiently)
 !gradle/repository/
 !gradle/repository/**
