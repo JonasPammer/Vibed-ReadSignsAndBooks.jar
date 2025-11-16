@@ -6,41 +6,26 @@ def localMavenRepo = file('gradle/repository')
 if (localMavenRepo.exists()) {
     println "🔌 Using offline repository: ${localMavenRepo}"
 
-    // Configure plugin repositories
-    settingsEvaluated { settings ->
-        settings.pluginManagement {
-            repositories {
-                maven {
-                    url localMavenRepo
-                    name 'VendoredDependencies'
-                }
-                gradlePluginPortal()
-                mavenCentral()
-            }
-        }
-    }
-
-    // Configure project repositories
-    allprojects {
-        buildscript {
-            repositories {
-                maven {
-                    url localMavenRepo
-                    name 'VendoredDependencies'
-                }
-                gradlePluginPortal()
-                mavenCentral()
-                maven { url 'https://jitpack.io' }
-            }
-        }
-
+    // Configure buildscript repositories (for plugins)
+    buildscript {
         repositories {
             maven {
                 url localMavenRepo
                 name 'VendoredDependencies'
             }
+            gradlePluginPortal()
             mavenCentral()
             maven { url 'https://jitpack.io' }
         }
+    }
+
+    // Configure project repositories (for dependencies)
+    repositories {
+        maven {
+            url localMavenRepo
+            name 'VendoredDependencies'
+        }
+        mavenCentral()
+        maven { url 'https://jitpack.io' }
     }
 }

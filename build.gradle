@@ -6,6 +6,9 @@ plugins {
     id 'com.github.jk1.dependency-license-report' version '3.0.1'
 }
 
+// Apply offline repository configuration for vendored dependencies
+apply from: '.claude/offline-repositories.gradle'
+
 group = 'com.minecraftdatamining'
 version = '1.0.0'
 

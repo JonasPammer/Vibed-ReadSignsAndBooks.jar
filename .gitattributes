@@ -1,3 +1,6 @@
 # Git LFS tracking for test world data
 src/test/resources/test-world/** filter=lfs diff=lfs merge=lfs -text
 
+# Git LFS tracking for vendored Gradle dependencies
+gradle/repository/** filter=lfs diff=lfs merge=lfs -text
+
