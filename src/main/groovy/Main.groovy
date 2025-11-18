@@ -327,13 +327,9 @@ class Main implements Runnable {
             case '1_13':
                 return 'Minecraft 1.13-1.14.3 (uses pack_format 4, functions/ directory)'
             case '1_14':
-<<<<<<< HEAD
-                return 'Minecraft 1.14.4-1.19.4'
+                return 'Minecraft 1.14.4-1.19.4 (uses pack_format 4, functions/ directory)'
             case '1_20':
-                return 'Minecraft 1.20-1.20.4'
-=======
-                return 'Minecraft 1.14.4 (uses pack_format 4, functions/ directory)'
->>>>>>> 299a446 (fix: CRITICAL - Correct datapack directory naming for pre-1.21 versions)
+                return 'Minecraft 1.20-1.20.4 (uses pack_format 15, functions/ directory)'
             case '1_20_5':
                 return 'Minecraft 1.20.5-1.20.6 (uses pack_format 41, functions/ directory)'
             case '1_21':
