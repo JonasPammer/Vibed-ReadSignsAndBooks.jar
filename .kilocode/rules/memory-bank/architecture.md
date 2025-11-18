@@ -91,11 +91,18 @@ Fallback logic: New format attempted first, old format on failure
 1. **Stendhal JSON** - Preserves metadata (author, title, pages, type, location)
 2. **CSV** - Tabular format (type, title, author, page_count, content_preview)
 3. **Combined Text** - Human-readable merged output
-4. **Minecraft Commands** - Four version-specific mcfunction files:
+4. **Minecraft Commands - Books** - Four version-specific mcfunction files:
    - `all_books-1_13.mcfunction` - Format: `give @p written_book{title:"...",author:"...",pages:['{"text":"..."}']}`
    - `all_books-1_14.mcfunction` - Format: `give @p written_book{title:"...",author:"...",pages:['["..."]']}`
    - `all_books-1_20_5.mcfunction` - Format: `give @p written_book[minecraft:written_book_content={...}]`
    - `all_books-1_21.mcfunction` - Format: `give @p written_book[written_book_content={...}]`
+5. **Minecraft Commands - Signs** - Five version-specific mcfunction files with clickable signs:
+   - `all_signs-1_13.mcfunction` - Format: `setblock ~X ~ ~Z oak_sign{Text1:'{...,"clickEvent":{...}}',...}`
+   - `all_signs-1_14.mcfunction` - Format: `setblock ~X ~ ~Z oak_sign{Text1:'["",{...,"clickEvent":{...}}]',...}`
+   - `all_signs-1_20.mcfunction` - Format: `setblock ~X ~ ~Z oak_sign{front_text:{messages:[["",{...,"clickEvent":{...}}]],...}}`
+   - `all_signs-1_20_5.mcfunction` - Format: `setblock ~X ~ ~Z oak_sign{front_text:{messages:[[[{...,"clickEvent":{...}}]]],...}}`
+   - `all_signs-1_21.mcfunction` - Format: Same as 1.20.5
+   - Each sign's first line clickable → shows original coordinates (X Y Z) → clickable to teleport
 
 ## Architectural Decisions & Rationale
 
@@ -144,6 +151,41 @@ Fallback logic: New format attempted first, old format on failure
   - **1.21**: `give @p written_book[written_book_content={title:"...",author:"...",pages:["..."]}]` (no `minecraft:` prefix)
 - **Testing**: Three dedicated integration tests verify file creation, command count, and JSON structure validity for all versions
 - **Attribution**: Implementation inspired by https://github.com/TheWilley/Text2Book and https://github.com/ADP424/MinecraftBookConverter
+
+### Clickable Signs in mcfunction Files
+- **Decision**: Generate five additional sign mcfunction files with interactive clickEvent functionality (GitHub issue #4)
+- **Rationale**: Players can click signs to see original world coordinates and teleport back to source location
+- **Implementation**:
+  - `Map<String, Object> signsByHash` stores sign metadata including original coordinates (originalX, originalY, originalZ)
+  - `writeSignToMcfunction(lines, signInfo)` accepts sign metadata to extract coordinates
+  - `allocateSignPosition(lines, originalCoords, signInfo)` stores coordinates alongside grid position
+  - Five version-specific generation methods with nested clickEvents:
+    - `generateSignCommand_1_13()` - Text1-Text4 format with clickEvent on first line
+    - `generateSignCommand_1_14()` - Array format `["",{...}]` with clickEvent
+    - `generateSignCommand_1_20()` - front_text/back_text structure with clickEvent
+    - `generateSignCommand_1_20_5()` - Component format `[[{...}]]` with clickEvent
+    - `generateSignCommand_1_21()` - Delegates to 1.20.5 format
+  - Each generates five mcfunction files simultaneously:
+    - `all_signs-1_13.mcfunction`
+    - `all_signs-1_14.mcfunction`
+    - `all_signs-1_20.mcfunction`
+    - `all_signs-1_20_5.mcfunction`
+    - `all_signs-1_21.mcfunction`
+- **clickEvent Structure**: Nested commands for interactive experience
+  ```
+  Sign click → /tellraw @s {"text":"Sign from (X Y Z)","color":"gray","clickEvent":{...}}
+             → Click gray text → /tp @s X Y Z
+  ```
+- **Escaping Requirements**: Different levels needed per version
+  - **1.13**: Triple-escaped for nested JSON: `\\\"text\\\"`
+  - **1.14**: Same as 1.13 with array wrapper
+  - **1.20+**: Double-escaped: `\"text\"`
+- **Testing**: Four integration tests verify sign mcfunction generation, clickEvent structure, and coordinate preservation
+- **Documentation**: Comprehensive inline comments with Minecraft wiki links:
+  - https://minecraft.wiki/w/Sign#Block_data
+  - https://minecraft.wiki/w/Commands/setblock
+  - https://minecraft.wiki/w/Commands/tellraw
+  - https://minecraft.wiki/w/Raw_JSON_text_format
 
 ## File Structure & Organization
 
