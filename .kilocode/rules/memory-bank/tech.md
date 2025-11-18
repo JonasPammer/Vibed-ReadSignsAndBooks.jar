@@ -98,9 +98,12 @@ java -Xmx10G -jar ReadSignsAndBooks.jar /path/to/minecraft/world
 
 ### JAR Configuration
 - **Manifest:** Main-Class set to Main class entry point
-- **Fat JAR:** All dependencies included in single JAR
-- **Auto-location:** JAR auto-copied to project root after build
+- **Fat JAR:** All dependencies included in single JAR (shadowJar-style configuration)
+  - Uses `from { configurations.runtimeClasspath.collect { zipTree(it) } }`
+  - DuplicatesStrategy.EXCLUDE to handle overlapping resources
+- **Auto-location:** JAR auto-copied to project root after build via `doLast` task
 - **Size:** Approximately 15-20MB with all dependencies
+- **Packaging:** Creates single executable JAR suitable for double-click launch
 
 ## Runtime Configuration
 
@@ -212,17 +215,27 @@ java -Xmx10G -jar ReadSignsAndBooks.jar /path/to/world --output-format stendhal
 - **Location:** `src/test/groovy/ReadBooksIntegrationSpec.groovy`
 - **Test Data:** Real Minecraft world (1_21_10-44-3)
 - **Timeout:** 10 minutes per test suite
+- **Test Invocation:** Tests call `Main.runCli()` directly (not `Main.main()` to avoid GUI launch issues)
 
 ### Test World Specifications
 - Format: Minecraft 1.21.10
 - Location: `src/test/resources/1_21_10-44-3/`
 - Contents: 44 books, 3 signs
-- Naming: `{version}-{bookcount}-{signcount}`
+- **Naming Convention:** `{worldname}-{bookcount}-{signcount}/`
+  - Example: `1_21_10-44-3/` = world version 1.21.10 with 44 books and 3 signs
+  - Book count includes duplicates
+  - Sign count represents physical signs by location (not unique text)
 
 ### Test Execution
 ```bash
 ./gradlew test
 ```
+
+### Test Output Inspection
+- **Output Location:** `build/test-worlds/*/ReadBooks/` (gitignored, persistent across test runs)
+- Allows manual inspection of extracted files for validation
+- Each test run creates dated subfolders within test-worlds
+- Useful for debugging test failures or verifying output format changes
 
 ### Expected Output Reference
 - File: `src/test/resources/1_21_10-44-3/SHOULDBE.txt`
@@ -264,6 +277,53 @@ java -Xmx10G -jar ReadSignsAndBooks.jar /path/to/world --output-format stendhal
 3. Profile NBT parsing bottleneck
 4. Optimize hot paths with benchmarking
 5. Update memory recommendations if needed
+
+## Development Notes
+
+### Logging Configuration
+- **Logback configuration:** Happens programmatically in Main.groovy (no logback.xml file)
+- Dynamic log file setting via system property: `System.setProperty("LOG_FILE", logFilePath)`
+- Allows runtime log redirection based on user input (CLI `-o` flag or GUI output folder selection)
+- GUI mode: Logs stream to both file and TextArea via GuiLogAppender
+
+### GUI Log Streaming
+- **Thread Safety:** GuiLogAppender uses `Platform.runLater()` for JavaFX thread safety
+- Real-time log updates from SLF4J/Logback to JavaFX TextArea
+- GuiLogAppender.logHandler closure set in GUI.start() method
+- Cleanup on window close: `GuiLogAppender.clearLogHandler()` to prevent memory leaks
+
+### Fat JAR Packaging Details
+- Uses Gradle's `from { configurations.runtimeClasspath.collect { zipTree(it) } }` pattern
+- Not using shadow plugin (manual fat JAR configuration in build.gradle)
+- All dependencies embedded in single executable JAR
+- Auto-copy to project root via `doLast { copy { ... } }` task
+
+### Test Output Persistence
+- Integration tests output to `build/test-worlds/` (gitignored directory)
+- Persists across test runs for manual inspection
+- Enables debugging of test failures by examining actual generated files
+- Mimics real-world usage by creating full output structure
+
+### Test World Naming Convention
+- Critical for test automation: Folder name must end with `-BOOKCOUNT-SIGNCOUNT`
+- Example: `1_21_10-44-3/` parsed as 44 expected books, 3 expected signs
+- Tests automatically validate extracted counts against folder name expectations
+- Multiple test worlds supported - all folders matching pattern are tested
+
+### Smart Entry Point Detection
+- `Main.main()` detects GUI vs CLI mode based on arguments
+- No args → GUI mode (`Application.launch(GUI)`)
+- Any args → CLI mode (Picocli `CommandLine` execution)
+- Special flag: `--gui` or `-g` forces GUI mode even with other args
+- Tests must call `Main.runCli()` directly to bypass GUI launch
+
+### Minecraft Version-Specific Considerations
+When adding support for new Minecraft versions:
+- NBT structure changes require parser updates (especially book storage format)
+- Command syntax changes require new mcfunction generator (e.g., 1.13 → 1.14 → 1.20.5 → 1.21)
+- Newline escaping rules differ: `\\n` (pre-1.20.5) vs `\n` (1.20.5+)
+- Component system changes require separate handling paths
+- Always test with real world data from target version
 
 ## Deployment Considerations
 

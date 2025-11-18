@@ -38,6 +38,25 @@ Intentional static state simplifies single-threaded processing without complex o
 
 ## Data Processing Pipeline
 
+### High-Level Data Flow
+```
+Minecraft World Files (.mca region files)
+    ↓
+MCAUtil.read() with LoadFlags (chunks, block entities, entities)
+    ↓
+NBT Tag traversal (CompoundTag, ListTag, StringTag)
+    ↓
+Parse books (container recursion: chest → shulker → bundle)
+    ↓
+Hash-based deduplication (bookHashes Set)
+    ↓
+Output generation (parallel writers for formats)
+    ↓
+ReadBooks/YYYY-MM-DD/ folder structure
+```
+
+### Detailed Processing Stages
+
 ### Input Stage
 - Accept world directory path via CLI argument
 - Validate directory structure (playerdata, region, entities folders)
@@ -96,6 +115,107 @@ Fallback logic: New format attempted first, old format on failure
    - `all_books-1_14.mcfunction` - Format: `give @p written_book{title:"...",author:"...",pages:['["..."]']}`
    - `all_books-1_20_5.mcfunction` - Format: `give @p written_book[minecraft:written_book_content={...}]`
    - `all_books-1_21.mcfunction` - Format: `give @p written_book[written_book_content={...}]`
+
+## Key Algorithms
+
+### Container Recursion Algorithm
+Deep inspection of nested containers handles complex storage structures:
+- Recursively processes `Items` ListTag in container NBT data
+- Supports arbitrary nesting depth (e.g., bundle → shulker → chest → shulker → bundle)
+- Maintains location context through recursion stack
+- Implemented in `processContainer()` method with CompoundTag parameter
+- Handles all 17+ container types uniformly via NBT tag structure
+
+### Hash-Based Deduplication
+Content-based book deduplication using Java hashCode():
+- Hash computed from book pages array content (not object reference)
+- `bookHashes` Set tracks seen content hashes
+- Duplicates saved to `.duplicates/` subfolder instead of being skipped
+- Preserves location metadata for all copies
+- Sign deduplication uses similar approach with `signHashes` Set
+
+### Coordinate Extraction
+Block entity positions extracted from NBT data:
+- Block entities store position as `x`, `y`, `z` NumberTag fields
+- Coordinates formatted as `x_y_z` in output filenames
+- Chunk coordinates computed for region file context
+- Used in metadata and output file naming
+
+### Sign Position Tracking
+Signs tracked by both content hash and physical location:
+- Unique sign text: Incremented X coordinate (~1, ~2, ~3, etc.)
+- Duplicate sign text: Same X coordinate, incremented Z offset (~0, ~1, ~2, etc.)
+- Implemented via `signsByHash` Map tracking positions per hash
+- Enables recreating sign placement patterns in mcfunction commands
+
+### Multi-Version Command Generation
+Separate command generators for Minecraft version compatibility:
+- **1.13**: Legacy NBT syntax in commands with `{"text":"..."}` pages
+- **1.14**: JSON text components with `["..."]` page format
+- **1.20.5**: Component system using `[minecraft:written_book_content={...}]`
+- **1.21**: Latest format with `[written_book_content={...}]` (no namespace prefix)
+- Each generator has version-specific escaping rules (`\\n` vs `\n`)
+
+## Important Patterns
+
+### NBT Data Access Patterns
+When working with Querz NBT library:
+```groovy
+// Safe nested access with null checks
+CompoundTag tag = ...
+if (tag.containsKey("key")) {
+    Tag value = tag.get("key")
+    if (value instanceof StringTag) {
+        String text = ((StringTag) value).getValue()
+    }
+}
+
+// ListTag iteration for container items
+ListTag<CompoundTag> items = tag.getListTag("Items")
+for (CompoundTag item : items) {
+    // Process each item
+}
+
+// Casting NBT tag types
+StringTag stringTag = (StringTag) tag.get("id")
+NumberTag numberTag = (NumberTag) tag.get("Count")
+CompoundTag compound = (CompoundTag) tag.get("tag")
+```
+
+Key NBT access principles:
+- Always check `containsKey()` before accessing nested tags
+- Cast appropriately: `StringTag`, `ListTag<?>`, `NumberTag`, `CompoundTag`
+- Container items stored in `tag.Items` ListTag (note capitalization)
+- Book pages in `tag.pages` or `tag.written_book_content.pages` depending on version
+
+### Minecraft Version Handling in Code
+When modifying mcfunction command generation:
+- **1.13 Format**: Uses legacy NBT syntax with § formatting codes, newlines as `\\n`
+  - Example: `give @p written_book{title:"...",author:"...",pages:['{"text":"..."}']}`
+- **1.14 Format**: Introduced JSON text components, still uses `\\n`
+  - Example: `give @p written_book{title:"...",author:"...",pages:['["..."]']}`
+- **1.20.5 Format**: Component system overhaul, uses `\n` for newlines
+  - Example: `give @p written_book[minecraft:written_book_content={title:"...",author:"...",pages:["..."]}]`
+- **1.21 Format**: Removed namespace prefix requirement, uses `\n`
+  - Example: `give @p written_book[written_book_content={title:"...",author:"...",pages:["..."]}]`
+
+All generators must maintain backward compatibility. Test with actual Minecraft versions before deployment.
+
+### Minecraft Formatting Codes
+§ codes preserved by default for color/styling:
+- `COLOR_CODES` array in Main.groovy defines all valid codes (§0-§f, §k-§r)
+- Codes represent colors, bold, italic, underline, strikethrough, obfuscated, reset
+- `--remove-formatting` CLI flag strips all § codes from output
+- Codes must be preserved in mcfunction commands for in-game appearance
+- Used in both book pages and sign text
+
+### State Persistence Pattern
+`.failed_regions_state.json` tracks problematic region files:
+- Map keyed by world folder name (`worldFolderName -> Set<failedRegionFiles>`)
+- Prevents retry spam on corrupted/unreadable region files across runs
+- Auto-recovery tracking: Successfully read regions removed from state
+- State file location: Output folder (not world folder, to avoid modifying source)
+- Updated dynamically as processing completes
 
 ## Architectural Decisions & Rationale
 

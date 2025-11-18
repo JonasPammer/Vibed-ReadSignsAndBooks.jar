@@ -47,6 +47,18 @@
   - Memory bank system explanation added
   - Updated Main.groovy line count to ~2431 lines across all memory bank files
   - Clean separation: CLAUDE.md for quick reference, memory bank for comprehensive details
+- ✅ **Memory Bank Enhancement - Implementation Patterns** (2025-11-18)
+  - **architecture.md additions:**
+    - High-level data flow diagram showing complete extraction pipeline
+    - "Key Algorithms" section: Container recursion, deduplication, coordinate extraction, sign tracking, multi-version commands
+    - "Important Patterns" section: NBT data access patterns with code examples, Minecraft version handling, formatting codes, state persistence
+  - **tech.md additions:**
+    - Enhanced JAR configuration details (fat JAR packaging, auto-copy mechanism)
+    - Expanded test configuration (test invocation pattern, naming convention, output inspection)
+    - New "Development Notes" section covering logging config, GUI log streaming, test persistence, smart entry point detection, version-specific considerations
+  - **context.md additions:**
+    - Known issue from TODO.md: Shulker box mcfunction bug requiring NBT research
+  - These additions provide practical implementation guidance for future development work
 
 ## Current Focus / Active Areas
 - **Maintenance Mode**: Monitoring for new Minecraft version releases
@@ -59,6 +71,7 @@
 - **Java 21 Requirement**: Uses modern Java features, not backward compatible to Java 8/11
 - **Memory Intensive**: Requires -Xmx10G for large worlds, not suitable for minimal memory environments
 - **Format Version Fallback**: Relies on format detection heuristics for version compatibility
+- **Shulker Box mcfunction Bug**: Generated shulker box commands fail with "No component with type 'minecraft:pages'" - requires research into correct 1.20.5+ shulker box NBT component structure (see TODO.md)
 
 ## Next Planned Work
 - Monitor for Minecraft 1.21+ format changes and adapt parsing logic
