@@ -341,9 +341,11 @@ class ReadBooksIntegrationSpec extends Specification {
                 assert Files.exists(packMcmeta), "Missing pack.mcmeta for version ${version}"
                 assert Files.isRegularFile(packMcmeta)
 
-                // Verify data/readbooks/function directory structure
-                Path functionDir = datapackRoot.resolve('data').resolve('readbooks').resolve('function')
-                assert Files.exists(functionDir), "Missing function directory for version ${version}"
+                // Verify data/readbooks/function(s) directory structure
+                // Pre-1.21 uses "functions" (plural), 1.21+ uses "function" (singular)
+                String functionDirName = (version == '1_21') ? 'function' : 'functions'
+                Path functionDir = datapackRoot.resolve('data').resolve('readbooks').resolve(functionDirName)
+                assert Files.exists(functionDir), "Missing ${functionDirName} directory for version ${version}"
                 assert Files.isDirectory(functionDir)
 
                 // Verify books.mcfunction exists
@@ -416,7 +418,7 @@ class ReadBooksIntegrationSpec extends Specification {
             // Verify all 4 version files exist in datapack structure
             ['1_13', '1_14', '1_20_5', '1_21'].every { version ->
                 Path mcfunctionFile = outputDir.resolve("readbooks_datapack_${version}")
-                    .resolve('data').resolve('readbooks').resolve('function').resolve('books.mcfunction')
+                    .resolve('data').resolve('readbooks').resolve(getFunctionDirName(version)).resolve('books.mcfunction')
                 assert Files.exists(mcfunctionFile), "Missing books.mcfunction file for version ${version}"
                 assert Files.isRegularFile(mcfunctionFile)
 
@@ -444,7 +446,7 @@ class ReadBooksIntegrationSpec extends Specification {
 
             ['1_13', '1_14', '1_20_5', '1_21'].every { version ->
                 Path mcfunctionFile = outputDir.resolve("readbooks_datapack_${version}")
-                    .resolve('data').resolve('readbooks').resolve('function').resolve('books.mcfunction')
+                    .resolve('data').resolve('readbooks').resolve(getFunctionDirName(version)).resolve('books.mcfunction')
                 String content = mcfunctionFile.text
 
                 // Count lines that start with "give @p"
@@ -472,7 +474,7 @@ class ReadBooksIntegrationSpec extends Specification {
 
             // Test 1.13 format: give @p written_book{title:"...",author:"...",pages:[...]}
             Path mcfunction13 = outputDir.resolve("readbooks_datapack_1_13")
-                .resolve('data').resolve('readbooks').resolve('function').resolve('books.mcfunction')
+                .resolve('data').resolve('readbooks').resolve(getFunctionDirName('1_13')).resolve('books.mcfunction')
             String firstCommand13 = mcfunction13.text.readLines().find { it.startsWith('give @p') }
             assert firstCommand13 != null, "No commands found in 1.13 file"
             assert firstCommand13.contains('written_book{title:'), "1.13 command missing title field"
@@ -482,7 +484,7 @@ class ReadBooksIntegrationSpec extends Specification {
 
             // Test 1.14 format: give @p written_book{title:"...",author:"...",pages:[...]}
             Path mcfunction14 = outputDir.resolve("readbooks_datapack_1_14")
-                .resolve('data').resolve('readbooks').resolve('function').resolve('books.mcfunction')
+                .resolve('data').resolve('readbooks').resolve(getFunctionDirName('1_14')).resolve('books.mcfunction')
             String firstCommand14 = mcfunction14.text.readLines().find { it.startsWith('give @p') }
             assert firstCommand14 != null, "No commands found in 1.14 file"
             assert firstCommand14.contains('written_book{title:'), "1.14 command missing title field"
@@ -492,7 +494,7 @@ class ReadBooksIntegrationSpec extends Specification {
 
             // Test 1.20.5 format: give @p written_book[minecraft:written_book_content={title:"...",author:"...",pages:[...]}]
             Path mcfunction205 = outputDir.resolve("readbooks_datapack_1_20_5")
-                .resolve('data').resolve('readbooks').resolve('function').resolve('books.mcfunction')
+                .resolve('data').resolve('readbooks').resolve(getFunctionDirName('1_20_5')).resolve('books.mcfunction')
             String firstCommand205 = mcfunction205.text.readLines().find { it.startsWith('give @p') }
             assert firstCommand205 != null, "No commands found in 1.20.5 file"
             assert firstCommand205.contains('written_book[minecraft:written_book_content={'), "1.20.5 command missing written_book_content"
@@ -503,7 +505,7 @@ class ReadBooksIntegrationSpec extends Specification {
 
             // Test 1.21 format: give @p written_book[written_book_content={title:"...",author:"...",pages:[...]}]
             Path mcfunction21 = outputDir.resolve("readbooks_datapack_1_21")
-                .resolve('data').resolve('readbooks').resolve('function').resolve('books.mcfunction')
+                .resolve('data').resolve('readbooks').resolve(getFunctionDirName('1_21')).resolve('books.mcfunction')
             String firstCommand21 = mcfunction21.text.readLines().find { it.startsWith('give @p') }
             assert firstCommand21 != null, "No commands found in 1.21 file"
             assert firstCommand21.contains('written_book[written_book_content={'), "1.21 command missing written_book_content"
@@ -532,7 +534,7 @@ class ReadBooksIntegrationSpec extends Specification {
             // Check all versions for valid JSON in shulker box commands
             ['1_13', '1_14', '1_20_5', '1_21'].every { version ->
                 Path mcfunctionFile = outputDir.resolve("readbooks_datapack_${version}")
-                    .resolve('data').resolve('readbooks').resolve('function').resolve('books.mcfunction')
+                    .resolve('data').resolve('readbooks').resolve(getFunctionDirName(version)).resolve('books.mcfunction')
                 String content = mcfunctionFile.text
 
                 // Find all shulker box commands (contain 'shulker_box')
@@ -591,7 +593,7 @@ class ReadBooksIntegrationSpec extends Specification {
 
             ['1_13', '1_14', '1_20_5', '1_21'].every { version ->
                 Path mcfunctionFile = outputDir.resolve("readbooks_datapack_${version}")
-                    .resolve('data').resolve('readbooks').resolve('function').resolve('books.mcfunction')
+                    .resolve('data').resolve('readbooks').resolve(getFunctionDirName(version)).resolve('books.mcfunction')
                 String content = mcfunctionFile.text
                 List<String> lines = content.readLines()
 
@@ -726,7 +728,7 @@ class ReadBooksIntegrationSpec extends Specification {
             // Verify all 4 version files exist for signs in datapack structure
             ['1_13', '1_14', '1_20_5', '1_21'].every { version ->
                 Path mcfunctionFile = outputDir.resolve("readbooks_datapack_${version}")
-                    .resolve('data').resolve('readbooks').resolve('function').resolve('signs.mcfunction')
+                    .resolve('data').resolve('readbooks').resolve(getFunctionDirName(version)).resolve('signs.mcfunction')
                 assert Files.exists(mcfunctionFile), "Missing signs.mcfunction file for version ${version}"
                 assert Files.isRegularFile(mcfunctionFile)
 
@@ -763,7 +765,7 @@ class ReadBooksIntegrationSpec extends Specification {
 
             // Extract X coordinates from a version file to verify incrementing pattern
             Path mcfunction21 = outputDir.resolve("readbooks_datapack_1_21")
-                .resolve('data').resolve('readbooks').resolve('function').resolve('signs.mcfunction')
+                .resolve('data').resolve('readbooks').resolve(getFunctionDirName('1_21')).resolve('signs.mcfunction')
             assert Files.exists(mcfunction21)
 
             String content = mcfunction21.text
@@ -815,7 +817,7 @@ class ReadBooksIntegrationSpec extends Specification {
 
             // Check Z coordinate offset pattern for duplicates
             Path mcfunction21 = outputDir.resolve("readbooks_datapack_1_21")
-                .resolve('data').resolve('readbooks').resolve('function').resolve('signs.mcfunction')
+                .resolve('data').resolve('readbooks').resolve(getFunctionDirName('1_21')).resolve('signs.mcfunction')
             assert Files.exists(mcfunction21)
 
             String content = mcfunction21.text
@@ -860,6 +862,14 @@ class ReadBooksIntegrationSpec extends Specification {
 
             true
         }
+    }
+
+    /**
+     * Get the correct function directory name for a Minecraft version
+     * Pre-1.21 uses "functions" (plural), 1.21+ uses "function" (singular)
+     */
+    private static String getFunctionDirName(String version) {
+        return (version == '1_21') ? 'function' : 'functions'
     }
 
     /**

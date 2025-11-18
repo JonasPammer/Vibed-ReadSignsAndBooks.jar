@@ -65,15 +65,20 @@ The tool creates output in `ReadBooks/YYYY-MM-DD/`:
 * `all_books.txt` - all books in Stendhal format, separated by `#region` and `#endregion` markers for VSCode folding
 * `all_books.csv` - CSV export of all books with metadata
 * `all_signs.csv` - CSV export of all signs with metadata
-* *Ready-to-use Minecraft Datapacks* (4 versions, each in its own folder):
+* *Ready-to-use Minecraft Datapacks* (4 versions with version-specific commands):
 ** `readbooks_datapack_1_13/` - Minecraft 1.13-1.14.3 (pack_format 4)
-** `readbooks_datapack_1_14/` - Minecraft 1.14.4-1.19.4 (pack_format 4)
+*** Uses `functions/` directory (plural) and 1.13 command syntax
+** `readbooks_datapack_1_14/` - Minecraft 1.14.4 (pack_format 4)
+*** Uses `functions/` directory (plural) and 1.14 command syntax
 ** `readbooks_datapack_1_20_5/` - Minecraft 1.20.5-1.20.6 (pack_format 41)
+*** Uses `functions/` directory (plural) and component-based syntax
 ** `readbooks_datapack_1_21/` - Minecraft 1.21+ (pack_format 48)
+*** Uses `function/` directory (SINGULAR - changed in 1.21!) and updated syntax
 ** Each datapack contains:
-*** `pack.mcmeta` - Datapack metadata file
-*** `data/readbooks/function/books.mcfunction` - Commands to recreate all books
-*** `data/readbooks/function/signs.mcfunction` - Commands to recreate all signs
+*** `pack.mcmeta` - Datapack metadata with appropriate pack_format number
+*** `data/readbooks/functions/books.mcfunction` OR `data/readbooks/function/books.mcfunction` - Book recreation commands
+*** `data/readbooks/functions/signs.mcfunction` OR `data/readbooks/function/signs.mcfunction` - Sign placement commands
+*** Directory structure varies: Pre-1.21 uses `functions/` (plural), 1.21+ uses `function/` (singular)
 * `logs.txt` - program debug logs
 * `summary.txt`
 ** Breakdown by container type (chests, shulker boxes, villagers, etc.)

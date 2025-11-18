@@ -223,12 +223,21 @@ class Main implements Runnable {
     /**
      * Create datapack directory structure for a specific Minecraft version
      *
-     * Structure:
+     * Structure for 1.21+:
      * readbooks_datapack_VERSION/
      * ├── pack.mcmeta
      * └── data/
      *     └── readbooks/
      *         └── function/
+     *             ├── books.mcfunction
+     *             └── signs.mcfunction
+     *
+     * Structure for pre-1.21:
+     * readbooks_datapack_VERSION/
+     * ├── pack.mcmeta
+     * └── data/
+     *     └── readbooks/
+     *         └── functions/  (note: plural)
      *             ├── books.mcfunction
      *             └── signs.mcfunction
      *
@@ -240,12 +249,16 @@ class Main implements Runnable {
         File datapackRoot = new File(baseDirectory, "${outputFolder}${File.separator}${datapackName}")
         File dataFolder = new File(datapackRoot, "data")
         File namespaceFolder = new File(dataFolder, "readbooks")
-        File functionFolder = new File(namespaceFolder, "function")
+
+        // CRITICAL: Pre-1.21 uses "functions" (plural), 1.21+ uses "function" (singular)
+        // This changed in Minecraft Java Edition 1.21 snapshot 24w21a
+        String functionDirName = (version == '1_21') ? 'function' : 'functions'
+        File functionFolder = new File(namespaceFolder, functionDirName)
 
         // Create all directories
         functionFolder.mkdirs()
 
-        LOGGER.debug("Created datapack structure: ${datapackRoot.absolutePath}")
+        LOGGER.debug("Created datapack structure: ${datapackRoot.absolutePath} with ${functionDirName}/ directory")
         return functionFolder
     }
 
@@ -302,21 +315,29 @@ class Main implements Runnable {
     /**
      * Get human-readable Minecraft version range for description
      *
+     * IMPORTANT: These descriptions reflect COMMAND COMPATIBILITY, not pack_format compatibility.
+     * The datapacks use specific pack_format numbers but the commands inside work across
+     * broader version ranges due to command syntax changes being independent of pack format.
+     *
      * @param version Version identifier (e.g., '1_13', '1_14', '1_20_5', '1_21')
      * @return Human-readable version string
      */
     static String getVersionDescription(String version) {
         switch (version) {
             case '1_13':
-                return 'Minecraft 1.13-1.14.3'
+                return 'Minecraft 1.13-1.14.3 (uses pack_format 4, functions/ directory)'
             case '1_14':
+<<<<<<< HEAD
                 return 'Minecraft 1.14.4-1.19.4'
             case '1_20':
                 return 'Minecraft 1.20-1.20.4'
+=======
+                return 'Minecraft 1.14.4 (uses pack_format 4, functions/ directory)'
+>>>>>>> 299a446 (fix: CRITICAL - Correct datapack directory naming for pre-1.21 versions)
             case '1_20_5':
-                return 'Minecraft 1.20.5-1.20.6'
+                return 'Minecraft 1.20.5-1.20.6 (uses pack_format 41, functions/ directory)'
             case '1_21':
-                return 'Minecraft 1.21+'
+                return 'Minecraft 1.21+ (uses pack_format 48, function/ directory)'
             default:
                 return "Minecraft ${version}"
         }
