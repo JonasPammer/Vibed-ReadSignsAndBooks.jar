@@ -5,7 +5,7 @@
 **Release Status:** Active, production-ready
 
 ## Recent Completed Work
-- ✅ Monolithic Main.groovy implementation (1637 lines) with full feature completeness
+- ✅ Monolithic Main.groovy implementation (~2431 lines) with full feature completeness
 - ✅ NBT format compatibility layer supporting Minecraft 1.18, 1.20, 1.20.5+
 - ✅ Multiple output formats implemented (Stendhal JSON, CSV, combined text)
 - ✅ 17 container types supported with recursive nesting
@@ -40,6 +40,14 @@
   - Automatic recovery tracking: Successfully read regions removed from state file
   - Dynamic state persistence: State updated only with remaining failures
   - 16/17 integration tests passing (pre-existing failure unrelated to feature)
+- ✅ **Enhanced CLAUDE.md Documentation** (2025-11-18)
+  - Comprehensive quick reference section with essential commands
+  - Build, test, and run commands with examples
+  - CLI options and architecture quick facts
+  - Output format documentation
+  - AI commit convention prominently featured
+  - Memory bank references preserved for detailed documentation
+  - Updated Main.groovy line count to ~2431 lines across all files
 
 ## Current Focus / Active Areas
 - **Maintenance Mode**: Monitoring for new Minecraft version releases
@@ -47,7 +55,7 @@
 - **Performance Optimization**: Monitoring memory usage on large-scale worlds
 
 ## Known Issues or Limitations
-- **Monolithic Design**: All code in single Main.groovy file (1637 lines) - refactoring deferred
+- **Monolithic Design**: All code in single Main.groovy file (~2431 lines) - refactoring deferred
 - **Single-threaded**: Processing is sequential, not parallelized (intentional for simplicity)
 - **Java 21 Requirement**: Uses modern Java features, not backward compatible to Java 8/11
 - **Memory Intensive**: Requires -Xmx10G for large worlds, not suitable for minimal memory environments
@@ -55,7 +63,7 @@
 
 ## Next Planned Work
 - Monitor for Minecraft 1.21+ format changes and adapt parsing logic
-- Consider optional refactoring into modular components if codebase exceeds 2000 lines
+- Consider optional refactoring into modular components (currently ~2431 lines, decision deferred)
 - Evaluate performance improvements for ultra-large worlds
 - Gather community feedback on output formats and usability
 

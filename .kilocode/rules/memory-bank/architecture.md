@@ -11,7 +11,7 @@ All extracted content is deduplicated by content hash and output to user-selecte
 
 ## Core Components
 
-### Main.groovy (1637 lines)
+### Main.groovy (~2431 lines)
 **Location:** `src/main/groovy/Main.groovy`
 
 Single monolithic Groovy file containing all application logic. This is intentional for simplicity and ease of deployment as a standalone JAR.
@@ -263,12 +263,12 @@ Main.runExtraction()  // Direct call, avoids System.exit()
 3. **Large memory footprint** - 10GB JVM for large worlds
 4. **NBT format dependency** - Tightly coupled to Querz library (6.1)
 5. **Minecraft version tracking** - Must update parsing logic for new format versions
-6. **CLI input only** - No GUI, API, or programmatic interface
+6. **Dual interface** - JavaFX GUI for double-click usage, CLI for automation (smart detection)
 7. **Stateful processing** - Static fields maintain extraction state
 
 ## Future Architectural Considerations
 
-- **Modularization**: Separate NBT parsing, container handling, output formatting into modules if monolith exceeds 2000 lines
+- **Modularization**: Consider separating NBT parsing, container handling, output formatting into modules (currently ~2431 lines, refactoring deferred for simplicity)
 - **Parallelization**: Process multiple region/entity files concurrently (requires thread-safe deduplication)
 - **Streaming NBT**: Avoid full structure load for large containers
 - **Plugin System**: Allow custom output format extensions
