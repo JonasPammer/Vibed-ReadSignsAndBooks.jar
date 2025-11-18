@@ -153,26 +153,41 @@ Fallback logic: New format attempted first, old format on failure
 - **Decision**: Generate complete, ready-to-use Minecraft datapacks instead of standalone mcfunction files
 - **Rationale**: Users can directly copy datapack folders into their Minecraft world without manual file organization
 - **Implementation**:
-  - `createDatapackStructure(version)` creates proper directory structure: `datapack_root/data/namespace/function/`
+  - `createDatapackStructure(version)` creates proper directory structure with version-specific function directory naming
   - `createPackMcmeta(version, packFormat, description)` generates valid pack.mcmeta JSON with version-appropriate pack_format
   - `getPackFormat(version)` maps version identifiers to official Minecraft pack_format numbers (4, 41, 48)
   - `getVersionDescription(version)` provides human-readable version ranges for pack.mcmeta descriptions
-- **Directory Structure**:
+- **CRITICAL: Directory Naming Change in 1.21**:
+  - **Pre-1.21 (1.13-1.20.6)**: Uses `functions/` directory (PLURAL)
+  - **1.21+**: Uses `function/` directory (SINGULAR)
+  - This changed in Java Edition 1.21 snapshot 24w21a
+  - Code automatically selects correct directory name based on version
+- **Directory Structure (Pre-1.21)**:
   ```
   readbooks_datapack_VERSION/
-  ├── pack.mcmeta (with pack_format: 4/41/48)
+  ├── pack.mcmeta (with pack_format: 4 or 41)
   └── data/
       └── readbooks/
-          └── function/
+          └── functions/  ← PLURAL
+              ├── books.mcfunction (give commands)
+              └── signs.mcfunction (setblock commands)
+  ```
+- **Directory Structure (1.21+)**:
+  ```
+  readbooks_datapack_1_21/
+  ├── pack.mcmeta (with pack_format: 48)
+  └── data/
+      └── readbooks/
+          └── function/  ← SINGULAR
               ├── books.mcfunction (give commands)
               └── signs.mcfunction (setblock commands)
   ```
 - **Pack Format Mapping**:
-  - 1.13-1.14.4: pack_format 4
-  - 1.20.5-1.20.6: pack_format 41
-  - 1.21+: pack_format 48
+  - 1.13-1.14.4: pack_format 4 (functions/ directory)
+  - 1.20.5-1.20.6: pack_format 41 (functions/ directory)
+  - 1.21+: pack_format 48 (function/ directory)
 - **User Experience**: Copy entire folder to `world/datapacks/`, run `/reload`, then `/function readbooks:books` or `/function readbooks:signs`
-- **Testing**: Dedicated integration tests verify datapack structure, pack.mcmeta validity, and function file creation for all versions
+- **Testing**: Dedicated integration tests verify datapack structure, pack.mcmeta validity, and function file creation for all versions with correct directory naming
 
 ## File Structure & Organization
 
