@@ -27,6 +27,7 @@ class GUI extends Application {
     static TextField worldPathField
     static TextField outputPathField
     static CheckBox removeFormattingCheckBox
+    static CheckBox extractCustomNamesCheckBox
     static TextArea logArea
     static Label statusLabel
     static File worldDir
@@ -87,12 +88,18 @@ class GUI extends Application {
         outputBtn.onAction = { selectOutputFolder(stage) }
         outputBox.children.addAll(new Label('Output Folder:').with { it.minWidth = 120; it }, outputPathField, outputBtn)
 
-        // Remove formatting checkbox
+        // Options checkboxes
         def formattingBox = new HBox(10)
         formattingBox.alignment = Pos.CENTER_LEFT
         removeFormattingCheckBox = new CheckBox('Remove Minecraft formatting codes (§ codes)')
         removeFormattingCheckBox.selected = false
         formattingBox.children.addAll(new Label('Options:').with { it.minWidth = 120; it }, removeFormattingCheckBox)
+
+        def customNamesBox = new HBox(10)
+        customNamesBox.alignment = Pos.CENTER_LEFT
+        extractCustomNamesCheckBox = new CheckBox('Extract custom names from items and entities')
+        extractCustomNamesCheckBox.selected = false
+        customNamesBox.children.addAll(new Label('').with { it.minWidth = 120; it }, extractCustomNamesCheckBox)
 
         // Action buttons (left-aligned)
         def btnBox = new HBox(15)
@@ -130,6 +137,7 @@ class GUI extends Application {
             worldBox,
             outputBox,
             formattingBox,
+            customNamesBox,
             new Separator(),
             btnBox,
             new Separator(),
@@ -290,6 +298,9 @@ class GUI extends Application {
                 }
                 if (removeFormattingCheckBox.selected) {
                     args += ['--remove-formatting']
+                }
+                if (extractCustomNamesCheckBox.selected) {
+                    args += ['--extract-custom-names']
                 }
 
                 // Call Main CLI directly (avoid double launch)

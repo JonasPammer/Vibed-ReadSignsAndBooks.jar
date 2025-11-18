@@ -48,7 +48,8 @@ class Main implements Runnable {
 
     static Set<Integer> bookHashes = [] as Set
     static Set<String> signHashes = [] as Set
-    
+    static Set<String> customNameHashes = [] as Set  // Custom name deduplication
+
     // State file management for tracking failed region files
     static Map<String, Set<String>> failedRegionsByWorld = [:]  // worldFolderName -> Set of failed region filenames
     static Set<String> recoveredRegions = [] as Set  // Regions that recovered in this run
@@ -59,6 +60,7 @@ class Main implements Runnable {
     static List<Map<String, String>> bookMetadataList = []
     static List<Map<String, Object>> bookCsvData = []
     static List<Map<String, Object>> signCsvData = []
+    static List<Map<String, Object>> customNameData = []  // Custom name extraction data
     static int emptySignsRemoved = 0
     static BufferedWriter combinedBooksWriter
     static Map<String, BufferedWriter> mcfunctionWriters = [:]
@@ -84,6 +86,9 @@ class Main implements Runnable {
 
     @Option(names = ['--remove-formatting'], description = 'Remove Minecraft text formatting codes (§ codes) from output files (default: false)', defaultValue = 'false')
     static boolean removeFormatting = false
+
+    @Option(names = ['--extract-custom-names'], description = 'Extract custom names from items and entities (default: false)', defaultValue = 'false')
+    static boolean extractCustomNames = false
 
     static void main(String[] args) {
         // Smart detection: GUI mode if no args (double-clicked JAR) or --gui flag
@@ -222,7 +227,7 @@ class Main implements Runnable {
 
     static void runExtraction() {
         // Reset state
-        [bookHashes, signHashes, booksByContainerType, booksByLocationType, bookMetadataList, bookCsvData, signCsvData, booksByAuthor, signsByHash].each { collection -> collection.clear() }
+        [bookHashes, signHashes, customNameHashes, booksByContainerType, booksByLocationType, bookMetadataList, bookCsvData, signCsvData, customNameData, booksByAuthor, signsByHash].each { collection -> collection.clear() }
         bookCounter = 0
         emptySignsRemoved = 0
         signXCoordinate = 1  // Reset sign coordinate counter
@@ -309,6 +314,7 @@ class Main implements Runnable {
             // Write CSV exports
             writeBooksCSV()
             writeSignsCSV()
+            writeCustomNamesOutput()
 
             long elapsed = System.currentTimeMillis() - startTime
             printSummaryStatistics(elapsed)
@@ -414,6 +420,106 @@ class Main implements Runnable {
     }
 
     /**
+     * Write custom names data to multiple output files
+     * Generates CSV, text, and Stendhal JSON formats
+     */
+    static void writeCustomNamesOutput() {
+        if (!extractCustomNames || customNameData.isEmpty()) {
+            LOGGER.debug('Custom name extraction not enabled or no custom names found')
+            return
+        }
+
+        LOGGER.info("Writing custom names output files with ${customNameData.size()} unique custom names...")
+
+        // Write CSV file
+        File csvFile = new File(baseDirectory, "${outputFolder}${File.separator}all_custom_names.csv")
+        csvFile.withWriter('UTF-8') { BufferedWriter writer ->
+            // Write header
+            writer.writeLine('Type,ItemOrEntityID,CustomName,X,Y,Z,Location')
+
+            // Write data
+            customNameData.each { Map<String, Object> entry ->
+                String type = entry.type?.toString() ?: 'unknown'
+                String itemOrEntityId = escapeCsvField(entry.itemOrEntityId?.toString() ?: 'undefined')
+                String customName = escapeCsvField(entry.customName?.toString() ?: 'undefined')
+                String x = entry.x?.toString() ?: '0'
+                String y = entry.y?.toString() ?: '0'
+                String z = entry.z?.toString() ?: '0'
+                String location = escapeCsvField(entry.location?.toString() ?: 'unknown')
+
+                writer.writeLine("${type},${itemOrEntityId},${customName},${x},${y},${z},${location}")
+            }
+        }
+        LOGGER.info("Custom names CSV written to: ${csvFile.absolutePath}")
+
+        // Write text file (human-readable format)
+        File textFile = new File(baseDirectory, "${outputFolder}${File.separator}all_custom_names.txt")
+        textFile.withWriter('UTF-8') { BufferedWriter writer ->
+            writer.writeLine('=' * 80)
+            writer.writeLine('CUSTOM NAMES EXTRACTION REPORT')
+            writer.writeLine('=' * 80)
+            writer.writeLine()
+            writer.writeLine("Total unique custom names found: ${customNameData.size()}")
+            writer.writeLine()
+
+            // Group by type
+            Map<String, List<Map<String, Object>>> byType = customNameData.groupBy { it.type }
+
+            byType.each { String type, List<Map<String, Object>> entries ->
+                writer.writeLine()
+                writer.writeLine('-' * 80)
+                writer.writeLine("${type.toUpperCase()}S WITH CUSTOM NAMES (${entries.size()})")
+                writer.writeLine('-' * 80)
+                writer.writeLine()
+
+                entries.eachWithIndex { Map<String, Object> entry, int index ->
+                    writer.writeLine("#${index + 1}")
+                    writer.writeLine("  Name: ${entry.customName}")
+                    writer.writeLine("  ${type == 'item' ? 'Item' : 'Entity'} ID: ${entry.itemOrEntityId}")
+                    writer.writeLine("  Location: (${entry.x}, ${entry.y}, ${entry.z})")
+                    writer.writeLine("  Found in: ${entry.location}")
+                    writer.writeLine()
+                }
+            }
+
+            writer.writeLine()
+            writer.writeLine('=' * 80)
+            writer.writeLine('END OF REPORT')
+            writer.writeLine('=' * 80)
+        }
+        LOGGER.info("Custom names text file written to: ${textFile.absolutePath}")
+
+        // Write Stendhal JSON file
+        File jsonFile = new File(baseDirectory, "${outputFolder}${File.separator}all_custom_names.json")
+        jsonFile.withWriter('UTF-8') { BufferedWriter writer ->
+            writer.writeLine('[')
+
+            customNameData.eachWithIndex { Map<String, Object> entry, int index ->
+                writer.write('  {')
+                writer.write("\"type\": \"${escapeJson(entry.type?.toString() ?: 'unknown')}\", ")
+                writer.write("\"itemOrEntityId\": \"${escapeJson(entry.itemOrEntityId?.toString() ?: 'undefined')}\", ")
+                writer.write("\"customName\": \"${escapeJson(entry.customName?.toString() ?: 'undefined')}\", ")
+                writer.write("\"x\": ${entry.x ?: 0}, ")
+                writer.write("\"y\": ${entry.y ?: 0}, ")
+                writer.write("\"z\": ${entry.z ?: 0}, ")
+                writer.write("\"location\": \"${escapeJson(entry.location?.toString() ?: 'unknown')}\"")
+                writer.write('}')
+
+                if (index < customNameData.size() - 1) {
+                    writer.writeLine(',')
+                } else {
+                    writer.writeLine()
+                }
+            }
+
+            writer.writeLine(']')
+        }
+        LOGGER.info("Custom names JSON file written to: ${jsonFile.absolutePath}")
+
+        LOGGER.info("Custom names output complete: ${customNameData.size()} entries written to 3 files")
+    }
+
+    /**
      * Escape CSV field by wrapping in quotes if it contains comma, newline, or quote
      */
     static String escapeCsvField(String field) {
@@ -432,6 +538,22 @@ class Main implements Runnable {
         }
 
         return escaped
+    }
+
+    /**
+     * Escape string for JSON by escaping quotes, backslashes, and newlines
+     */
+    static String escapeJson(String text) {
+        if (!text) {
+            return ''
+        }
+
+        return text
+            .replace('\\', '\\\\')
+            .replace('"', '\\"')
+            .replace('\n', '\\n')
+            .replace('\r', '\\r')
+            .replace('\t', '\\t')
     }
 
     /**
@@ -1311,6 +1433,15 @@ class Main implements Runnable {
                                      int yPos = entityPos.size() >= 3 ? getDoubleAt(entityPos, 1) as int : 0
                                      int zPos = entityPos.size() >= 3 ? getDoubleAt(entityPos, 2) as int : 0
 
+                                     // Extract custom name from entity if --extract-custom-names flag is set
+                                     if (extractCustomNames) {
+                                         String customName = extractCustomNameFromEntity(entity)
+                                         if (customName) {
+                                             String location = "Chunk [${x}, ${z}] Entity ${entityId} at (${xPos} ${yPos} ${zPos}) ${file.name}"
+                                             recordCustomName(customName, entityId, 'entity', location, xPos, yPos, zPos)
+                                         }
+                                     }
+
                                      // Entities with inventory
                                      if (hasKey(entity, 'Items')) {
                                          getCompoundTagList(entity, 'Items').each { CompoundTag item ->
@@ -1393,6 +1524,14 @@ class Main implements Runnable {
      */
     public static void parseItem(CompoundTag item, String bookInfo) {
         String itemId = item.getString('id')
+
+        // Extract custom name if --extract-custom-names flag is set
+        if (extractCustomNames) {
+            String customName = extractCustomNameFromItem(item)
+            if (customName) {
+                recordCustomName(customName, itemId, 'item', bookInfo, 0, 0, 0)
+            }
+        }
 
         if (itemId == 'minecraft:written_book') {
             LOGGER.debug("Found written book: ${bookInfo.take(80)}...")
@@ -2426,6 +2565,117 @@ class Main implements Runnable {
 
     static boolean isCompoundList(ListTag<?> list) {
         return list && list.size() > 0 && list.typeClass == CompoundTag
+    }
+
+    /**
+     * Extract custom name from an item NBT compound
+     * Handles both pre-1.20.5 (tag.display.Name) and 1.20.5+ (components.minecraft:custom_name) formats
+     *
+     * @param item The item CompoundTag
+     * @return Custom name string, or null if no custom name exists
+     */
+    static String extractCustomNameFromItem(CompoundTag item) {
+        if (!item) {
+            return null
+        }
+
+        String customName = null
+
+        // Try new format first (1.20.5+ with components)
+        if (hasKey(item, 'components')) {
+            CompoundTag components = getCompoundTag(item, 'components')
+            if (hasKey(components, 'minecraft:custom_name')) {
+                net.querz.nbt.tag.Tag<?> customNameTag = components.get('minecraft:custom_name')
+
+                // Handle both string and compound formats
+                if (customNameTag instanceof StringTag) {
+                    customName = ((StringTag) customNameTag).value
+                } else if (customNameTag instanceof CompoundTag) {
+                    // Extract text from JSON component compound
+                    customName = ((CompoundTag) customNameTag).getString('text')
+                }
+            }
+        }
+
+        // Fallback to old format (pre-1.20.5 with tag.display.Name)
+        if (!customName && hasKey(item, 'tag')) {
+            CompoundTag tagCompound = getCompoundTag(item, 'tag')
+            if (hasKey(tagCompound, 'display')) {
+                CompoundTag displayTag = getCompoundTag(tagCompound, 'display')
+                if (hasKey(displayTag, 'Name')) {
+                    customName = displayTag.getString('Name')
+                }
+            }
+        }
+
+        // Return null if empty or whitespace-only
+        if (customName != null && customName.trim().isEmpty()) {
+            return null
+        }
+
+        return customName
+    }
+
+    /**
+     * Extract custom name from an entity NBT compound
+     * Entities use CustomName tag at root level across all versions
+     *
+     * @param entity The entity CompoundTag
+     * @return Custom name string, or null if no custom name exists
+     */
+    static String extractCustomNameFromEntity(CompoundTag entity) {
+        if (!entity || !hasKey(entity, 'CustomName')) {
+            return null
+        }
+
+        String customName = entity.getString('CustomName')
+
+        // Return null if empty or whitespace-only
+        if (customName == null || customName.trim().isEmpty()) {
+            return null
+        }
+
+        return customName
+    }
+
+    /**
+     * Record a custom name from an item or entity
+     * Handles deduplication and data collection
+     *
+     * @param customName The raw custom name string from NBT
+     * @param itemOrEntityId The minecraft ID (e.g., "minecraft:diamond_sword" or "minecraft:zombie")
+     * @param type "item" or "entity"
+     * @param location Description of where it was found
+     * @param x X coordinate (optional, use 0 if unknown)
+     * @param y Y coordinate (optional, use 0 if unknown)
+     * @param z Z coordinate (optional, use 0 if unknown)
+     */
+    static void recordCustomName(String customName, String itemOrEntityId, String type, String location, int x = 0, int y = 0, int z = 0) {
+        if (!extractCustomNames || !customName) {
+            return
+        }
+
+        // Create hash for deduplication (combines name + type + id for uniqueness)
+        String hash = "${customName}|${type}|${itemOrEntityId}".hashCode().toString()
+
+        // Check if this exact custom name has been recorded before
+        if (!customNameHashes.add(hash)) {
+            LOGGER.debug("Skipping duplicate custom name: ${customName} on ${itemOrEntityId}")
+            return
+        }
+
+        // Record the custom name data
+        customNameData.add([
+            customName: customName,
+            itemOrEntityId: itemOrEntityId,
+            type: type,
+            location: location,
+            x: x,
+            y: y,
+            z: z
+        ])
+
+        LOGGER.debug("Recorded custom name: '${customName}' on ${type} ${itemOrEntityId} at (${x}, ${y}, ${z})")
     }
 
 }
