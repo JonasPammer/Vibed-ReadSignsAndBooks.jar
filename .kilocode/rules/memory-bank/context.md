@@ -50,6 +50,19 @@
   - Generation included in shulker box book NBT for all versions
   - Enables provenance tracking and understanding book genealogy
   - Resolves GitHub issue #7 (generation tracking implemented; .duplicates folder logic deferred)
+- ✅ **Duplicates Folder Post-Processing & Testing Documentation** (Version 1.0.5)
+  - Implemented parseStendhalFile() helper: Extracts generation, title, pages, and content hash from .stendhal files
+  - Implemented ensureOriginalsNotInDuplicates() post-processing: Ensures original books (generation=0) never in .duplicates/
+  - Smart swapping logic: Original in duplicates swaps with copy in books/, or moves if no swap available
+  - Collision handling: Automatic filename deduplication when moving files
+  - Integrated into runExtraction() workflow: Runs after all books written, before CSV exports
+  - Comprehensive error handling: Graceful failures with warnings, no crashes on corrupt files
+  - **Extensive Research & Documentation** (40+ WebSearch/WebFetch operations performed):
+    - testing-strategies.md (1000+ lines): Complete Spock 2.4 framework guide, data-driven testing, mocking/stubbing, integration patterns, file I/O testing, NBT testing, performance optimization
+    - integration-test-specs.md (800+ lines): 40+ test case specifications covering generation extraction, duplicates logic, output formats, multi-version compatibility
+    - Research covered: Spock best practices, Groovy power assertions, test fixture generation, edge case handling, world corruption testing, duplicate detection algorithms
+  - Completes GitHub issue #7 implementation (generation tracking + .duplicates logic fully implemented)
+  - Total documentation added: 1800+ lines of comprehensive testing guidance
 
 ## Current Focus / Active Areas
 - **Maintenance Mode**: Monitoring for new Minecraft version releases

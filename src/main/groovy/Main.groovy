@@ -305,6 +305,8 @@ class Main implements Runnable {
              // Close all sign mcfunction writers
              signsMcfunctionWriters.values().each { it?.close() }
 
+            // Post-processing: Ensure originals (generation=0) are in books/ folder, not .duplicates/
+            ensureOriginalsNotInDuplicates()
 
             // Write CSV exports
             writeBooksCSV()
@@ -2317,6 +2319,164 @@ class Main implements Runnable {
             default:
                 LOGGER.warn("Unknown generation value: ${generation}, defaulting to 'Original'")
                 return 'Original'
+        }
+    }
+
+    /**
+     * Parse a .stendhal file to extract generation metadata and compute content hash
+     *
+     * @param bookFile File object pointing to .stendhal file
+     * @return Map with generation (int), contentHash (int), title (String), and pages (List<String>)
+     */
+    static Map<String, Object> parseStendhalFile(File bookFile) {
+        int generation = 0
+        String title = 'Untitled'
+        List<String> pages = []
+
+        bookFile.eachLine('UTF-8') { String line ->
+            if (line.startsWith('title:')) {
+                title = line.substring(6).trim()
+            } else if (line.startsWith('generation:')) {
+                String genStr = line.substring(11).trim()
+                try {
+                    generation = genStr as int
+                } catch (NumberFormatException e) {
+                    LOGGER.warn("Failed to parse generation from ${bookFile.name}: ${genStr}")
+                    generation = 0
+                }
+            } else if (line.startsWith('#-')) {
+                // Page content line (strip '#- ' prefix)
+                pages.add(line.substring(3))
+            }
+        }
+
+        // Compute content hash (same algorithm as bookHashes - hash of pages)
+        int contentHash = pages.hashCode()
+
+        return [
+            generation: generation,
+            contentHash: contentHash,
+            title: title,
+            pages: pages
+        ]
+    }
+
+    /**
+     * Ensure original books (generation=0) are never placed in .duplicates/ folder
+     *
+     * Post-processing step that runs after all books are written. If an original book
+     * is found in .duplicates/, it swaps with a non-original from books/ folder, or
+     * simply moves the original to books/ if no swapping is needed.
+     *
+     * This ensures the canonical version (original) is always in the main books/ directory.
+     */
+    static void ensureOriginalsNotInDuplicates() {
+        LOGGER.debug("Checking for originals in .duplicates folder...")
+
+        File duplicatesDir = new File(baseDirectory, duplicatesFolder)
+        if (!duplicatesDir.exists()) {
+            LOGGER.debug("No .duplicates folder exists - skipping check")
+            return
+        }
+
+        File booksDir = new File(baseDirectory, booksFolder)
+        if (!booksDir.exists()) {
+            LOGGER.warn("Books folder does not exist - cannot perform originals check")
+            return
+        }
+
+        // Track books by content hash
+        Map<Integer, List<Map<String, Object>>> booksByHash = [:]
+
+        // Scan all .stendhal files in both folders
+        [
+            [folder: booksFolder, isInDuplicates: false],
+            [folder: duplicatesFolder, isInDuplicates: true]
+        ].each { Map folderInfo ->
+            File dir = new File(baseDirectory, folderInfo.folder as String)
+            dir.listFiles()?.findAll { it.name.endsWith('.stendhal') }?.each { File bookFile ->
+                try {
+                    // Parse .stendhal file to extract generation and content hash
+                    Map<String, Object> bookData = parseStendhalFile(bookFile)
+                    int contentHash = bookData.contentHash as int
+
+                    if (!booksByHash.containsKey(contentHash)) {
+                        booksByHash[contentHash] = []
+                    }
+
+                    booksByHash[contentHash].add([
+                        file: bookFile,
+                        generation: bookData.generation,
+                        title: bookData.title,
+                        isInDuplicates: folderInfo.isInDuplicates
+                    ])
+                } catch (Exception e) {
+                    LOGGER.warn("Failed to parse ${bookFile.name} for originals check: ${e.message}")
+                }
+            }
+        }
+
+        // For each content hash, ensure original (if exists) is in books/ folder
+        int swapsPerformed = 0
+        int movesPerformed = 0
+
+        booksByHash.each { int hash, List<Map<String, Object>> copies ->
+            // Find original (generation = 0)
+            Map<String, Object> original = copies.find { it.generation == 0 }
+            if (!original) {
+                return  // No original exists for this content, skip
+            }
+
+            // If original is in .duplicates/, handle it
+            if (original.isInDuplicates) {
+                // Try to find a non-original from books/ to swap with
+                Map<String, Object> nonOriginal = copies.find { it.generation != 0 && !it.isInDuplicates }
+
+                if (nonOriginal) {
+                    // Swap files: original → books/, non-original → duplicates/
+                    try {
+                        File tempFile = File.createTempFile('swap', '.stendhal', new File(baseDirectory, outputFolder))
+                        File originalFile = original.file as File
+                        File nonOriginalFile = nonOriginal.file as File
+
+                        // Three-way swap using temp file
+                        originalFile.renameTo(tempFile)
+                        nonOriginalFile.renameTo(originalFile)
+                        tempFile.renameTo(nonOriginalFile)
+
+                        swapsPerformed++
+                        LOGGER.debug("Swapped original \"${original.title}\" from .duplicates to books/")
+                    } catch (IOException e) {
+                        LOGGER.warn("Failed to swap files for original \"${original.title}\": ${e.message}")
+                    }
+                } else {
+                    // All copies are originals or only original exists - move to books/
+                    try {
+                        File originalFile = original.file as File
+                        File newLocation = new File(booksDir, originalFile.name)
+
+                        // Handle filename collision
+                        int counter = 2
+                        while (newLocation.exists()) {
+                            String baseName = originalFile.name.replace('.stendhal', '')
+                            newLocation = new File(booksDir, "${baseName}_${counter}.stendhal")
+                            counter++
+                        }
+
+                        originalFile.renameTo(newLocation)
+                        movesPerformed++
+                        LOGGER.debug("Moved original \"${original.title}\" from .duplicates to books/")
+                    } catch (IOException e) {
+                        LOGGER.warn("Failed to move original \"${original.title}\" from duplicates: ${e.message}")
+                    }
+                }
+            }
+        }
+
+        if (swapsPerformed > 0 || movesPerformed > 0) {
+            LOGGER.info("✓ Ensured ${swapsPerformed} original(s) swapped and ${movesPerformed} original(s) moved to books/ folder (not .duplicates/)")
+        } else {
+            LOGGER.debug("No originals found in .duplicates/ - folder structure is correct")
         }
     }
 
