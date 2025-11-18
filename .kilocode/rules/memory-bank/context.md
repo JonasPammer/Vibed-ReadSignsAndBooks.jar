@@ -41,13 +41,12 @@
   - Dynamic state persistence: State updated only with remaining failures
   - 16/17 integration tests passing (pre-existing failure unrelated to feature)
 - ✅ **Enhanced CLAUDE.md Documentation** (2025-11-18)
-  - Comprehensive quick reference section with essential commands
-  - Build, test, and run commands with examples
-  - CLI options and architecture quick facts
-  - Output format documentation
-  - AI commit convention prominently featured
-  - Memory bank references preserved for detailed documentation
-  - Updated Main.groovy line count to ~2431 lines across all files
+  - Memory bank @ references moved to top for automatic inline inclusion
+  - Removed all duplicated content already covered in memory bank files
+  - Streamlined to minimal quick-start commands and AI commit convention
+  - Memory bank system explanation added
+  - Updated Main.groovy line count to ~2431 lines across all memory bank files
+  - Clean separation: CLAUDE.md for quick reference, memory bank for comprehensive details
 
 ## Current Focus / Active Areas
 - **Maintenance Mode**: Monitoring for new Minecraft version releases
