@@ -435,33 +435,33 @@ class Main implements Runnable {
     }
 
     /**
-     * Escape text for Minecraft commands based on version
+     * Escape text for use in Minecraft SNBT (Stringified NBT) commands
+     * Escapes for double-quoted SNBT string context
      * @param text The text to escape
-     * @param version The Minecraft version ('1_13', '1_14', '1_20_5', '1_21')
+     * @return Escaped text safe for double-quoted SNBT strings
      */
-    static String escapeForMinecraftCommand(String text, String version) {
+    static String escapeForSnbt(String text) {
         if (!text) {
             return ''
         }
 
-        String escaped = text
+        return text
+            .replace('\\', '\\\\')      // Backslash → double backslash
+            .replace('"', '\\"')        // Quote → escaped quote
+            .replace('\n', '\\n')       // Newline → escaped newline
+            .replace('\r', '\\r')       // Carriage return
+            .replace('\t', '\\t')       // Tab
+    }
 
-        // Version-specific escaping
-        if (version in ['1_13', '1_14']) {
-            // Older versions need double backslash escaping
-            escaped = escaped.replace('\\', '\\\\\\\\')
-            escaped = escaped.replace('"', '\\\\"')
-            escaped = escaped.replace("'", "\\'")
-            escaped = escaped.replace('\n', '\\\\n')
-        } else {
-            // 1.20.5+ uses single backslash escaping
-            escaped = escaped.replace('\\', '\\\\')
-            escaped = escaped.replace('"', '\\"')
-            escaped = escaped.replace("'", "\\'")
-            escaped = escaped.replace('\n', '\\n')
-        }
-
-        return escaped
+    /**
+     * Legacy method maintained for compatibility with existing sign command code
+     * @deprecated Use escapeForSnbt() for new code
+     * @param text The text to escape
+     * @param version Ignored - kept for API compatibility
+     * @return Escaped text
+     */
+    static String escapeForMinecraftCommand(String text, String version) {
+        return escapeForSnbt(text)
     }
 
     /**
@@ -668,70 +668,124 @@ class Main implements Runnable {
     /**
      * Generate a Minecraft /give command for a written book
      * Supports versions: 1.13+, 1.14+, 1.20.5+, 1.21+
+     *
+     * Page format in NBT:
+     * - Raw text may be plain string: "Hello"
+     * - Or JSON text component: {"text":"Hello","color":"red"}
+     *
+     * Command escaping:
+     * - 1.13/1.14: Uses single-quoted pages, backslashes only need escaping
+     * - 1.20.5/1.21: Uses double-quoted pages, both backslashes and quotes need escaping
      */
     static String generateBookCommand(String title, String author, ListTag<?> pages, String version) {
-        String escapedTitle = escapeForMinecraftCommand(title ?: 'Untitled', version)
-        String escapedAuthor = escapeForMinecraftCommand(author ?: 'Unknown', version)
+        String escapedTitle = escapeForSnbt(title ?: 'Untitled')
+        String escapedAuthor = escapeForSnbt(author ?: 'Unknown')
 
         String pagesStr
 
         switch (version) {
             case '1_13':
                 // 1.13: /give @p written_book{title:"Title",author:"Author",pages:['{"text":"page1"}','{"text":"page2"}']}
+                // Pages wrapped in single quotes, so only backslashes need escaping
                 pagesStr = (0..<pages.size()).collect { int i ->
                     String rawText = getStringAt(pages, i)
-                    // Convert § formatting codes to JSON text components if needed
-                    String jsonComponent = rawText.startsWith('{') ? rawText : "{\"text\":\"${rawText}\"}"
-                    // Single quotes don't require internal quote escaping, only backslashes
-                    String escaped = jsonComponent.replace('\\', '\\\\')
-                    "'${escaped}'"
+
+                    // Ensure we have JSON text component format
+                    String jsonComponent
+                    if (rawText.startsWith('{') || rawText.startsWith('[')) {
+                        // Already JSON - use as-is
+                        jsonComponent = rawText
+                    } else {
+                        // Plain text - wrap in JSON and escape content for JSON
+                        String jsonEscapedText = rawText
+                            .replace('\\', '\\\\')
+                            .replace('"', '\\"')
+                            .replace('\n', '\\n')
+                        jsonComponent = "{\"text\":\"${jsonEscapedText}\"}"
+                    }
+
+                    // For single-quoted SNBT string: only escape backslashes
+                    // Double quotes inside single quotes don't need escaping
+                    String snbtEscaped = jsonComponent.replace('\\', '\\\\')
+                    "'${snbtEscaped}'"
                 }.join(',')
                 return "give @p written_book{title:\"${escapedTitle}\",author:\"${escapedAuthor}\",pages:[${pagesStr}]}"
 
             case '1_14':
                 // 1.14: /give @p written_book{title:"Title",author:"Author",pages:['["page1"]','["page2"]']}
-                // 1.14 wraps JSON in array brackets - note: uses single quotes so internal quotes don't need escaping
+                // Similar to 1.13 but pages are wrapped in JSON array syntax
                 pagesStr = (0..<pages.size()).collect { int i ->
                     String rawText = getStringAt(pages, i)
-                    // If rawText is JSON (starts with '[' or '{'), use it directly
-                    // If it's plain text, wrap in JSON array format
+
+                    // Build JSON structure (array for 1.14 format)
                     String jsonArray
                     if (rawText.startsWith('[')) {
-                        jsonArray = rawText  // Already a JSON array
+                        jsonArray = rawText  // Already an array
                     } else if (rawText.startsWith('{')) {
-                        jsonArray = "[${rawText}]"  // Wrap JSON object in array
+                        jsonArray = "[${rawText}]"  // Wrap object in array
                     } else {
-                        // Plain text: wrap in JSON array format ["text"]
-                        // Note: Inside single quotes, we can use \" directly without escaping
-                        jsonArray = "[\"${rawText}\"]"
+                        // Plain text - escape for JSON then wrap in array
+                        String jsonEscapedText = rawText
+                            .replace('\\', '\\\\')
+                            .replace('"', '\\"')
+                            .replace('\n', '\\n')
+                        jsonArray = "[\"${jsonEscapedText}\"]"
                     }
-                    // Escape backslashes only (single quotes don't need quote escaping)
-                    String escaped = jsonArray.replace('\\', '\\\\')
-                    "'${escaped}'"
+
+                    // For single-quoted SNBT string: only escape backslashes
+                    String snbtEscaped = jsonArray.replace('\\', '\\\\')
+                    "'${snbtEscaped}'"
                 }.join(',')
                 return "give @p written_book{title:\"${escapedTitle}\",author:\"${escapedAuthor}\",pages:[${pagesStr}]}"
 
             case '1_20_5':
                 // 1.20.5: /give @p written_book[minecraft:written_book_content={title:"Title",author:"Author",pages:["page1","page2"]}]
+                // Pages wrapped in double quotes, so both backslashes and quotes need escaping
                 pagesStr = (0..<pages.size()).collect { int i ->
                     String rawText = getStringAt(pages, i)
-                    // Convert § formatting codes to JSON text components if needed
-                    String jsonComponent = rawText.startsWith('{') ? rawText : "{\"text\":\"${rawText}\"}"
-                    // Escape for NBT syntax
-                    String escaped = jsonComponent.replace('\\', '\\\\').replace('"', '\\"')
-                    "\"${escaped}\""
+
+                    // Ensure we have JSON text component format
+                    String jsonComponent
+                    if (rawText.startsWith('{') || rawText.startsWith('[')) {
+                        jsonComponent = rawText
+                    } else {
+                        String jsonEscapedText = rawText
+                            .replace('\\', '\\\\')
+                            .replace('"', '\\"')
+                            .replace('\n', '\\n')
+                        jsonComponent = "{\"text\":\"${jsonEscapedText}\"}"
+                    }
+
+                    // For double-quoted SNBT string: escape both backslashes and quotes
+                    // Order matters: escape backslashes FIRST, then quotes
+                    String snbtEscaped = jsonComponent
+                        .replace('\\', '\\\\')
+                        .replace('"', '\\"')
+                    "\"${snbtEscaped}\""
                 }.join(',')
                 return "give @p written_book[minecraft:written_book_content={title:\"${escapedTitle}\",author:\"${escapedAuthor}\",pages:[${pagesStr}]}]"
 
             case '1_21':
                 // 1.21: /give @p written_book[written_book_content={title:"Title",author:"Author",pages:["page1","page2"]}]
+                // Same as 1.20.5 but without 'minecraft:' namespace prefix
                 pagesStr = (0..<pages.size()).collect { int i ->
                     String rawText = getStringAt(pages, i)
-                    // Convert § formatting codes to JSON text components if needed
-                    String jsonComponent = rawText.startsWith('{') ? rawText : "{\"text\":\"${rawText}\"}"
-                    // Escape for NBT syntax
-                    String escaped = jsonComponent.replace('\\', '\\\\').replace('"', '\\"')
-                    "\"${escaped}\""
+
+                    String jsonComponent
+                    if (rawText.startsWith('{') || rawText.startsWith('[')) {
+                        jsonComponent = rawText
+                    } else {
+                        String jsonEscapedText = rawText
+                            .replace('\\', '\\\\')
+                            .replace('"', '\\"')
+                            .replace('\n', '\\n')
+                        jsonComponent = "{\"text\":\"${jsonEscapedText}\"}"
+                    }
+
+                    String snbtEscaped = jsonComponent
+                        .replace('\\', '\\\\')
+                        .replace('"', '\\"')
+                    "\"${snbtEscaped}\""
                 }.join(',')
                 return "give @p written_book[written_book_content={title:\"${escapedTitle}\",author:\"${escapedAuthor}\",pages:[${pagesStr}]}]"
 
@@ -823,8 +877,11 @@ class Main implements Runnable {
             String escaped = escapeForMinecraftCommand(line, '1_20')
             "'[\\\"\\\":{\\\"text\\\":\\\"${escaped}\\\"}]'"
         }.join(',')
-        
-        return "setblock ~${x} ~ ~${z} oak_sign[rotation=0,waterlogged=false]{front_text:{messages:[${frontMessages}],has_glowing_text:0},back_text:{messages:[],has_glowing_text:0},is_waxed:0} replace"
+
+        // back_text must have exactly 4 empty messages (Minecraft requirement)
+        String backMessages = (0..3).collect { "'[\\\"\\\":{\\\"text\\\":\\\"\\\"}]'" }.join(',')
+
+        return "setblock ~${x} ~ ~${z} oak_sign[rotation=0,waterlogged=false]{front_text:{messages:[${frontMessages}],has_glowing_text:0},back_text:{messages:[${backMessages}],has_glowing_text:0},is_waxed:0} replace"
     }
 
     /**
@@ -834,10 +891,13 @@ class Main implements Runnable {
         String frontMessages = (0..3).collect { int i ->
             String line = i < lines.size() ? lines[i] : ''
             String escaped = escapeForMinecraftCommand(line, '1_20_5')
-            '[[{"text":"' + escaped + '"}]]'
+            '\'{"text":"' + escaped + '"}\''
         }.join(',')
-        
-        return "setblock ~${x} ~ ~${z} oak_sign[rotation=0,waterlogged=false]{front_text:{messages:[${frontMessages}],has_glowing_text:0},back_text:{messages:[],has_glowing_text:0},is_waxed:0} replace"
+
+        // back_text must have exactly 4 empty messages (Minecraft requirement)
+        String backMessages = (0..3).collect { '\'{"text":""}\'' }.join(',')
+
+        return "setblock ~${x} ~ ~${z} oak_sign[rotation=0,waterlogged=false]{front_text:{messages:[${frontMessages}],has_glowing_text:0},back_text:{messages:[${backMessages}],has_glowing_text:0},is_waxed:0} replace"
     }
 
     /**
