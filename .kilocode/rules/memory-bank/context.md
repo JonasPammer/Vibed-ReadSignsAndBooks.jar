@@ -40,6 +40,16 @@
   - Automatic recovery tracking: Successfully read regions removed from state file
   - Dynamic state persistence: State updated only with remaining failures
   - 16/17 integration tests passing (pre-existing failure unrelated to feature)
+- ✅ **Book Generation Tracking** (Version 1.0.4)
+  - Tracks book copy tier (generation): 0=Original, 1=Copy of Original, 2=Copy of Copy, 3=Tattered
+  - Multi-format NBT extraction: Handles both pre-1.20.5 (tag.generation) and 1.20.5+ (components) formats
+  - Generation metadata in all outputs: Stendhal files, CSV exports, mcfunction commands
+  - New CSV columns: Generation (integer), GenerationLabel (human-readable)
+  - New Stendhal fields: generation, generation_label
+  - Generation NBT preserved in all mcfunction commands (1.13, 1.14, 1.20.5, 1.21)
+  - Generation included in shulker box book NBT for all versions
+  - Enables provenance tracking and understanding book genealogy
+  - Resolves GitHub issue #7 (generation tracking implemented; .duplicates folder logic deferred)
 
 ## Current Focus / Active Areas
 - **Maintenance Mode**: Monitoring for new Minecraft version releases

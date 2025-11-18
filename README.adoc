@@ -20,6 +20,26 @@ This tool scans Minecraft world files and extracts:
 * *Books in containers of containers* (e.g., inside bundles in frames, inside shulker boxes in chests)
 * *Books in player inventories* and ender chests
 * *Duplicate tracking:* Saves duplicate books to `.duplicates/` folder instead of skipping them
+* *Book generation tracking:* Tracks whether books are originals, copies, copies of copies, or tattered
+** Generation metadata included in CSV, Stendhal files, and mcfunction commands
+** Enables understanding the provenance and genealogy of duplicated books
+
+=== Book Generation Tracking
+
+ReadSignsAndBooks now tracks the **generation** (copy tier) of written books, extracted from Minecraft's NBT data:
+
+* *Original (0):* First signed book created from a book & quill
+* *Copy of Original (1):* Copied from an original book
+* *Copy of Copy (2):* Copied from a copy (cannot be copied further)
+* *Tattered (3):* Maximum copy tier (rare, cannot be copied)
+
+This generation information is included in:
+
+* *CSV exports:* New `Generation` and `GenerationLabel` columns
+* *Stendhal files:* New `generation:` and `generation_label:` metadata fields
+* *Minecraft commands:* Generation NBT preserved in all `/give` commands (1.13+, 1.14+, 1.20.5+, 1.21+)
+
+This feature helps archivists and server administrators understand which books are original works versus copies, enabling better preservation and provenance tracking.
 
 == Usage
 
@@ -63,7 +83,7 @@ The tool creates output in `ReadBooks/YYYY-MM-DD/`:
 * `all_signs.txt` - all signs found in the world, one per line
 ** Example: `Chunk [31, 31]	(-2 75 -5)		Line 1! ⚠ Line 2! ☀`
 * `all_books.txt` - all books in Stendhal format, separated by `#region` and `#endregion` markers for VSCode folding
-* `all_books.csv` - CSV export of all books with metadata
+* `all_books.csv` - CSV export of all books with metadata (includes generation columns)
 * `all_signs.csv` - CSV export of all signs with metadata
 * `all_books-1_13.mcfunction` - Minecraft 1.13+ commands to recreate all books via `/give` commands
 * `all_books-1_14.mcfunction` - Minecraft 1.14+ commands to recreate all books via `/give` commands
