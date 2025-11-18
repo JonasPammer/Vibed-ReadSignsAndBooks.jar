@@ -91,18 +91,15 @@ Fallback logic: New format attempted first, old format on failure
 1. **Stendhal JSON** - Preserves metadata (author, title, pages, type, location)
 2. **CSV** - Tabular format (type, title, author, page_count, content_preview)
 3. **Combined Text** - Human-readable merged output
-4. **Minecraft Commands - Books** - Four version-specific mcfunction files:
-   - `all_books-1_13.mcfunction` - Format: `give @p written_book{title:"...",author:"...",pages:['{"text":"..."}']}`
-   - `all_books-1_14.mcfunction` - Format: `give @p written_book{title:"...",author:"...",pages:['["..."]']}`
-   - `all_books-1_20_5.mcfunction` - Format: `give @p written_book[minecraft:written_book_content={...}]`
-   - `all_books-1_21.mcfunction` - Format: `give @p written_book[written_book_content={...}]`
-5. **Minecraft Commands - Signs** - Five version-specific mcfunction files with clickable signs:
-   - `all_signs-1_13.mcfunction` - Format: `setblock ~X ~ ~Z oak_sign{Text1:'{...,"clickEvent":{...}}',...}`
-   - `all_signs-1_14.mcfunction` - Format: `setblock ~X ~ ~Z oak_sign{Text1:'["",{...,"clickEvent":{...}}]',...}`
-   - `all_signs-1_20.mcfunction` - Format: `setblock ~X ~ ~Z oak_sign{front_text:{messages:[["",{...,"clickEvent":{...}}]],...}}`
-   - `all_signs-1_20_5.mcfunction` - Format: `setblock ~X ~ ~Z oak_sign{front_text:{messages:[[[{...,"clickEvent":{...}}]]],...}}`
-   - `all_signs-1_21.mcfunction` - Format: Same as 1.20.5
-   - Each sign's first line clickable → shows original coordinates (X Y Z) → clickable to teleport
+4. **Minecraft Datapacks** - Four complete, ready-to-use datapacks:
+   - `readbooks_datapack_1_13/` - Minecraft 1.13-1.14.3 (pack_format 4)
+   - `readbooks_datapack_1_14/` - Minecraft 1.14.4-1.19.4 (pack_format 4)
+   - `readbooks_datapack_1_20_5/` - Minecraft 1.20.5-1.20.6 (pack_format 41)
+   - `readbooks_datapack_1_21/` - Minecraft 1.21+ (pack_format 48)
+   - Each datapack contains:
+     - `pack.mcmeta` with appropriate pack_format
+     - `data/readbooks/function/books.mcfunction` - Give commands for all books
+     - `data/readbooks/function/signs.mcfunction` - Setblock commands for all signs with clickable teleport
 
 ## Architectural Decisions & Rationale
 
@@ -152,25 +149,45 @@ Fallback logic: New format attempted first, old format on failure
 - **Testing**: Three dedicated integration tests verify file creation, command count, and JSON structure validity for all versions
 - **Attribution**: Implementation inspired by https://github.com/TheWilley/Text2Book and https://github.com/ADP424/MinecraftBookConverter
 
-### Clickable Signs in mcfunction Files
-- **Decision**: Generate five additional sign mcfunction files with interactive clickEvent functionality (GitHub issue #4)
+### Datapack Structure Generation
+- **Decision**: Generate complete, ready-to-use Minecraft datapacks instead of standalone mcfunction files
+- **Rationale**: Users can directly copy datapack folders into their Minecraft world without manual file organization
+- **Implementation**:
+  - `createDatapackStructure(version)` creates proper directory structure: `datapack_root/data/namespace/function/`
+  - `createPackMcmeta(version, packFormat, description)` generates valid pack.mcmeta JSON with version-appropriate pack_format
+  - `getPackFormat(version)` maps version identifiers to official Minecraft pack_format numbers (4, 41, 48)
+  - `getVersionDescription(version)` provides human-readable version ranges for pack.mcmeta descriptions
+- **Directory Structure**:
+  ```
+  readbooks_datapack_VERSION/
+  ├── pack.mcmeta (with pack_format: 4/41/48)
+  └── data/
+      └── readbooks/
+          └── function/
+              ├── books.mcfunction (give commands)
+              └── signs.mcfunction (setblock commands with clickable teleport)
+  ```
+- **Pack Format Mapping**:
+  - 1.13-1.14.4: pack_format 4
+  - 1.20.5-1.20.6: pack_format 41
+  - 1.21+: pack_format 48
+- **User Experience**: Copy entire folder to `world/datapacks/`, run `/reload`, then `/function readbooks:books` or `/function readbooks:signs`
+- **Testing**: Dedicated integration tests verify datapack structure, pack.mcmeta validity, and function file creation for all versions
+
+### Clickable Signs in Datapack mcfunction Files
+- **Decision**: Generate sign mcfunction files with interactive clickEvent functionality (GitHub issue #4)
 - **Rationale**: Players can click signs to see original world coordinates and teleport back to source location
 - **Implementation**:
   - `Map<String, Object> signsByHash` stores sign metadata including original coordinates (originalX, originalY, originalZ)
   - `writeSignToMcfunction(lines, signInfo)` accepts sign metadata to extract coordinates
   - `allocateSignPosition(lines, originalCoords, signInfo)` stores coordinates alongside grid position
-  - Five version-specific generation methods with nested clickEvents:
+  - Version-specific generation methods with nested clickEvents:
     - `generateSignCommand_1_13()` - Text1-Text4 format with clickEvent on first line
     - `generateSignCommand_1_14()` - Array format `["",{...}]` with clickEvent
     - `generateSignCommand_1_20()` - front_text/back_text structure with clickEvent
     - `generateSignCommand_1_20_5()` - Component format `[[{...}]]` with clickEvent
     - `generateSignCommand_1_21()` - Delegates to 1.20.5 format
-  - Each generates five mcfunction files simultaneously:
-    - `all_signs-1_13.mcfunction`
-    - `all_signs-1_14.mcfunction`
-    - `all_signs-1_20.mcfunction`
-    - `all_signs-1_20_5.mcfunction`
-    - `all_signs-1_21.mcfunction`
+  - Signs written to `data/readbooks/function/signs.mcfunction` in each datapack
 - **clickEvent Structure**: Nested commands for interactive experience
   ```
   Sign click → /tellraw @s {"text":"Sign from (X Y Z)","color":"gray","clickEvent":{...}}
@@ -180,7 +197,7 @@ Fallback logic: New format attempted first, old format on failure
   - **1.13**: Triple-escaped for nested JSON: `\\\"text\\\"`
   - **1.14**: Same as 1.13 with array wrapper
   - **1.20+**: Double-escaped: `\"text\"`
-- **Testing**: Four integration tests verify sign mcfunction generation, clickEvent structure, and coordinate preservation
+- **Testing**: Integration tests verify sign mcfunction generation, clickEvent structure, and coordinate preservation
 - **Documentation**: Comprehensive inline comments with Minecraft wiki links:
   - https://minecraft.wiki/w/Sign#Block_data
   - https://minecraft.wiki/w/Commands/setblock

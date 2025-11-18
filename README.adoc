@@ -65,15 +65,67 @@ The tool creates output in `ReadBooks/YYYY-MM-DD/`:
 * `all_books.txt` - all books in Stendhal format, separated by `#region` and `#endregion` markers for VSCode folding
 * `all_books.csv` - CSV export of all books with metadata
 * `all_signs.csv` - CSV export of all signs with metadata
-* `all_books-1_13.mcfunction` - Minecraft 1.13+ commands to recreate all books via `/give` commands
-* `all_books-1_14.mcfunction` - Minecraft 1.14+ commands to recreate all books via `/give` commands
-* `all_books-1_20_5.mcfunction` - Minecraft 1.20.5+ commands to recreate all books via `/give` commands
-* `all_books-1_21.mcfunction` - Minecraft 1.21+ commands to recreate all books via `/give` commands
+* *Ready-to-use Minecraft Datapacks* (4 versions, each in its own folder):
+** `readbooks_datapack_1_13/` - Minecraft 1.13-1.14.3 (pack_format 4)
+** `readbooks_datapack_1_14/` - Minecraft 1.14.4-1.19.4 (pack_format 4)
+** `readbooks_datapack_1_20_5/` - Minecraft 1.20.5-1.20.6 (pack_format 41)
+** `readbooks_datapack_1_21/` - Minecraft 1.21+ (pack_format 48)
+** Each datapack contains:
+*** `pack.mcmeta` - Datapack metadata file
+*** `data/readbooks/function/books.mcfunction` - Commands to recreate all books
+*** `data/readbooks/function/signs.mcfunction` - Commands to recreate all signs
 * `logs.txt` - program debug logs
 * `summary.txt`
 ** Breakdown by container type (chests, shulker boxes, villagers, etc.)
 ** Breakdown by location type (block entities, entities, players)
 ** Processing time and performance metrics
+
+=== Using the Datapacks in Minecraft
+
+The generated datapacks can be directly copied into your Minecraft world:
+
+. *Locate your world's datapacks folder:*
++
+* Windows: `%appdata%\.minecraft\saves\YourWorldName\datapacks\`
+* Mac: `~/Library/Application Support/minecraft/saves/YourWorldName/datapacks/`
+* Linux: `~/.minecraft/saves/YourWorldName/datapacks/`
+
+. *Copy the appropriate datapack folder* for your Minecraft version:
++
+[source,bash]
+----
+# Example: For Minecraft 1.21+
+cp -r ReadBooks/YYYY-MM-DD/readbooks_datapack_1_21 ~/.minecraft/saves/YourWorldName/datapacks/
+----
+
+. *In Minecraft, reload datapacks:*
++
+[source,mcfunction]
+----
+/reload
+----
++
+You should see a message confirming the datapack was loaded.
+
+. *Run the function to get all books:*
++
+[source,mcfunction]
+----
+/function readbooks:books
+----
++
+This will give you all extracted books.
+
+. *Run the function to place all signs:*
++
+[source,mcfunction]
+----
+/function readbooks:signs
+----
++
+This will place all signs starting at your current position.
+
+TIP: Choose the datapack version that matches your Minecraft version for best compatibility!
 
 == Development
 
