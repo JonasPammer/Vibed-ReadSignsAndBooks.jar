@@ -790,6 +790,232 @@ class ReadBooksIntegrationSpec extends Specification {
         copyTestWorldData(worldInfo.resourcePath)
     }
 
+    def "should create sign mcfunction files for all Minecraft versions"() {
+        given: 'test worlds with signs'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'sign mcfunction files are created for all versions'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+            runReadBooksProgram()
+
+            ['1_13', '1_14', '1_20', '1_20_5', '1_21'].every { version ->
+                Path mcfunctionFile = outputDir.resolve("all_signs-${version}.mcfunction")
+                assert Files.exists(mcfunctionFile), "Missing sign mcfunction file for version ${version}"
+                assert Files.isRegularFile(mcfunctionFile)
+
+                // File should have content
+                assert Files.size(mcfunctionFile) > 0, "Empty sign mcfunction file for version ${version}"
+            }
+            true
+        }
+    }
+
+    def "should have correct number of sign commands in each mcfunction file"() {
+        given: 'test worlds with signs'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'each sign mcfunction file has correct number of commands'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+            runReadBooksProgram()
+
+            // Count sign commands in each version
+            ['1_13', '1_14', '1_20', '1_20_5', '1_21'].every { version ->
+                Path mcfunctionFile = outputDir.resolve("all_signs-${version}.mcfunction")
+                String content = mcfunctionFile.text
+                List<String> commands = content.readLines().findAll { it.trim() && it.startsWith('setblock') }
+
+                // Should have at least as many commands as expected signs
+                assert commands.size() >= worldInfo.signCount,
+                    "Version ${version} has ${commands.size()} commands, expected at least ${worldInfo.signCount}"
+            }
+            true
+        }
+    }
+
+    def "should generate clickEvent in sign commands for all versions"() {
+        given: 'test worlds with signs'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'sign commands contain clickEvent structure'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+            runReadBooksProgram()
+
+            // Verify 1.13 format
+            Path mcfunction13 = outputDir.resolve("all_signs-1_13.mcfunction")
+            String firstCommand13 = mcfunction13.text.readLines().find { it.startsWith('setblock') }
+            assert firstCommand13 != null, "No setblock command found in 1_13"
+            assert firstCommand13.contains('clickEvent'), "1.13 sign command missing clickEvent"
+            assert firstCommand13.contains('action') && firstCommand13.contains('run_command'), "1.13 clickEvent missing action"
+            assert firstCommand13.contains('tellraw'), "1.13 clickEvent missing tellraw command"
+
+            // Verify 1.14 format
+            Path mcfunction14 = outputDir.resolve("all_signs-1_14.mcfunction")
+            String firstCommand14 = mcfunction14.text.readLines().find { it.startsWith('setblock') }
+            assert firstCommand14 != null, "No setblock command found in 1_14"
+            assert firstCommand14.contains('clickEvent'), "1.14 sign command missing clickEvent"
+            assert firstCommand14.contains('action') && firstCommand14.contains('run_command'), "1.14 clickEvent missing action"
+
+            // Verify 1.20 format
+            Path mcfunction20 = outputDir.resolve("all_signs-1_20.mcfunction")
+            String firstCommand20 = mcfunction20.text.readLines().find { it.startsWith('setblock') }
+            assert firstCommand20 != null, "No setblock command found in 1_20"
+            assert firstCommand20.contains('clickEvent'), "1.20 sign command missing clickEvent"
+
+            // Verify 1.20.5 format
+            Path mcfunction205 = outputDir.resolve("all_signs-1_20_5.mcfunction")
+            String firstCommand205 = mcfunction205.text.readLines().find { it.startsWith('setblock') }
+            assert firstCommand205 != null, "No setblock command found in 1_20_5"
+            assert firstCommand205.contains('clickEvent'), "1.20.5 sign command missing clickEvent"
+            assert firstCommand205.contains('action') && firstCommand205.contains('run_command'), "1.20.5 clickEvent missing action"
+
+            // Verify 1.21 format
+            Path mcfunction21 = outputDir.resolve("all_signs-1_21.mcfunction")
+            String firstCommand21 = mcfunction21.text.readLines().find { it.startsWith('setblock') }
+            assert firstCommand21 != null, "No setblock command found in 1_21"
+            assert firstCommand21.contains('clickEvent'), "1.21 sign command missing clickEvent"
+
+            true
+        }
+    }
+
+    def "should embed original coordinates in sign clickEvent"() {
+        given: 'test worlds with signs'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'clickEvent contains original sign coordinates'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+            runReadBooksProgram()
+
+            // Check 1.20.5 format (easiest to parse)
+            Path mcfunction205 = outputDir.resolve("all_signs-1_20_5.mcfunction")
+            String firstCommand = mcfunction205.text.readLines().find { it.startsWith('setblock') }
+            assert firstCommand != null
+
+            // Should contain "Sign from (X Y Z)" in the tellraw
+            assert firstCommand.contains('Sign from ('), "Missing coordinate display in tellraw"
+
+            // Should contain "/tp @s" teleport command
+            assert firstCommand.contains('/tp @s'), "Missing teleport command in clickEvent"
+
+            // Extract coordinates from tellraw message
+            def signFromMatch = (firstCommand =~ /Sign from \((-?\d+) (-?\d+) (-?\d+)\)/)
+            assert signFromMatch.find(), "Could not find 'Sign from (X Y Z)' pattern"
+
+            // Extract coordinates from teleport command
+            def tpMatch = (firstCommand =~ /\/tp @s (-?\d+) (-?\d+) (-?\d+)/)
+            assert tpMatch.find(), "Could not find '/tp @s X Y Z' pattern"
+
+            // Coordinates in tellraw and tp should match
+            assert signFromMatch.group(1) == tpMatch.group(1), "X coordinate mismatch"
+            assert signFromMatch.group(2) == tpMatch.group(2), "Y coordinate mismatch"
+            assert signFromMatch.group(3) == tpMatch.group(3), "Z coordinate mismatch"
+
+            true
+        }
+    }
+
+    def "should have nested clickEvent structure sign to tellraw to teleport"() {
+        given: 'test worlds with signs'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'clickEvent properly nested: sign → tellraw → tp'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+            runReadBooksProgram()
+
+            // Test 1.20.5 format for clarity
+            Path mcfunction205 = outputDir.resolve("all_signs-1_20_5.mcfunction")
+            String firstCommand = mcfunction205.text.readLines().find { it.startsWith('setblock') }
+            assert firstCommand != null
+
+            // Structure should be:
+            // 1. Sign text has clickEvent
+            // 2. clickEvent runs /tellraw command
+            // 3. tellraw message has its own clickEvent
+            // 4. That clickEvent runs /tp command
+
+            // Verify sign has clickEvent that runs tellraw
+            assert firstCommand.contains('clickEvent') && firstCommand.contains('action') &&
+                   firstCommand.contains('run_command') && firstCommand.contains('/tellraw'),
+                "Sign clickEvent should run tellraw command"
+
+            // Verify tellraw message contains its own clickEvent for teleport
+            assert firstCommand =~ /tellraw.*clickEvent.*\/tp/,
+                "tellraw message should contain clickEvent for teleport"
+
+            // Verify gray color for coordinate text
+            assert firstCommand.contains('gray'),
+                "tellraw coordinate message should be gray"
+
+            true
+        }
+    }
+
+    def "should only add clickEvent to first line of sign"() {
+        given: 'test worlds with signs'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'only first line has clickEvent, other lines are plain text'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+            runReadBooksProgram()
+
+            // Check 1.13 format (Text1, Text2, Text3, Text4)
+            Path mcfunction13 = outputDir.resolve("all_signs-1_13.mcfunction")
+            String firstCommand = mcfunction13.text.readLines().find { it.startsWith('setblock') }
+            assert firstCommand != null
+
+            // Text1 should have clickEvent
+            def text1Match = (firstCommand =~ /Text1:'([^']+)'/)
+            assert text1Match.find(), "Could not find Text1 field"
+            String text1Content = text1Match.group(1)
+            assert text1Content.contains('clickEvent'), "Text1 should have clickEvent"
+
+            // Text2, Text3, Text4 should NOT have clickEvent (if they exist)
+            def text2Match = (firstCommand =~ /Text2:'([^']+)'/)
+            if (text2Match.find()) {
+                String text2Content = text2Match.group(1)
+                assert !text2Content.contains('clickEvent'), "Text2 should not have clickEvent"
+            }
+
+            def text3Match = (firstCommand =~ /Text3:'([^']+)'/)
+            if (text3Match.find()) {
+                String text3Content = text3Match.group(1)
+                assert !text3Content.contains('clickEvent'), "Text3 should not have clickEvent"
+            }
+
+            def text4Match = (firstCommand =~ /Text4:'([^']+)'/)
+            if (text4Match.find()) {
+                String text4Content = text4Match.group(1)
+                assert !text4Content.contains('clickEvent'), "Text4 should not have clickEvent"
+            }
+
+            true
+        }
+    }
+
     /**
      * Discover all test worlds in resources folder.
      * Test worlds must be named with pattern: WORLDNAME-BOOKCOUNT-SIGNCOUNT
