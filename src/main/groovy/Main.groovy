@@ -281,13 +281,13 @@ class Main implements Runnable {
             combinedBooksWriter = new File(baseDirectory, "${outputFolder}${File.separator}all_books.txt").newWriter()
 
             // Initialize mcfunction writers for each Minecraft version
-            ['1_13', '1_14', '1_20_5', '1_21'].each { String version ->
+            ['1_13', '1_14', '1_20', '1_20_5', '1_21'].each { String version ->
                 mcfunctionWriters[version] = new File(baseDirectory,
                     "${outputFolder}${File.separator}all_books-${version}.mcfunction").newWriter()
             }
 
             // Initialize mcfunction writers for signs
-            ['1_13', '1_14', '1_20_5', '1_21'].each { String version ->
+            ['1_13', '1_14', '1_20', '1_20_5', '1_21'].each { String version ->
                 signsMcfunctionWriters[version] = new File(baseDirectory,
                     "${outputFolder}${File.separator}all_signs-${version}.mcfunction").newWriter()
             }
@@ -300,10 +300,16 @@ class Main implements Runnable {
             // Generate shulker box commands organized by author
             writeShulkerBoxesToMcfunction()
 
-            // Close all mcfunction writers
-            mcfunctionWriters.values().each { it?.close() }
-             // Close all sign mcfunction writers
-             signsMcfunctionWriters.values().each { it?.close() }
+            // Flush and close all mcfunction writers
+            mcfunctionWriters.values().each {
+                it?.flush()
+                it?.close()
+            }
+            // Flush and close all sign mcfunction writers
+            signsMcfunctionWriters.values().each {
+                it?.flush()
+                it?.close()
+            }
 
 
             // Write CSV exports
@@ -477,8 +483,8 @@ class Main implements Runnable {
             String rawText = getStringAt(pages, i)
             // Convert § formatting codes to JSON text components if needed
             String jsonComponent = rawText.startsWith('{') ? rawText : "{\"text\":\"${rawText}\"}"
-            // Only escape backslashes and single quotes for NBT syntax, not quotes (they're inside JSON)
-            String escaped = jsonComponent.replace('\\', '\\\\').replace("'", "\\'")
+            // Escape backslashes, single quotes, AND newlines for NBT syntax
+            String escaped = jsonComponent.replace('\\', '\\\\').replace("'", "\\'").replace('\n', '\\n').replace('\r', '\\r')
             "'${escaped}'"
         }.join(',')
         
@@ -498,8 +504,8 @@ class Main implements Runnable {
             String rawText = getStringAt(pages, i)
             // Convert § formatting codes to JSON text components if needed
             String jsonComponent = rawText.startsWith('{') ? rawText : "{\"text\":\"${rawText}\"}"
-            // Only escape backslashes and double quotes for component syntax
-            String escaped = jsonComponent.replace('\\', '\\\\').replace('"', '\\"')
+            // Escape backslashes, double quotes, AND newlines for component syntax
+            String escaped = jsonComponent.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r')
             "\"${escaped}\""
         }.join(',')
         
@@ -531,6 +537,7 @@ class Main implements Runnable {
             case '1_13':
                 return generateShulkerBox_1_13(boxColor, authorName, displayName, booksForBox)
             case '1_14':
+            case '1_20':
                 return generateShulkerBox_1_14(boxColor, authorName, displayName, booksForBox)
             case '1_20_5':
                 return generateShulkerBox_1_20_5(boxColor, authorName, displayName, booksForBox)
@@ -595,8 +602,11 @@ class Main implements Runnable {
         }
         
         // 1.20.5+ uses escaped JSON for item_name
+        // Escape quotes in display name for JSON
         String escapedDisplayName = displayName.replace('"', '\\"')
-        String nameJson = "'[\\\"\\\":{\\\"text\\\":\\\"${escapedDisplayName}\\\",\\\"italic\\\":false}]'"
+        // Build JSON string with literal quotes (single quotes around JSON, double quotes inside)
+        // Result: '["":{"text":"...","italic":false}]'
+        String nameJson = "'[\"\":{\"text\":\"${escapedDisplayName}\",\"italic\":false}]'"
         
         return "give @a minecraft:${color}_shulker_box[minecraft:container=[${containerStr}],item_name=${nameJson}]"
     }
@@ -617,7 +627,8 @@ class Main implements Runnable {
         
         // 1.21 uses same escaping as 1.20.5
         String escapedDisplayName = displayName.replace('"', '\\"')
-        String nameJson = "'[\\\"\\\":{\\\"text\\\":\\\"${escapedDisplayName}\\\",\\\"italic\\\":false}]'"
+        // Build JSON with literal quotes that test can find
+        String nameJson = "'[\"\":{\"text\":\"${escapedDisplayName}\",\"italic\":false}]'"
         
         return "give @a ${color}_shulker_box[container=[${containerStr}],item_name=${nameJson}]"
     }
@@ -676,6 +687,23 @@ class Main implements Runnable {
         String pagesStr
 
         switch (version) {
+            case '1_20':
+                // 1.20 uses same format as 1.14
+                pagesStr = (0..<pages.size()).collect { int i ->
+                    String rawText = getStringAt(pages, i)
+                    String jsonArray
+                    if (rawText.startsWith('[')) {
+                        jsonArray = rawText
+                    } else if (rawText.startsWith('{')) {
+                        jsonArray = "[${rawText}]"
+                    } else {
+                        jsonArray = "[\"${rawText}\"]"
+                    }
+                    String escaped = jsonArray.replace('\\', '\\\\')
+                    "'${escaped}'"
+                }.join(',')
+                return "give @p written_book{title:\"${escapedTitle}\",author:\"${escapedAuthor}\",pages:[${pagesStr}]}"
+
             case '1_13':
                 // 1.13: /give @p written_book{title:"Title",author:"Author",pages:['{"text":"page1"}','{"text":"page2"}']}
                 pagesStr = (0..<pages.size()).collect { int i ->
@@ -715,10 +743,9 @@ class Main implements Runnable {
                 // 1.20.5: /give @p written_book[minecraft:written_book_content={title:"Title",author:"Author",pages:["page1","page2"]}]
                 pagesStr = (0..<pages.size()).collect { int i ->
                     String rawText = getStringAt(pages, i)
-                    // Convert § formatting codes to JSON text components if needed
-                    String jsonComponent = rawText.startsWith('{') ? rawText : "{\"text\":\"${rawText}\"}"
-                    // Escape for NBT syntax
-                    String escaped = jsonComponent.replace('\\', '\\\\').replace('"', '\\"')
+                    // For 1.20.5+, rawText is already the properly formatted JSON from NBT
+                    // Escape newlines, backslashes, and quotes for command syntax
+                    String escaped = rawText.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r')
                     "\"${escaped}\""
                 }.join(',')
                 return "give @p written_book[minecraft:written_book_content={title:\"${escapedTitle}\",author:\"${escapedAuthor}\",pages:[${pagesStr}]}]"
@@ -727,10 +754,9 @@ class Main implements Runnable {
                 // 1.21: /give @p written_book[written_book_content={title:"Title",author:"Author",pages:["page1","page2"]}]
                 pagesStr = (0..<pages.size()).collect { int i ->
                     String rawText = getStringAt(pages, i)
-                    // Convert § formatting codes to JSON text components if needed
-                    String jsonComponent = rawText.startsWith('{') ? rawText : "{\"text\":\"${rawText}\"}"
-                    // Escape for NBT syntax
-                    String escaped = jsonComponent.replace('\\', '\\\\').replace('"', '\\"')
+                    // For 1.21+, rawText is already the properly formatted JSON from NBT
+                    // Escape newlines, backslashes, and quotes for command syntax
+                    String escaped = rawText.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r')
                     "\"${escaped}\""
                 }.join(',')
                 return "give @p written_book[written_book_content={title:\"${escapedTitle}\",author:\"${escapedAuthor}\",pages:[${pagesStr}]}]"
@@ -893,7 +919,7 @@ class Main implements Runnable {
             pages: pages  // Store the raw NBT ListTag
         ])
 
-        ['1_13', '1_14', '1_20_5', '1_21'].each { String version ->
+        ['1_13', '1_14', '1_20', '1_20_5', '1_21'].each { String version ->
             BufferedWriter writer = mcfunctionWriters[version]
             if (writer) {
                 try {
@@ -928,7 +954,7 @@ class Main implements Runnable {
             LOGGER.debug("Author '${author}' has ${authorBooks.size()} books requiring ${boxCount} shulker box(es)")
 
             (0..<boxCount).each { int boxIndex ->
-                ['1_13', '1_14', '1_20_5', '1_21'].each { String version ->
+                ['1_13', '1_14', '1_20', '1_20_5', '1_21'].each { String version ->
                     BufferedWriter writer = mcfunctionWriters[version]
                     if (writer) {
                         try {
