@@ -142,6 +142,25 @@ java -Xmx10G -jar ReadSignsAndBooks.jar /path/to/world --output-format stendhal
 - **Current:** 1.18, 1.20, 1.20.5, 1.21
 - **Future:** Requires parsing updates for new major versions
 
+### Minecraft Datapack pack_format Quick Reference
+
+**CRITICAL**: pack_format numbers must match Minecraft version for datapacks to load properly.
+
+| pack_format | Minecraft Versions | Directory Name | Our Datapacks |
+|-------------|-------------------|----------------|---------------|
+| 4 | 1.13 – 1.14.4 | `functions/` | ✅ readbooks_datapack_1_13, readbooks_datapack_1_14 |
+| 5 | 1.15 – 1.16.1 | `functions/` | ❌ Not generated |
+| 6-40 | 1.16.2 – 1.20.4 | `functions/` | ❌ Not generated |
+| 41 | 1.20.5 – 1.20.6 | `functions/` | ✅ readbooks_datapack_1_20_5 |
+| 42-47 | Snapshots/Pre-releases | `function/` or `functions/` | ❌ Not generated |
+| 48 | 1.21 – 1.21.1 | `function/` | ✅ readbooks_datapack_1_21 |
+
+**Directory Naming Change**: Minecraft 1.21 snapshot 24w21a changed directory names from plural (`functions/`) to singular (`function/`). See @.kilocode/rules/memory-bank/minecraft-datapacks.md for complete table and details.
+
+**Implementation**: `getPackFormat(version)` method maps version strings to pack_format numbers. `createDatapackStructure(version)` uses version-specific directory naming.
+
+**Source**: https://minecraft.wiki/w/Pack_format (verified 2025-11-18)
+
 ### File System Constraints
 - Cannot process encrypted/compressed world saves
 - Requires read access to playerdata/, region/, entities/ folders
