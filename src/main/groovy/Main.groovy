@@ -772,13 +772,17 @@ class Main implements Runnable {
      * Allocate coordinates for a sign (once per unique text, regardless of versions)
      * Returns a map with {x, z} coordinates
      */
-    static Map<String, Object> allocateSignPosition(List<String> lines) {
+    static Map<String, Object> allocateSignPosition(List<String> lines, List<Object> originalCoords, String signInfo) {
         String signKey = lines.join('|')  // Use text as unique key
         if (!signsByHash.containsKey(signKey)) {
             signsByHash[signKey] = [
                 x: signXCoordinate,
                 z: 0,  // First occurrence at Z 0, duplicates at Z+1, Z+2, etc.
-                lines: lines
+                lines: lines,
+                originalX: originalCoords[0],
+                originalY: originalCoords[1],
+                originalZ: originalCoords[2],
+                signInfo: signInfo
             ]
             signXCoordinate++
         } else {
@@ -804,13 +808,13 @@ class Main implements Runnable {
 
         switch (version) {
             case '1_13':
-                return generateSignCommand_1_13(frontLines, x, z)
+                return generateSignCommand_1_13(frontLines, x, z, position)
             case '1_14':
-                return generateSignCommand_1_14(frontLines, x, z)
+                return generateSignCommand_1_14(frontLines, x, z, position)
             case '1_20':
-                return generateSignCommand_1_20(frontLines, x, z, backLines)
+                return generateSignCommand_1_20(frontLines, x, z, position, backLines)
             case '1_20_5':
-                return generateSignCommand_1_20_5(frontLines, x, z, backLines)
+                return generateSignCommand_1_20_5(frontLines, x, z, position, backLines)
             case '1_21':
                 return generateSignCommand_1_21(frontLines, x, z, position, backLines)
             default:
@@ -820,36 +824,95 @@ class Main implements Runnable {
 
     /**
      * Generate sign for Minecraft 1.13-1.19 (old format with Text1-Text4)
+     *
+     * References:
+     * - Sign NBT format: https://minecraft.wiki/w/Sign#Block_data
+     * - setblock command: https://minecraft.wiki/w/Commands/setblock
+     * - tellraw command: https://minecraft.wiki/w/Commands/tellraw
+     * - JSON text format: https://minecraft.wiki/w/Raw_JSON_text_format
+     * - clickEvent documentation: https://minecraft.wiki/w/Raw_JSON_text_format#Java_Edition
      */
-    static String generateSignCommand_1_13(List<String> lines, int x, int z) {
-        String text1 = escapeForMinecraftCommand(lines.size() > 0 ? lines[0] : '', '1_13')
-        String text2 = escapeForMinecraftCommand(lines.size() > 1 ? lines[1] : '', '1_13')
-        String text3 = escapeForMinecraftCommand(lines.size() > 2 ? lines[2] : '', '1_13')
-        String text4 = escapeForMinecraftCommand(lines.size() > 3 ? lines[3] : '', '1_13')
-        
-        return "setblock ~${x} ~ ~${z} oak_sign[rotation=0,waterlogged=false]{Text1:'{\"text\":\"${text1}\"}',Text2:'{\"text\":\"${text2}\"}',Text3:'{\"text\":\"${text3}\"}',Text4:'{\"text\":\"${text4}\"}',GlowingText:0} replace"
+    static String generateSignCommand_1_13(List<String> frontLines, int x, int z, Map<String, Object> position) {
+        // Extract original world coordinates for clickEvent
+        int origX = position.originalX as int
+        int origY = position.originalY as int
+        int origZ = position.originalZ as int
+
+        // Create tellraw command that displays coordinates and allows teleporting
+        // Format: /tellraw @s {"text":"...", "color":"...", "clickEvent":{"action":"run_command","value":"..."}}
+        // The tellraw itself has a clickEvent that runs /tp command to teleport player to original location
+        String tellrawCmd = "/tellraw @s {\\\\\\\"text\\\\\\\":\\\\\\\"Sign from (${origX} ${origY} ${origZ})\\\\\\\",\\\\\\\"color\\\\\\\":\\\\\\\"gray\\\\\\\",\\\\\\\"clickEvent\\\\\\\":{\\\\\\\"action\\\\\\\":\\\\\\\"run_command\\\\\\\",\\\\\\\"value\\\\\\\":\\\\\\\"/tp @s ${origX} ${origY} ${origZ}\\\\\\\"}}"
+
+        // Add clickEvent to first line if it has text
+        // Format: {"text":"...", "clickEvent":{"action":"run_command","value":"..."}}
+        String text1 = escapeForMinecraftCommand(frontLines.size() > 0 ? frontLines[0] : '', '1_13')
+        String text1Json = text1 ? "{\\\"text\\\":\\\"${text1}\\\",\\\"clickEvent\\\":{\\\"action\\\":\\\"run_command\\\",\\\"value\\\":\\\"${tellrawCmd}\\\"}}" : "{\\\"text\\\":\\\"${text1}\\\"}"
+
+        String text2 = escapeForMinecraftCommand(frontLines.size() > 1 ? frontLines[1] : '', '1_13')
+        String text3 = escapeForMinecraftCommand(frontLines.size() > 2 ? frontLines[2] : '', '1_13')
+        String text4 = escapeForMinecraftCommand(frontLines.size() > 3 ? frontLines[3] : '', '1_13')
+
+        return "setblock ~${x} ~ ~${z} oak_sign[rotation=0,waterlogged=false]{Text1:'${text1Json}',Text2:'{\"text\":\"${text2}\"}',Text3:'{\"text\":\"${text3}\"}',Text4:'{\"text\":\"${text4}\"}',GlowingText:0} replace"
     }
 
     /**
      * Generate sign for Minecraft 1.14-1.19 (old format)
+     *
+     * References:
+     * - Sign NBT format (1.14+): https://minecraft.wiki/w/Sign#Block_data
+     * - Raw JSON text changes in 1.14: https://minecraft.wiki/w/Raw_JSON_text_format#History
+     * - 1.14 changed text component format to use array syntax: ["",{"text":"..."}]
      */
-    static String generateSignCommand_1_14(List<String> lines, int x, int z) {
-        String text1 = escapeForMinecraftCommand(lines.size() > 0 ? lines[0] : '', '1_14')
-        String text2 = escapeForMinecraftCommand(lines.size() > 1 ? lines[1] : '', '1_14')
-        String text3 = escapeForMinecraftCommand(lines.size() > 2 ? lines[2] : '', '1_14')
-        String text4 = escapeForMinecraftCommand(lines.size() > 3 ? lines[3] : '', '1_14')
-        
-        return "setblock ~${x} ~ ~${z} oak_sign[rotation=0,waterlogged=false]{Text1:'[\\\"\\\":{\\\"text\\\":\\\"${text1}\\\"}]',Text2:'[\\\"\\\":{\\\"text\\\":\\\"${text2}\\\"}]',Text3:'[\\\"\\\":{\\\"text\\\":\\\"${text3}\\\"}]',Text4:'[\\\"\\\":{\\\"text\\\":\\\"${text4}\\\"}]',GlowingText:0} replace"
+    static String generateSignCommand_1_14(List<String> frontLines, int x, int z, Map<String, Object> position) {
+        // Extract original world coordinates for clickEvent
+        int origX = position.originalX as int
+        int origY = position.originalY as int
+        int origZ = position.originalZ as int
+
+        // Create tellraw command that displays coordinates and allows teleporting
+        // Note: 1.14 requires additional escaping due to array format
+        String tellrawCmd = "/tellraw @s {\\\\\\\\\\\\\\\"text\\\\\\\\\\\\\\\":\\\\\\\\\\\\\\\"Sign from (${origX} ${origY} ${origZ})\\\\\\\\\\\\\\\",\\\\\\\\\\\\\\\"color\\\\\\\\\\\\\\\":\\\\\\\\\\\\\\\"gray\\\\\\\\\\\\\\\",\\\\\\\\\\\\\\\"clickEvent\\\\\\\\\\\\\\\":{\\\\\\\\\\\\\\\"action\\\\\\\\\\\\\\\":\\\\\\\\\\\\\\\"run_command\\\\\\\\\\\\\\\",\\\\\\\\\\\\\\\"value\\\\\\\\\\\\\\\":\\\\\\\\\\\\\\\"/tp @s ${origX} ${origY} ${origZ}\\\\\\\\\\\\\\\"}}"
+
+        // Add clickEvent to first line if it has text
+        // 1.14 format: ["",{"text":"...","clickEvent":{...}}]
+        String text1 = escapeForMinecraftCommand(frontLines.size() > 0 ? frontLines[0] : '', '1_14')
+        String text1Json = text1 ? "[\\\"\\\":{\\\"text\\\":\\\"${text1}\\\",\\\"clickEvent\\\":{\\\"action\\\":\\\"run_command\\\",\\\"value\\\":\\\"${tellrawCmd}\\\"}}]" : "[\\\"\\\":{\\\"text\\\":\\\"${text1}\\\"}]"
+
+        String text2 = escapeForMinecraftCommand(frontLines.size() > 1 ? frontLines[1] : '', '1_14')
+        String text3 = escapeForMinecraftCommand(frontLines.size() > 2 ? frontLines[2] : '', '1_14')
+        String text4 = escapeForMinecraftCommand(frontLines.size() > 3 ? frontLines[3] : '', '1_14')
+
+        return "setblock ~${x} ~ ~${z} oak_sign[rotation=0,waterlogged=false]{Text1:'${text1Json}',Text2:'[\\\"\\\":{\\\"text\\\":\\\"${text2}\\\"}]',Text3:'[\\\"\\\":{\\\"text\\\":\\\"${text3}\\\"}]',Text4:'[\\\"\\\":{\\\"text\\\":\\\"${text4}\\\"}]',GlowingText:0} replace"
     }
 
     /**
      * Generate sign for Minecraft 1.20 (new front_text/back_text format)
+     *
+     * References:
+     * - Sign format changes in 1.20: https://minecraft.wiki/w/Sign#History (Java Edition 1.20 section)
+     * - New front_text/back_text structure: https://minecraft.wiki/w/Sign#Block_data
+     * - Signs now support text on both sides with separate front_text and back_text NBT compounds
+     * - Each side has: messages (array of 4 text components), has_glowing_text (byte), color (string)
      */
-    static String generateSignCommand_1_20(List<String> frontLines, int x, int z, List<String> backLines = null) {
+    static String generateSignCommand_1_20(List<String> frontLines, int x, int z, Map<String, Object> position, List<String> backLines = null) {
+        // Extract original world coordinates for clickEvent
+        int origX = position.originalX as int
+        int origY = position.originalY as int
+        int origZ = position.originalZ as int
+
+        // Create tellraw command that displays coordinates and allows teleporting
+        String tellrawCmd = "/tellraw @s {\\\\\\\\\\\\\\\"text\\\\\\\\\\\\\\\":\\\\\\\\\\\\\\\"Sign from (${origX} ${origY} ${origZ})\\\\\\\\\\\\\\\",\\\\\\\\\\\\\\\"color\\\\\\\\\\\\\\\":\\\\\\\\\\\\\\\"gray\\\\\\\\\\\\\\\",\\\\\\\\\\\\\\\"clickEvent\\\\\\\\\\\\\\\":{\\\\\\\\\\\\\\\"action\\\\\\\\\\\\\\\":\\\\\\\\\\\\\\\"run_command\\\\\\\\\\\\\\\",\\\\\\\\\\\\\\\"value\\\\\\\\\\\\\\\":\\\\\\\\\\\\\\\"/tp @s ${origX} ${origY} ${origZ}\\\\\\\\\\\\\\\"}}"
+
         String frontMessages = (0..3).collect { int i ->
             String line = i < frontLines.size() ? frontLines[i] : ''
             String escaped = escapeForMinecraftCommand(line, '1_20')
-            "'[\\\"\\\":{\\\"text\\\":\\\"${escaped}\\\"}]'"
+            // Add clickEvent to first line
+            // Format: ["",{"text":"...","clickEvent":{...}}]
+            if (i == 0 && line) {
+                "'[\\\"\\\":{\\\"text\\\":\\\"${escaped}\\\",\\\"clickEvent\\\":{\\\"action\\\":\\\"run_command\\\",\\\"value\\\":\\\"${tellrawCmd}\\\"}}]'"
+            } else {
+                "'[\\\"\\\":{\\\"text\\\":\\\"${escaped}\\\"}]'"
+            }
         }.join(',')
         
         // Generate back_text messages if provided, otherwise empty array
@@ -869,12 +932,35 @@ class Main implements Runnable {
 
     /**
      * Generate sign for Minecraft 1.20.5+ (new front_text/back_text with component format)
+     *
+     * References:
+     * - Sign text component changes (1.20.5): https://minecraft.wiki/w/Sign#History (see 24w09a snapshot)
+     * - Text components simplified: messages now use [[{"text":"..."}]] instead of ["",{"text":"..."}]
+     * - Discussion on format changes: https://bugs.mojang.com/browse/MC-268359
+     * - clickEvent on signs: Clicking the sign text triggers the clickEvent action
+     * - The clickEvent runs a tellraw that shows original coordinates with its own clickEvent for teleportation
      */
-    static String generateSignCommand_1_20_5(List<String> frontLines, int x, int z, List<String> backLines = null) {
+    static String generateSignCommand_1_20_5(List<String> frontLines, int x, int z, Map<String, Object> position, List<String> backLines = null) {
+        // Extract original world coordinates for clickEvent
+        int origX = position.originalX as int
+        int origY = position.originalY as int
+        int origZ = position.originalZ as int
+
+        // Create tellraw command that displays coordinates and allows teleporting
+        // This command will be executed when player clicks on the sign's first line
+        // Format: /tellraw @s {"text":"Sign from (X Y Z)","color":"gray","clickEvent":{"action":"run_command","value":"/tp @s X Y Z"}}
+        String tellrawCmd = "/tellraw @s {\\\"text\\\":\\\"Sign from (${origX} ${origY} ${origZ})\\\",\\\"color\\\":\\\"gray\\\",\\\"clickEvent\\\":{\\\"action\\\":\\\"run_command\\\",\\\"value\\\":\\\"/tp @s ${origX} ${origY} ${origZ}\\\"}}"
+
         String frontMessages = (0..3).collect { int i ->
             String line = i < frontLines.size() ? frontLines[i] : ''
             String escaped = escapeForMinecraftCommand(line, '1_20_5')
-            '[[{"text":"' + escaped + '"}]]'
+            // Add clickEvent to first line
+            // 1.20.5+ format: [[{"text":"...","clickEvent":{...}}]]
+            if (i == 0 && line) {
+                '[[{"text":"' + escaped + '","clickEvent":{"action":"run_command","value":"' + tellrawCmd + '"}}]]'
+            } else {
+                '[[{"text":"' + escaped + '"}]]'
+            }
         }.join(',')
         
         // Generate back_text messages if provided, otherwise empty array
@@ -896,21 +982,25 @@ class Main implements Runnable {
      * Generate sign for Minecraft 1.21+ (same as 1.20.5)
      */
     static String generateSignCommand_1_21(List<String> frontLines, int x, int z, Map<String, Object> position, List<String> backLines = null) {
-        return generateSignCommand_1_20_5(frontLines, x, z, backLines)
+        return generateSignCommand_1_20_5(frontLines, x, z, position, backLines)
     }
 
     /**
      * Write a sign command to all sign mcfunction version files (with deduplication)
      * @param frontLines List of front text lines (required)
+     * @param signInfo Sign info string containing coordinates (required for clickEvent)
      * @param backLines List of back text lines (optional, can be null or empty)
      */
-    static void writeSignToMcfunction(List<String> frontLines, List<String> backLines = null) {
+    static void writeSignToMcfunction(List<String> frontLines, String signInfo, List<String> backLines = null) {
         if (!frontLines || frontLines.size() == 0) {
             return
         }
 
+        // Extract original world coordinates from signInfo
+        List<Object> originalCoords = extractSignCoordinates(signInfo)
+
         // Allocate coordinates once for all versions
-        Map<String, Object> position = allocateSignPosition(frontLines)
+        Map<String, Object> position = allocateSignPosition(frontLines, originalCoords, signInfo)
 
         ['1_13', '1_14', '1_20', '1_20_5', '1_21'].each { String version ->
             BufferedWriter writer = signsMcfunctionWriters[version]
@@ -2112,7 +2202,7 @@ class Main implements Runnable {
 
         // Write to file with delimiter between lines
          // Write sign to mcfunction files
-         writeSignToMcfunction([line1, line2, line3, line4])
+         writeSignToMcfunction([line1, line2, line3, line4], signInfo)
 
         signWriter.with {
             write(signInfo)
@@ -2191,8 +2281,7 @@ class Main implements Runnable {
         List<String> paddedLines = extractedFrontLines.collect { String text -> padSignLine(text) }
         
         // Write sign to mcfunction files (preserve back_text if it exists)
-        writeSignToMcfunction(extractedFrontLines, extractedBackLines)
-        
+        writeSignToMcfunction(extractedFrontLines, signInfo, extractedBackLines)
         signWriter.write(signInfo)
         paddedLines.eachWithIndex { String text, int index ->
             signWriter.write(text)

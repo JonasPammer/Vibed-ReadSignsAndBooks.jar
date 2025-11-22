@@ -37,10 +37,15 @@ ReadSignsAndBooks.jar provides a straightforward CLI tool that:
 - **Stendhal JSON** - Structured format preserving all metadata (author, title, pages)
 - **CSV** - Tabular format for spreadsheet analysis
 - **Combined Text** - Plain text with book/sign separation for quick reading
-- **Minecraft Commands** - Four version-specific mcfunction files (1.13+, 1.14+, 1.20.5+, 1.21+) containing `/give` commands to recreate all books in-game
+- **Minecraft Commands - Books** - Four version-specific mcfunction files (1.13+, 1.14+, 1.20.5+, 1.21+) containing `/give` commands to recreate all books in-game
   - Each command includes title, author, and all pages with proper escaping
   - Can be used in command blocks, datapacks, or direct execution
   - Preserves formatting codes and Unicode characters
+- **Minecraft Commands - Signs** - Five version-specific mcfunction files (1.13+, 1.14+, 1.20+, 1.20.5+, 1.21+) containing `/setblock` commands to place all signs
+  - **Interactive clickable signs**: Click first line → displays original world coordinates → click coordinates to teleport
+  - Preserves all four lines of text with proper escaping
+  - Signs placed in organized grid pattern with relative coordinates
+  - Deduplicates identical signs (same text stacked vertically)
 
 ### Content Processing
 - NBT binary format parsing and traversal

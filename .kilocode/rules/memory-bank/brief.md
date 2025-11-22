@@ -43,3 +43,16 @@ Server administrators and archivists need a reliable way to:
 
 ## Author/Team Context
 Community-maintained open-source project with focus on reliability and version compatibility.
+
+## Recent Features & Updates
+- ✅ **Clickable Signs** (GitHub issue #4): mcfunction files now generate interactive signs where clicking the first line shows original world coordinates with clickable teleport functionality
+  - Implemented for all five Minecraft versions (1.13, 1.14, 1.20, 1.20.5, 1.21)
+  - Nested clickEvent structure: Sign → tellraw → teleport
+  - Comprehensive Minecraft wiki documentation in code comments
+
+## Important Development Notes
+- **Java Version**: Requires Java 21+ (JavaFX 21 class files require Java 21)
+- **SDKMAN Users**: Always prefix gradle/java commands with `sdk env;` to ensure correct Java version
+  - Example: `sdk env; ./gradlew build` not just `./gradlew build`
+  - Prevents `UnsupportedClassVersionError` when JavaFX classes are loaded
+- **Test Execution**: Integration tests require Java 21; use `sdk env; ./gradlew test`

@@ -55,7 +55,35 @@
 ### Prerequisites
 - Java Development Kit 21 or later
 - Git (for version control)
+- **SDKMAN** recommended for Java version management (https://sdkman.io)
 - No additional tools required (Gradle wrapper handles builds)
+
+### IMPORTANT: Java Version Management
+**This project requires Java 21.** If using SDKMAN, always prefix gradle/java commands with `sdk env;` to ensure correct Java version:
+
+```bash
+# CORRECT: Use sdk env to load .sdkmanrc configuration
+sdk env; ./gradlew build
+sdk env; ./gradlew test
+sdk env; java -jar ReadSignsAndBooks.jar
+
+# WRONG: Running without sdk env may use wrong Java version
+./gradlew build  # ❌ May fail with UnsupportedClassVersionError
+```
+
+**Why**: The project uses JavaFX 21 which requires Java 21 class files (version 65.0). Running with older Java versions will fail with `UnsupportedClassVersionError`.
+
+**Setup**:
+```bash
+# Install Java 21 via SDKMAN
+sdk install java 21.0.9-tem
+
+# Use Java 21 for current shell
+sdk use java 21.0.9-tem
+
+# Or always use sdk env; prefix
+sdk env; ./gradlew build
+```
 
 ### Local Development
 ```bash
@@ -63,20 +91,20 @@
 git clone <repo-url>
 cd Vibed-ReadSignsAndBooks.jar
 
-# Verify Java version
-java -version
+# Verify Java version (should be 21+)
+sdk env; java -version
 
 # Build project
-./gradlew build
+sdk env; ./gradlew build
 
 # Run tests
-./gradlew test
+sdk env; ./gradlew test
 
 # Create executable JAR
-./gradlew fatJar
+sdk env; ./gradlew fatJar
 
 # Run application
-java -Xmx10G -jar ReadSignsAndBooks.jar /path/to/minecraft/world
+sdk env; java -Xmx10G -jar ReadSignsAndBooks.jar /path/to/minecraft/world
 ```
 
 ## Build System Configuration
