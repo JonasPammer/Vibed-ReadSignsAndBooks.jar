@@ -743,9 +743,10 @@ class Main implements Runnable {
                 // 1.20.5: /give @p written_book[minecraft:written_book_content={title:"Title",author:"Author",pages:["page1","page2"]}]
                 pagesStr = (0..<pages.size()).collect { int i ->
                     String rawText = getStringAt(pages, i)
-                    // For 1.20.5+, rawText is already the properly formatted JSON from NBT
-                    // Escape newlines, backslashes, and quotes for command syntax
-                    String escaped = rawText.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r')
+                    // Convert § formatting codes to JSON text components if needed
+                    String jsonComponent = rawText.startsWith('{') ? rawText : "{\"text\":\"${rawText}\"}"
+                    // Escape for NBT syntax: backslashes, double quotes, and newlines
+                    String escaped = jsonComponent.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r')
                     "\"${escaped}\""
                 }.join(',')
                 return "give @p written_book[minecraft:written_book_content={title:\"${escapedTitle}\",author:\"${escapedAuthor}\",pages:[${pagesStr}]}]"
@@ -754,9 +755,10 @@ class Main implements Runnable {
                 // 1.21: /give @p written_book[written_book_content={title:"Title",author:"Author",pages:["page1","page2"]}]
                 pagesStr = (0..<pages.size()).collect { int i ->
                     String rawText = getStringAt(pages, i)
-                    // For 1.21+, rawText is already the properly formatted JSON from NBT
-                    // Escape newlines, backslashes, and quotes for command syntax
-                    String escaped = rawText.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r')
+                    // Convert § formatting codes to JSON text components if needed
+                    String jsonComponent = rawText.startsWith('{') ? rawText : "{\"text\":\"${rawText}\"}"
+                    // Escape for NBT syntax: backslashes, double quotes, and newlines
+                    String escaped = jsonComponent.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r')
                     "\"${escaped}\""
                 }.join(',')
                 return "give @p written_book[written_book_content={title:\"${escapedTitle}\",author:\"${escapedAuthor}\",pages:[${pagesStr}]}]"
@@ -792,8 +794,8 @@ class Main implements Runnable {
      * Supports versions: 1.12-1.19, 1.20, 1.21.5+
      * Places signs at incrementing X coordinates, with Z offset for duplicates
      */
-    static String generateSignCommand(List<String> lines, Map<String, Object> position, String version) {
-        if (!lines || lines.size() == 0) {
+    static String generateSignCommand(List<String> frontLines, Map<String, Object> position, String version, List<String> backLines = null) {
+        if (!frontLines || frontLines.size() == 0) {
             return ''
         }
 
@@ -802,15 +804,15 @@ class Main implements Runnable {
 
         switch (version) {
             case '1_13':
-                return generateSignCommand_1_13(lines, x, z)
+                return generateSignCommand_1_13(frontLines, x, z)
             case '1_14':
-                return generateSignCommand_1_14(lines, x, z)
+                return generateSignCommand_1_14(frontLines, x, z)
             case '1_20':
-                return generateSignCommand_1_20(lines, x, z)
+                return generateSignCommand_1_20(frontLines, x, z, backLines)
             case '1_20_5':
-                return generateSignCommand_1_20_5(lines, x, z)
+                return generateSignCommand_1_20_5(frontLines, x, z, backLines)
             case '1_21':
-                return generateSignCommand_1_21(lines, x, z)
+                return generateSignCommand_1_21(frontLines, x, z, position, backLines)
             default:
                 return ''
         }
@@ -843,52 +845,78 @@ class Main implements Runnable {
     /**
      * Generate sign for Minecraft 1.20 (new front_text/back_text format)
      */
-    static String generateSignCommand_1_20(List<String> lines, int x, int z) {
+    static String generateSignCommand_1_20(List<String> frontLines, int x, int z, List<String> backLines = null) {
         String frontMessages = (0..3).collect { int i ->
-            String line = i < lines.size() ? lines[i] : ''
+            String line = i < frontLines.size() ? frontLines[i] : ''
             String escaped = escapeForMinecraftCommand(line, '1_20')
             "'[\\\"\\\":{\\\"text\\\":\\\"${escaped}\\\"}]'"
         }.join(',')
         
-        return "setblock ~${x} ~ ~${z} oak_sign[rotation=0,waterlogged=false]{front_text:{messages:[${frontMessages}],has_glowing_text:0},back_text:{messages:[],has_glowing_text:0},is_waxed:0} replace"
+        // Generate back_text messages if provided, otherwise empty array
+        String backMessages
+        if (backLines && backLines.any { it }) {
+            backMessages = (0..3).collect { int i ->
+                String line = i < backLines.size() ? backLines[i] : ''
+                String escaped = escapeForMinecraftCommand(line, '1_20')
+                "'[\\\"\\\":{\\\"text\\\":\\\"${escaped}\\\"}]'"
+            }.join(',')
+        } else {
+            backMessages = "''[\\\"\\\":{\\\"text\\\":\\\"\\\"}]'', ''[\\\"\\\":{\\\"text\\\":\\\"\\\"}]'', ''[\\\"\\\":{\\\"text\\\":\\\"\\\"}]'', ''[\\\"\\\":{\\\"text\\\":\\\"\\\"}]''"
+        }
+        
+        return "setblock ~${x} ~ ~${z} oak_sign[rotation=0,waterlogged=false]{front_text:{messages:[${frontMessages}],has_glowing_text:0},back_text:{messages:[${backMessages}],has_glowing_text:0},is_waxed:0} replace"
     }
 
     /**
      * Generate sign for Minecraft 1.20.5+ (new front_text/back_text with component format)
      */
-    static String generateSignCommand_1_20_5(List<String> lines, int x, int z) {
+    static String generateSignCommand_1_20_5(List<String> frontLines, int x, int z, List<String> backLines = null) {
         String frontMessages = (0..3).collect { int i ->
-            String line = i < lines.size() ? lines[i] : ''
+            String line = i < frontLines.size() ? frontLines[i] : ''
             String escaped = escapeForMinecraftCommand(line, '1_20_5')
             '[[{"text":"' + escaped + '"}]]'
         }.join(',')
         
-        return "setblock ~${x} ~ ~${z} oak_sign[rotation=0,waterlogged=false]{front_text:{messages:[${frontMessages}],has_glowing_text:0},back_text:{messages:[],has_glowing_text:0},is_waxed:0} replace"
+        // Generate back_text messages if provided, otherwise empty array
+        String backMessages
+        if (backLines && backLines.any { it }) {
+            backMessages = (0..3).collect { int i ->
+                String line = i < backLines.size() ? backLines[i] : ''
+                String escaped = escapeForMinecraftCommand(line, '1_20_5')
+                '[[{"text":"' + escaped + '"}]]'
+            }.join(',')
+        } else {
+            backMessages = '[[{"text":""}]], [[{"text":""}]], [[{"text":""}]], [[{"text":""}]]'
+        }
+        
+        return "setblock ~${x} ~ ~${z} oak_sign[rotation=0,waterlogged=false]{front_text:{messages:[${frontMessages}],has_glowing_text:0},back_text:{messages:[${backMessages}],has_glowing_text:0},is_waxed:0} replace"
     }
 
     /**
      * Generate sign for Minecraft 1.21+ (same as 1.20.5)
      */
-    static String generateSignCommand_1_21(List<String> lines, int x, int z) {
-        return generateSignCommand_1_20_5(lines, x, z)
+    static String generateSignCommand_1_21(List<String> frontLines, int x, int z, Map<String, Object> position, List<String> backLines = null) {
+        return generateSignCommand_1_20_5(frontLines, x, z, backLines)
     }
 
     /**
      * Write a sign command to all sign mcfunction version files (with deduplication)
+     * @param frontLines List of front text lines (required)
+     * @param backLines List of back text lines (optional, can be null or empty)
      */
-    static void writeSignToMcfunction(List<String> lines) {
-        if (!lines || lines.size() == 0) {
+    static void writeSignToMcfunction(List<String> frontLines, List<String> backLines = null) {
+        if (!frontLines || frontLines.size() == 0) {
             return
         }
 
         // Allocate coordinates once for all versions
-        Map<String, Object> position = allocateSignPosition(lines)
+        Map<String, Object> position = allocateSignPosition(frontLines)
 
         ['1_13', '1_14', '1_20', '1_20_5', '1_21'].each { String version ->
             BufferedWriter writer = signsMcfunctionWriters[version]
             if (writer) {
                 try {
-                    String command = generateSignCommand(lines, position, version)
+                    String command = generateSignCommand(frontLines, position, version, backLines)
                     if (command) {
                         writer.writeLine(command)
                     }
@@ -2122,26 +2150,37 @@ class Main implements Runnable {
         LOGGER.debug('parseSignNew() - Extracting text from new format sign')
 
         CompoundTag frontText = getCompoundTag(tileEntity, 'front_text')
-        ListTag<?> messages = getListTag(frontText, 'messages')
+        ListTag<?> frontMessages = getListTag(frontText, 'messages')
 
-        if (messages.size() == 0) {
-            LOGGER.debug('No messages found, returning')
+        if (frontMessages.size() == 0) {
+            LOGGER.debug('No front messages found, returning')
             return
         }
 
-        List<String> signLines = (0..3).collect { int i -> getStringAt(messages, i) }
+        List<String> frontSignLines = (0..3).collect { int i -> getStringAt(frontMessages, i) }
 
-        String hash = signInfo + signLines.join('')
+        // Also read back_text if it exists
+        List<String> backSignLines = null
+        CompoundTag backText = getCompoundTag(tileEntity, 'back_text')
+        if (backText) {
+            ListTag<?> backMessages = getListTag(backText, 'messages')
+            if (backMessages && backMessages.size() > 0) {
+                backSignLines = (0..3).collect { int i -> getStringAt(backMessages, i) }
+            }
+        }
+
+        String hash = signInfo + frontSignLines.join('')
         if (!signHashes.add(hash)) {
             LOGGER.debug('Sign is duplicate, skipping')
             return
         }
 
         // Extract sign text
-        List<String> extractedLines = signLines.collect { String line -> extractSignLineText(line) }
+        List<String> extractedFrontLines = frontSignLines.collect { String line -> extractSignLineText(line) }
+        List<String> extractedBackLines = backSignLines ? backSignLines.collect { String line -> extractSignLineText(line) } : null
 
         // Check if sign is completely empty
-        if (extractedLines.every { it.isEmpty() }) {
+        if (extractedFrontLines.every { it.isEmpty() }) {
             emptySignsRemoved++
             List<Object> coords = extractSignCoordinates(signInfo)
             LOGGER.debug("Removed empty sign at coordinates: ${coords[0]}, ${coords[1]}, ${coords[2]}")
@@ -2149,10 +2188,10 @@ class Main implements Runnable {
         }
 
         // Pad lines to 15 characters and write to file with delimiter
-        List<String> paddedLines = extractedLines.collect { String text -> padSignLine(text) }
+        List<String> paddedLines = extractedFrontLines.collect { String text -> padSignLine(text) }
         
-        // Write sign to mcfunction files
-        writeSignToMcfunction(extractedLines)
+        // Write sign to mcfunction files (preserve back_text if it exists)
+        writeSignToMcfunction(extractedFrontLines, extractedBackLines)
         
         signWriter.write(signInfo)
         paddedLines.eachWithIndex { String text, int index ->
