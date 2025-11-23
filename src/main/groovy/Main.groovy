@@ -401,7 +401,7 @@ class Main implements Runnable {
 
             // Create datapack structures and initialize mcfunction writers for each Minecraft version
             LOGGER.info("Creating Minecraft datapacks...")
-            ['1_13', '1_14', '1_20', '1_20_5', '1_21'].each { String version ->
+            ['1_13', '1_14', '1_20_5', '1_21'].each { String version ->
                 // Create datapack directory structure
                 File functionFolder = createDatapackStructure(version)
 
@@ -1042,7 +1042,7 @@ class Main implements Runnable {
         // Allocate coordinates once for all versions
         Map<String, Object> position = allocateSignPosition(frontLines)
 
-        ['1_13', '1_14', '1_20', '1_20_5', '1_21'].each { String version ->
+        ['1_13', '1_14', '1_20_5', '1_21'].each { String version ->
             BufferedWriter writer = signsMcfunctionWriters[version]
             if (writer) {
                 try {
@@ -1077,7 +1077,7 @@ class Main implements Runnable {
             pages: pages  // Store the raw NBT ListTag
         ])
 
-        ['1_13', '1_14', '1_20', '1_20_5', '1_21'].each { String version ->
+        ['1_13', '1_14', '1_20_5', '1_21'].each { String version ->
             BufferedWriter writer = mcfunctionWriters[version]
             if (writer) {
                 try {
@@ -1112,7 +1112,7 @@ class Main implements Runnable {
             LOGGER.debug("Author '${author}' has ${authorBooks.size()} books requiring ${boxCount} shulker box(es)")
 
             (0..<boxCount).each { int boxIndex ->
-                ['1_13', '1_14', '1_20', '1_20_5', '1_21'].each { String version ->
+                ['1_13', '1_14', '1_20_5', '1_21'].each { String version ->
                     BufferedWriter writer = mcfunctionWriters[version]
                     if (writer) {
                         try {
