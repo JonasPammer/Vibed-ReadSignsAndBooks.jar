@@ -75,6 +75,8 @@ class Main implements Runnable {
         'light_gray', 'cyan', 'purple', 'blue',
         'brown', 'green', 'red', 'black'
     ]
+    // Supported datapack / mcfunction targets. Order matters for file creation.
+    public static final List<String> DATAPACK_VERSIONS = ['1_13', '1_14', '1_20_5', '1_21'].asImmutable()
 
     @Option(names = ['-w', '--world'], description = 'Specify custom world directory')
     static String customWorldDirectory
@@ -252,7 +254,7 @@ class Main implements Runnable {
 
         // CRITICAL: Pre-1.21 uses "functions" (plural), 1.21+ uses "function" (singular)
         // This changed in Minecraft Java Edition 1.21 snapshot 24w21a
-        String functionDirName = (version == '1_21') ? 'function' : 'functions'
+        String functionDirName = getFunctionDirectoryName(version)
         File functionFolder = new File(namespaceFolder, functionDirName)
 
         // Create all directories
@@ -260,6 +262,14 @@ class Main implements Runnable {
 
         LOGGER.debug("Created datapack structure: ${datapackRoot.absolutePath} with ${functionDirName}/ directory")
         return functionFolder
+    }
+
+    /**
+     * Determine the correct datapack function directory name for a given version.
+     * 1.21+ uses the new singular `function/` naming from snapshot 24w21a.
+     */
+    static String getFunctionDirectoryName(String version) {
+        return (version == '1_21') ? 'function' : 'functions'
     }
 
     /**
@@ -299,9 +309,7 @@ class Main implements Runnable {
         switch (version) {
             case '1_13':
             case '1_14':
-                return 4  // Minecraft 1.13-1.14.4
-            case '1_20':
-                return 15  // Minecraft 1.20-1.20.4
+                return 4  // Minecraft 1.13-1.19.4
             case '1_20_5':
                 return 41  // Minecraft 1.20.5-1.20.6
             case '1_21':
@@ -328,8 +336,6 @@ class Main implements Runnable {
                 return 'Minecraft 1.13-1.14.3 (uses pack_format 4, functions/ directory)'
             case '1_14':
                 return 'Minecraft 1.14.4-1.19.4 (uses pack_format 4, functions/ directory)'
-            case '1_20':
-                return 'Minecraft 1.20-1.20.4 (uses pack_format 15, functions/ directory)'
             case '1_20_5':
                 return 'Minecraft 1.20.5-1.20.6 (uses pack_format 41, functions/ directory)'
             case '1_21':
@@ -401,7 +407,7 @@ class Main implements Runnable {
 
             // Create datapack structures and initialize mcfunction writers for each Minecraft version
             LOGGER.info("Creating Minecraft datapacks...")
-            ['1_13', '1_14', '1_20', '1_20_5', '1_21'].each { String version ->
+            DATAPACK_VERSIONS.each { String version ->
                 // Create datapack directory structure
                 File functionFolder = createDatapackStructure(version)
 
@@ -667,7 +673,6 @@ class Main implements Runnable {
             case '1_13':
                 return generateShulkerBox_1_13(boxColor, authorName, displayName, booksForBox)
             case '1_14':
-            case '1_20':
                 return generateShulkerBox_1_14(boxColor, authorName, displayName, booksForBox)
             case '1_20_5':
                 return generateShulkerBox_1_20_5(boxColor, authorName, displayName, booksForBox)
@@ -817,23 +822,6 @@ class Main implements Runnable {
         String pagesStr
 
         switch (version) {
-            case '1_20':
-                // 1.20 uses same format as 1.14
-                pagesStr = (0..<pages.size()).collect { int i ->
-                    String rawText = getStringAt(pages, i)
-                    String jsonArray
-                    if (rawText.startsWith('[')) {
-                        jsonArray = rawText
-                    } else if (rawText.startsWith('{')) {
-                        jsonArray = "[${rawText}]"
-                    } else {
-                        jsonArray = "[\"${rawText}\"]"
-                    }
-                    String escaped = jsonArray.replace('\\', '\\\\')
-                    "'${escaped}'"
-                }.join(',')
-                return "give @p written_book{title:\"${escapedTitle}\",author:\"${escapedAuthor}\",pages:[${pagesStr}]}"
-
             case '1_13':
                 // 1.13: /give @p written_book{title:"Title",author:"Author",pages:['{"text":"page1"}','{"text":"page2"}']}
                 pagesStr = (0..<pages.size()).collect { int i ->
@@ -937,8 +925,6 @@ class Main implements Runnable {
                 return generateSignCommand_1_13(frontLines, x, z)
             case '1_14':
                 return generateSignCommand_1_14(frontLines, x, z)
-            case '1_20':
-                return generateSignCommand_1_20(frontLines, x, z, backLines)
             case '1_20_5':
                 return generateSignCommand_1_20_5(frontLines, x, z, backLines)
             case '1_21':
@@ -970,31 +956,6 @@ class Main implements Runnable {
         String text4 = escapeForMinecraftCommand(lines.size() > 3 ? lines[3] : '', '1_14')
         
         return "setblock ~${x} ~ ~${z} oak_sign[rotation=0,waterlogged=false]{Text1:'[\\\"\\\":{\\\"text\\\":\\\"${text1}\\\"}]',Text2:'[\\\"\\\":{\\\"text\\\":\\\"${text2}\\\"}]',Text3:'[\\\"\\\":{\\\"text\\\":\\\"${text3}\\\"}]',Text4:'[\\\"\\\":{\\\"text\\\":\\\"${text4}\\\"}]',GlowingText:0} replace"
-    }
-
-    /**
-     * Generate sign for Minecraft 1.20 (new front_text/back_text format)
-     */
-    static String generateSignCommand_1_20(List<String> frontLines, int x, int z, List<String> backLines = null) {
-        String frontMessages = (0..3).collect { int i ->
-            String line = i < frontLines.size() ? frontLines[i] : ''
-            String escaped = escapeForMinecraftCommand(line, '1_20')
-            "'[\\\"\\\":{\\\"text\\\":\\\"${escaped}\\\"}]'"
-        }.join(',')
-        
-        // Generate back_text messages if provided, otherwise empty array
-        String backMessages
-        if (backLines && backLines.any { it }) {
-            backMessages = (0..3).collect { int i ->
-                String line = i < backLines.size() ? backLines[i] : ''
-                String escaped = escapeForMinecraftCommand(line, '1_20')
-                "'[\\\"\\\":{\\\"text\\\":\\\"${escaped}\\\"}]'"
-            }.join(',')
-        } else {
-            backMessages = "''[\\\"\\\":{\\\"text\\\":\\\"\\\"}]'', ''[\\\"\\\":{\\\"text\\\":\\\"\\\"}]'', ''[\\\"\\\":{\\\"text\\\":\\\"\\\"}]'', ''[\\\"\\\":{\\\"text\\\":\\\"\\\"}]''"
-        }
-        
-        return "setblock ~${x} ~ ~${z} oak_sign[rotation=0,waterlogged=false]{front_text:{messages:[${frontMessages}],has_glowing_text:0},back_text:{messages:[${backMessages}],has_glowing_text:0},is_waxed:0} replace"
     }
 
     /**
@@ -1042,7 +1003,7 @@ class Main implements Runnable {
         // Allocate coordinates once for all versions
         Map<String, Object> position = allocateSignPosition(frontLines)
 
-        ['1_13', '1_14', '1_20', '1_20_5', '1_21'].each { String version ->
+        DATAPACK_VERSIONS.each { String version ->
             BufferedWriter writer = signsMcfunctionWriters[version]
             if (writer) {
                 try {
@@ -1077,7 +1038,7 @@ class Main implements Runnable {
             pages: pages  // Store the raw NBT ListTag
         ])
 
-        ['1_13', '1_14', '1_20', '1_20_5', '1_21'].each { String version ->
+        DATAPACK_VERSIONS.each { String version ->
             BufferedWriter writer = mcfunctionWriters[version]
             if (writer) {
                 try {
@@ -1112,7 +1073,7 @@ class Main implements Runnable {
             LOGGER.debug("Author '${author}' has ${authorBooks.size()} books requiring ${boxCount} shulker box(es)")
 
             (0..<boxCount).each { int boxIndex ->
-                ['1_13', '1_14', '1_20', '1_20_5', '1_21'].each { String version ->
+                DATAPACK_VERSIONS.each { String version ->
                     BufferedWriter writer = mcfunctionWriters[version]
                     if (writer) {
                         try {

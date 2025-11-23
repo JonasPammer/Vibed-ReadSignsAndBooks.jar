@@ -24,3 +24,8 @@ String functionDirName = (version == '1_21') ? 'function' : 'functions'
 **DO NOT** hardcode `function/` for all versions - this will break pre-1.21 datapacks!
 
 See @.kilocode/rules/memory-bank/minecraft-datapacks.md for complete technical reference.
+
+## Datapack Guardrails
+
+- Always consult @.kilocode/rules/memory-bank/minecraft-datapacks.md before touching datapack code. That document is the single source of truth for pack formats, directory names, and command syntax.
+- Only generate and test the versions listed in `Main.DATAPACK_VERSIONS` (`1_13`, `1_14`, `1_20_5`, `1_21`). Adding/removing versions requires updating the constant, integration tests, and this file together.

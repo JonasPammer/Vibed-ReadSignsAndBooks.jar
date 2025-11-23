@@ -153,10 +153,11 @@ Fallback logic: New format attempted first, old format on failure
 - **Decision**: Generate complete, ready-to-use Minecraft datapacks instead of standalone mcfunction files
 - **Rationale**: Users can directly copy datapack folders into their Minecraft world without manual file organization
 - **Implementation**:
-  - `createDatapackStructure(version)` creates proper directory structure with version-specific function directory naming
-  - `createPackMcmeta(version, packFormat, description)` generates valid pack.mcmeta JSON with version-appropriate pack_format
-  - `getPackFormat(version)` maps version identifiers to official Minecraft pack_format numbers (4, 41, 48)
-  - `getVersionDescription(version)` provides human-readable version ranges for pack.mcmeta descriptions
+    - `Main.DATAPACK_VERSIONS` is a single immutable list (`['1_13', '1_14', '1_20_5', '1_21']`) that drives every datapack loop. Adding a new datapack requires updating this constant, docs, and tests—no hidden arrays remain.
+    - `createDatapackStructure(version)` + `getFunctionDirectoryName(version)` enforce the plural/singular `function(s)/` rule from @.kilocode/rules/memory-bank/minecraft-datapacks.md.
+    - `createPackMcmeta(version, packFormat, description)` writes JSON with the correct `pack_format` and descriptive text so users (and CI) can verify they picked the right folder without opening Minecraft.
+    - `getPackFormat(version)` maps version identifiers to official Minecraft pack_format numbers (4, 41, 48).
+    - `getVersionDescription(version)` provides human-readable version ranges for pack.mcmeta descriptions and is also surfaced in README instructions.
 - **CRITICAL: Directory Naming Change in 1.21**:
   - **Pre-1.21 (1.13-1.20.6)**: Uses `functions/` directory (PLURAL)
   - **1.21+**: Uses `function/` directory (SINGULAR)
@@ -187,7 +188,7 @@ Fallback logic: New format attempted first, old format on failure
   - 1.20.5-1.20.6: pack_format 41 (functions/ directory)
   - 1.21+: pack_format 48 (function/ directory)
 - **User Experience**: Copy entire folder to `world/datapacks/`, run `/reload`, then `/function readbooks:books` or `/function readbooks:signs`
-- **Testing**: Dedicated integration tests verify datapack structure, pack.mcmeta validity, and function file creation for all versions with correct directory naming
+- **Testing**: `ReadBooksIntegrationSpec` now asserts there are *exactly* four datapack folders, verifies `pack.mcmeta` `pack_format` + description strings, and inspects both `books.mcfunction` and `signs.mcfunction` contents for every supported version. These tests catch regressions such as extra folders or incorrect directory naming before release.
 
 ## File Structure & Organization
 
