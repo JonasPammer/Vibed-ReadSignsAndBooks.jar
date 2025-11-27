@@ -220,6 +220,125 @@ class Main implements Runnable {
         }
     }
 
+    /**
+     * Create datapack directory structure for a specific Minecraft version
+     *
+     * Structure for 1.21+:
+     * readbooks_datapack_VERSION/
+     * ├── pack.mcmeta
+     * └── data/
+     *     └── readbooks/
+     *         └── function/
+     *             ├── books.mcfunction
+     *             └── signs.mcfunction
+     *
+     * Structure for pre-1.21:
+     * readbooks_datapack_VERSION/
+     * ├── pack.mcmeta
+     * └── data/
+     *     └── readbooks/
+     *         └── functions/  (note: plural)
+     *             ├── books.mcfunction
+     *             └── signs.mcfunction
+     *
+     * @param version Version identifier (e.g., '1_13', '1_14', '1_20_5', '1_21')
+     * @return The function directory File object
+     */
+    static File createDatapackStructure(String version) {
+        String datapackName = "readbooks_datapack_${version}"
+        File datapackRoot = new File(baseDirectory, "${outputFolder}${File.separator}${datapackName}")
+        File dataFolder = new File(datapackRoot, "data")
+        File namespaceFolder = new File(dataFolder, "readbooks")
+
+        // CRITICAL: Pre-1.21 uses "functions" (plural), 1.21+ uses "function" (singular)
+        // This changed in Minecraft Java Edition 1.21 snapshot 24w21a
+        String functionDirName = (version == '1_21') ? 'function' : 'functions'
+        File functionFolder = new File(namespaceFolder, functionDirName)
+
+        // Create all directories
+        functionFolder.mkdirs()
+
+        LOGGER.debug("Created datapack structure: ${datapackRoot.absolutePath} with ${functionDirName}/ directory")
+        return functionFolder
+    }
+
+    /**
+     * Create pack.mcmeta file for a datapack
+     *
+     * @param version Version identifier (e.g., '1_13', '1_14', '1_20_5', '1_21')
+     * @param packFormat The pack_format number for this Minecraft version
+     * @param description Human-readable description of the datapack
+     */
+    static void createPackMcmeta(String version, int packFormat, String description) {
+        String datapackName = "readbooks_datapack_${version}"
+        File datapackRoot = new File(baseDirectory, "${outputFolder}${File.separator}${datapackName}")
+        File packMcmetaFile = new File(datapackRoot, "pack.mcmeta")
+
+        // Create pack.mcmeta JSON content
+        Map<String, Object> packData = [
+            pack: [
+                pack_format: packFormat,
+                description: description
+            ]
+        ]
+
+        packMcmetaFile.withWriter('UTF-8') { BufferedWriter writer ->
+            writer.write(new groovy.json.JsonBuilder(packData).toPrettyString())
+        }
+
+        LOGGER.debug("Created pack.mcmeta for ${datapackName} with pack_format ${packFormat}")
+    }
+
+    /**
+     * Get pack_format number for a Minecraft version
+     *
+     * @param version Version identifier (e.g., '1_13', '1_14', '1_20_5', '1_21')
+     * @return The appropriate pack_format number
+     */
+    static int getPackFormat(String version) {
+        switch (version) {
+            case '1_13':
+            case '1_14':
+                return 4  // Minecraft 1.13-1.14.4
+            case '1_20':
+                return 15  // Minecraft 1.20-1.20.4
+            case '1_20_5':
+                return 41  // Minecraft 1.20.5-1.20.6
+            case '1_21':
+                return 48  // Minecraft 1.21+
+            default:
+                LOGGER.warn("Unknown version ${version}, defaulting to pack_format 48")
+                return 48
+        }
+    }
+
+    /**
+     * Get human-readable Minecraft version range for description
+     *
+     * IMPORTANT: These descriptions reflect COMMAND COMPATIBILITY, not pack_format compatibility.
+     * The datapacks use specific pack_format numbers but the commands inside work across
+     * broader version ranges due to command syntax changes being independent of pack format.
+     *
+     * @param version Version identifier (e.g., '1_13', '1_14', '1_20_5', '1_21')
+     * @return Human-readable version string
+     */
+    static String getVersionDescription(String version) {
+        switch (version) {
+            case '1_13':
+                return 'Minecraft 1.13-1.14.3 (uses pack_format 4, functions/ directory)'
+            case '1_14':
+                return 'Minecraft 1.14.4-1.19.4 (uses pack_format 4, functions/ directory)'
+            case '1_20':
+                return 'Minecraft 1.20-1.20.4 (uses pack_format 15, functions/ directory)'
+            case '1_20_5':
+                return 'Minecraft 1.20.5-1.20.6 (uses pack_format 41, functions/ directory)'
+            case '1_21':
+                return 'Minecraft 1.21+ (uses pack_format 48, function/ directory)'
+            default:
+                return "Minecraft ${version}"
+        }
+    }
+
     static void runExtraction() {
         // Reset state
         [bookHashes, signHashes, booksByContainerType, booksByLocationType, bookMetadataList, bookCsvData, signCsvData, booksByAuthor, signsByHash].each { collection -> collection.clear() }
@@ -231,7 +350,7 @@ class Main implements Runnable {
         baseDirectory = customWorldDirectory ?: System.getProperty('user.dir')
         dateStamp = new SimpleDateFormat('yyyy-MM-dd', Locale.US).format(new Date())
         outputFolder = customOutputDirectory ?: "ReadBooks${File.separator}${dateStamp}"
-        
+
         // Extract parent folder for state file (top-level output folder without date stamp)
         if (customOutputDirectory) {
             // If custom directory given, extract parent folder
@@ -241,7 +360,7 @@ class Main implements Runnable {
             // Default is ReadBooks
             outputFolderParent = "ReadBooks"
         }
-        
+
         booksFolder = "${outputFolder}${File.separator}books"
         duplicatesFolder = "${booksFolder}${File.separator}.duplicates"
 
@@ -280,17 +399,28 @@ class Main implements Runnable {
         try {
             combinedBooksWriter = new File(baseDirectory, "${outputFolder}${File.separator}all_books.txt").newWriter()
 
-            // Initialize mcfunction writers for each Minecraft version
-            ['1_13', '1_14', '1_20', '1_20_5', '1_21'].each { String version ->
-                mcfunctionWriters[version] = new File(baseDirectory,
-                    "${outputFolder}${File.separator}all_books-${version}.mcfunction").newWriter()
-            }
+            // Create datapack structures and initialize mcfunction writers for each Minecraft version
+            LOGGER.info("Creating Minecraft datapacks...")
+            ['1_13', '1_14', '1_20_5', '1_21'].each { String version ->
+                // Create datapack directory structure
+                File functionFolder = createDatapackStructure(version)
 
-            // Initialize mcfunction writers for signs
-            ['1_13', '1_14', '1_20', '1_20_5', '1_21'].each { String version ->
-                signsMcfunctionWriters[version] = new File(baseDirectory,
-                    "${outputFolder}${File.separator}all_signs-${version}.mcfunction").newWriter()
+                // Create pack.mcmeta with appropriate pack_format
+                int packFormat = getPackFormat(version)
+                String description = "ReadSignsAndBooks extracted content for ${getVersionDescription(version)}"
+                createPackMcmeta(version, packFormat, description)
+
+                // Initialize book mcfunction writer in datapack/data/readbooks/function/books.mcfunction
+                File booksFile = new File(functionFolder, 'books.mcfunction')
+                mcfunctionWriters[version] = booksFile.newWriter('UTF-8')
+
+                // Initialize signs mcfunction writer in datapack/data/readbooks/function/signs.mcfunction
+                File signsFile = new File(functionFolder, 'signs.mcfunction')
+                signsMcfunctionWriters[version] = signsFile.newWriter('UTF-8')
+
+                LOGGER.info("  ✓ Created datapack for ${getVersionDescription(version)} (pack_format ${packFormat})")
             }
+            LOGGER.info("Datapacks created successfully!")
 
             readPlayerData()
             readSignsAndBooks()
@@ -1002,7 +1132,7 @@ class Main implements Runnable {
         // Allocate coordinates once for all versions
         Map<String, Object> position = allocateSignPosition(frontLines, originalCoords, signInfo)
 
-        ['1_13', '1_14', '1_20', '1_20_5', '1_21'].each { String version ->
+        ['1_13', '1_14', '1_20_5', '1_21'].each { String version ->
             BufferedWriter writer = signsMcfunctionWriters[version]
             if (writer) {
                 try {
@@ -1037,7 +1167,7 @@ class Main implements Runnable {
             pages: pages  // Store the raw NBT ListTag
         ])
 
-        ['1_13', '1_14', '1_20', '1_20_5', '1_21'].each { String version ->
+        ['1_13', '1_14', '1_20_5', '1_21'].each { String version ->
             BufferedWriter writer = mcfunctionWriters[version]
             if (writer) {
                 try {
@@ -1072,7 +1202,7 @@ class Main implements Runnable {
             LOGGER.debug("Author '${author}' has ${authorBooks.size()} books requiring ${boxCount} shulker box(es)")
 
             (0..<boxCount).each { int boxIndex ->
-                ['1_13', '1_14', '1_20', '1_20_5', '1_21'].each { String version ->
+                ['1_13', '1_14', '1_20_5', '1_21'].each { String version ->
                     BufferedWriter writer = mcfunctionWriters[version]
                     if (writer) {
                         try {
