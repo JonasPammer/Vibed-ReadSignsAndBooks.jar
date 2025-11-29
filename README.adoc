@@ -1,5 +1,7 @@
 = Vibed-ReadSignsAndBooks.jar
 
+image:./src/main/resources/icons/icon.svg[ReadSignsAndBooks Icon,150,150,float="right"]
+
 Full attribution go to the source code shared on 2020 by `Matt (/u/worldseed)` in the `r/MinecraftDataMining` 's Discord server.
 Additional Attributions go to https://github.com/TheWilley/Text2Book and https://github.com/ADP424/MinecraftBookConverter.
 

@@ -1,0 +1,191 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Minecraft-style pixelated noise texture -->
+    <pattern id="pixelNoise" x="0" y="0" width="16" height="16" patternUnits="userSpaceOnUse">
+      <rect width="16" height="16" fill="#000" fill-opacity="0.03"/>
+      <rect x="0" y="0" width="8" height="8" fill="#fff" fill-opacity="0.02"/>
+      <rect x="8" y="8" width="8" height="8" fill="#fff" fill-opacity="0.02"/>
+    </pattern>
+    
+    <!-- Book leather gradient -->
+    <linearGradient id="bookLeather" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8B4513"/>
+      <stop offset="50%" stop-color="#654321"/>
+      <stop offset="100%" stop-color="#4A2C17"/>
+    </linearGradient>
+    
+    <!-- Page gradient -->
+    <linearGradient id="pageGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFF8DC"/>
+      <stop offset="100%" stop-color="#F5DEB3"/>
+    </linearGradient>
+    
+    <!-- Oak wood gradient for sign -->
+    <linearGradient id="oakWood" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#C4A35A"/>
+      <stop offset="30%" stop-color="#A68B47"/>
+      <stop offset="70%" stop-color="#8B7335"/>
+      <stop offset="100%" stop-color="#6B5A2A"/>
+    </linearGradient>
+    
+    <!-- Scan beam gradient -->
+    <linearGradient id="scanBeam" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00FF88" stop-opacity="0"/>
+      <stop offset="50%" stop-color="#00FF88" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#00FF88" stop-opacity="0"/>
+    </linearGradient>
+    
+    <!-- Glow filter -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    
+    <!-- Drop shadow -->
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="2" dy="4" stdDeviation="3" flood-color="#000" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+  
+  <!-- Transparent background -->
+  
+  <!-- Open Book - Main Element -->
+  <g filter="url(#shadow)" transform="translate(80, 140)">
+    <!-- Book spine -->
+    <rect x="160" y="0" width="32" height="160" fill="#3D2817" rx="2"/>
+    
+    <!-- Left cover -->
+    <path d="M32 8 L160 0 L160 160 L32 152 Z" fill="url(#bookLeather)"/>
+    <!-- Left cover highlight -->
+    <path d="M32 8 L80 4 L80 156 L32 152 Z" fill="#9B5523" fill-opacity="0.3"/>
+    
+    <!-- Right cover -->
+    <path d="M192 0 L320 8 L320 152 L192 160 Z" fill="url(#bookLeather)"/>
+    <!-- Right cover shadow -->
+    <path d="M272 4 L320 8 L320 152 L272 156 Z" fill="#000" fill-opacity="0.2"/>
+    
+    <!-- Left pages -->
+    <path d="M40 16 L156 8 L156 152 L40 144 Z" fill="url(#pageGrad)"/>
+    <!-- Page lines (text representation) -->
+    <g stroke="#8B7355" stroke-width="2" stroke-linecap="round">
+      <line x1="56" y1="32" x2="140" y2="28"/>
+      <line x1="56" y1="48" x2="130" y2="44"/>
+      <line x1="56" y1="64" x2="136" y2="60"/>
+      <line x1="56" y1="80" x2="120" y2="76"/>
+      <line x1="56" y1="96" x2="138" y2="92"/>
+      <line x1="56" y1="112" x2="128" y2="108"/>
+      <line x1="56" y1="128" x2="134" y2="124"/>
+    </g>
+    
+    <!-- Right pages -->
+    <path d="M196 8 L312 16 L312 144 L196 152 Z" fill="url(#pageGrad)"/>
+    <!-- Page lines (text representation) -->
+    <g stroke="#8B7355" stroke-width="2" stroke-linecap="round">
+      <line x1="212" y1="28" x2="296" y2="32"/>
+      <line x1="212" y1="44" x2="286" y2="48"/>
+      <line x1="212" y1="60" x2="292" y2="64"/>
+      <line x1="212" y1="76" x2="276" y2="80"/>
+      <line x1="212" y1="92" x2="294" y2="96"/>
+      <line x1="212" y1="108" x2="284" y2="112"/>
+      <line x1="212" y1="124" x2="290" y2="128"/>
+    </g>
+  </g>
+  
+  <!-- Minecraft Sign - positioned at top right -->
+  <g filter="url(#shadow)" transform="translate(320, 16)">
+    <!-- Sign post -->
+    <rect x="56" y="96" width="16" height="64" fill="#6B5A2A"/>
+    <rect x="56" y="96" width="8" height="64" fill="#7D6B32"/>
+    
+    <!-- Sign board -->
+    <rect x="8" y="16" width="112" height="80" fill="url(#oakWood)" rx="2"/>
+    <!-- Wood grain lines -->
+    <g stroke="#5A4A22" stroke-width="1" stroke-opacity="0.4">
+      <line x1="8" y1="32" x2="120" y2="32"/>
+      <line x1="8" y1="56" x2="120" y2="56"/>
+      <line x1="8" y1="80" x2="120" y2="80"/>
+    </g>
+    <!-- Sign text lines -->
+    <g stroke="#2D2418" stroke-width="3" stroke-linecap="round">
+      <line x1="24" y1="36" x2="104" y2="36"/>
+      <line x1="24" y1="52" x2="88" y2="52"/>
+      <line x1="24" y1="68" x2="96" y2="68"/>
+      <line x1="24" y1="84" x2="80" y2="84"/>
+    </g>
+    <!-- Board edge highlight -->
+    <rect x="8" y="16" width="112" height="4" fill="#D4B86A" fill-opacity="0.3"/>
+  </g>
+  
+  <!-- Scanning beam effect -->
+  <g filter="url(#glow)">
+    <!-- Horizontal scan line across book -->
+    <rect x="96" y="250" width="320" height="6" fill="url(#scanBeam)" rx="3">
+      <animate attributeName="y" values="180;320;180" dur="2s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.8;1;0.8" dur="2s" repeatCount="indefinite"/>
+    </rect>
+    
+    <!-- Scan particles -->
+    <g fill="#00FF88">
+      <circle cx="140" cy="240" r="3" opacity="0.8">
+        <animate attributeName="cy" values="200;300;200" dur="2s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0;1;0" dur="2s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="256" cy="260" r="2" opacity="0.6">
+        <animate attributeName="cy" values="220;320;220" dur="2s" repeatCount="indefinite" begin="0.3s"/>
+        <animate attributeName="opacity" values="0;0.8;0" dur="2s" repeatCount="indefinite" begin="0.3s"/>
+      </circle>
+      <circle cx="380" cy="250" r="2.5" opacity="0.7">
+        <animate attributeName="cy" values="210;310;210" dur="2s" repeatCount="indefinite" begin="0.6s"/>
+        <animate attributeName="opacity" values="0;0.9;0" dur="2s" repeatCount="indefinite" begin="0.6s"/>
+      </circle>
+    </g>
+  </g>
+  
+  <!-- Binary/text extraction effect - floating Standard Galactic Alphabet characters (Minecraft enchanting table) -->
+  <!-- Easter eggs: "vibe" (vibe coded), "matt" (original author u/worldseed), "sign" (signs extraction) -->
+  <g font-family="monospace" font-size="16" fill="#00FF88" filter="url(#glow)">
+    <text x="100" y="130" opacity="0.7">
+      <animate attributeName="y" values="130;90;130" dur="3s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.7;0;0.7" dur="3s" repeatCount="indefinite"/>
+      ⍊╎ʖᒷ
+    </text>
+    <text x="380" y="280" opacity="0.5">
+      <animate attributeName="y" values="280;240;280" dur="2.5s" repeatCount="indefinite" begin="0.5s"/>
+      <animate attributeName="opacity" values="0.5;0;0.5" dur="2.5s" repeatCount="indefinite" begin="0.5s"/>
+      ᒲᔑℸ ̣ ℸ ̣
+    </text>
+    <text x="70" y="320" opacity="0.6">
+      <animate attributeName="y" values="320;280;320" dur="2.8s" repeatCount="indefinite" begin="1s"/>
+      <animate attributeName="opacity" values="0.6;0;0.6" dur="2.8s" repeatCount="indefinite" begin="1s"/>
+      ᓭ╎⊣リ
+    </text>
+  </g>
+  
+  <!-- Magnifying glass / scanner lens -->
+  <g transform="translate(340, 280)" filter="url(#shadow)">
+    <!-- Handle (moved further out) -->
+    <rect x="64" y="64" width="48" height="16" rx="4" fill="#4A4A4A" transform="rotate(45, 64, 64)"/>
+    <rect x="64" y="64" width="48" height="8" rx="4" fill="#5A5A5A" transform="rotate(45, 64, 64)"/>
+    
+    <!-- Lens ring -->
+    <circle cx="32" cy="32" r="44" fill="none" stroke="#606060" stroke-width="12"/>
+    <circle cx="32" cy="32" r="44" fill="none" stroke="#707070" stroke-width="8"/>
+    
+    <!-- Lens glass -->
+    <circle cx="32" cy="32" r="36" fill="#00FF88" fill-opacity="0.15"/>
+    <circle cx="32" cy="32" r="36" fill="none" stroke="#00FF88" stroke-width="2" opacity="0.6"/>
+    
+    <!-- Lens highlight -->
+    <ellipse cx="20" cy="20" rx="12" ry="8" fill="#fff" fill-opacity="0.2"/>
+  </g>
+  
+  <!-- "JAR" indicator badge - positioned under the book, left-aligned -->
+  <g transform="translate(112, 330)">
+    <rect width="200" height="28" rx="4" fill="#1a1a1a"/>
+    <rect width="200" height="28" rx="4" fill="none" stroke="#00FF88" stroke-width="2" opacity="0.6"/>
+    <text x="10" y="19" font-family="'Courier New', monospace" font-size="12" font-weight="bold" fill="#00FF88">ReadSignsAndBooks.jar</text>
+  </g>
+</svg>
