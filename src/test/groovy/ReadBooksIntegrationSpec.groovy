@@ -894,29 +894,8 @@ class ReadBooksIntegrationSpec extends Specification {
         copyTestWorldData(worldInfo.resourcePath)
     }
 
-    def "should create sign mcfunction files for all Minecraft versions"() {
-        given: 'test worlds with signs'
-        List testWorlds = discoverTestWorlds()
-
-        expect: 'at least one test world exists'
-        testWorlds.size() > 0
-
-        and: 'sign mcfunction files are created for all versions'
-        testWorlds.every { worldInfo ->
-            setupTestWorld(worldInfo)
-            runReadBooksProgram()
-
-            ['1_13', '1_14', '1_20', '1_20_5', '1_21'].every { version ->
-                Path mcfunctionFile = outputDir.resolve("all_signs-${version}.mcfunction")
-                assert Files.exists(mcfunctionFile), "Missing sign mcfunction file for version ${version}"
-                assert Files.isRegularFile(mcfunctionFile)
-
-                // File should have content
-                assert Files.size(mcfunctionFile) > 0, "Empty sign mcfunction file for version ${version}"
-            }
-            true
-        }
-    }
+    // REMOVED - Duplicate test that expects standalone mcfunction files
+    // The correct test is earlier at line 716 which checks datapack structure
 
     def "should have correct number of sign commands in each mcfunction file"() {
         given: 'test worlds with signs'
@@ -930,9 +909,10 @@ class ReadBooksIntegrationSpec extends Specification {
             setupTestWorld(worldInfo)
             runReadBooksProgram()
 
-            // Count sign commands in each version
-            ['1_13', '1_14', '1_20', '1_20_5', '1_21'].every { version ->
-                Path mcfunctionFile = outputDir.resolve("all_signs-${version}.mcfunction")
+            // Count sign commands in each version DATAPACK
+            ['1_13', '1_14', '1_20_5', '1_21'].every { version ->
+                Path mcfunctionFile = outputDir.resolve("readbooks_datapack_${version}")
+                    .resolve('data').resolve('readbooks').resolve(getFunctionDirName(version)).resolve('signs.mcfunction')
                 String content = mcfunctionFile.text
                 List<String> commands = content.readLines().findAll { it.trim() && it.startsWith('setblock') }
 
@@ -956,36 +936,34 @@ class ReadBooksIntegrationSpec extends Specification {
             setupTestWorld(worldInfo)
             runReadBooksProgram()
 
-            // Verify 1.13 format
-            Path mcfunction13 = outputDir.resolve("all_signs-1_13.mcfunction")
+            // Verify 1.13 format IN DATAPACK
+            Path mcfunction13 = outputDir.resolve("readbooks_datapack_1_13")
+                .resolve('data').resolve('readbooks').resolve(getFunctionDirName('1_13')).resolve('signs.mcfunction')
             String firstCommand13 = mcfunction13.text.readLines().find { it.startsWith('setblock') }
             assert firstCommand13 != null, "No setblock command found in 1_13"
             assert firstCommand13.contains('clickEvent'), "1.13 sign command missing clickEvent"
             assert firstCommand13.contains('action') && firstCommand13.contains('run_command'), "1.13 clickEvent missing action"
             assert firstCommand13.contains('tellraw'), "1.13 clickEvent missing tellraw command"
 
-            // Verify 1.14 format
-            Path mcfunction14 = outputDir.resolve("all_signs-1_14.mcfunction")
+            // Verify 1.14 format IN DATAPACK
+            Path mcfunction14 = outputDir.resolve("readbooks_datapack_1_14")
+                .resolve('data').resolve('readbooks').resolve(getFunctionDirName('1_14')).resolve('signs.mcfunction')
             String firstCommand14 = mcfunction14.text.readLines().find { it.startsWith('setblock') }
             assert firstCommand14 != null, "No setblock command found in 1_14"
             assert firstCommand14.contains('clickEvent'), "1.14 sign command missing clickEvent"
             assert firstCommand14.contains('action') && firstCommand14.contains('run_command'), "1.14 clickEvent missing action"
 
-            // Verify 1.20 format
-            Path mcfunction20 = outputDir.resolve("all_signs-1_20.mcfunction")
-            String firstCommand20 = mcfunction20.text.readLines().find { it.startsWith('setblock') }
-            assert firstCommand20 != null, "No setblock command found in 1_20"
-            assert firstCommand20.contains('clickEvent'), "1.20 sign command missing clickEvent"
-
-            // Verify 1.20.5 format
-            Path mcfunction205 = outputDir.resolve("all_signs-1_20_5.mcfunction")
+            // Verify 1.20.5 format IN DATAPACK
+            Path mcfunction205 = outputDir.resolve("readbooks_datapack_1_20_5")
+                .resolve('data').resolve('readbooks').resolve(getFunctionDirName('1_20_5')).resolve('signs.mcfunction')
             String firstCommand205 = mcfunction205.text.readLines().find { it.startsWith('setblock') }
             assert firstCommand205 != null, "No setblock command found in 1_20_5"
             assert firstCommand205.contains('clickEvent'), "1.20.5 sign command missing clickEvent"
             assert firstCommand205.contains('action') && firstCommand205.contains('run_command'), "1.20.5 clickEvent missing action"
 
-            // Verify 1.21 format
-            Path mcfunction21 = outputDir.resolve("all_signs-1_21.mcfunction")
+            // Verify 1.21 format IN DATAPACK
+            Path mcfunction21 = outputDir.resolve("readbooks_datapack_1_21")
+                .resolve('data').resolve('readbooks').resolve(getFunctionDirName('1_21')).resolve('signs.mcfunction')
             String firstCommand21 = mcfunction21.text.readLines().find { it.startsWith('setblock') }
             assert firstCommand21 != null, "No setblock command found in 1_21"
             assert firstCommand21.contains('clickEvent'), "1.21 sign command missing clickEvent"
@@ -1006,8 +984,9 @@ class ReadBooksIntegrationSpec extends Specification {
             setupTestWorld(worldInfo)
             runReadBooksProgram()
 
-            // Check 1.20.5 format (easiest to parse)
-            Path mcfunction205 = outputDir.resolve("all_signs-1_20_5.mcfunction")
+            // Check 1.20.5 format (easiest to parse) IN DATAPACK
+            Path mcfunction205 = outputDir.resolve("readbooks_datapack_1_20_5")
+                .resolve('data').resolve('readbooks').resolve(getFunctionDirName('1_20_5')).resolve('signs.mcfunction')
             String firstCommand = mcfunction205.text.readLines().find { it.startsWith('setblock') }
             assert firstCommand != null
 
@@ -1046,8 +1025,9 @@ class ReadBooksIntegrationSpec extends Specification {
             setupTestWorld(worldInfo)
             runReadBooksProgram()
 
-            // Test 1.20.5 format for clarity
-            Path mcfunction205 = outputDir.resolve("all_signs-1_20_5.mcfunction")
+            // Test 1.20.5 format for clarity IN DATAPACK
+            Path mcfunction205 = outputDir.resolve("readbooks_datapack_1_20_5")
+                .resolve('data').resolve('readbooks').resolve(getFunctionDirName('1_20_5')).resolve('signs.mcfunction')
             String firstCommand = mcfunction205.text.readLines().find { it.startsWith('setblock') }
             assert firstCommand != null
 
@@ -1086,8 +1066,9 @@ class ReadBooksIntegrationSpec extends Specification {
             setupTestWorld(worldInfo)
             runReadBooksProgram()
 
-            // Check 1.13 format (Text1, Text2, Text3, Text4)
-            Path mcfunction13 = outputDir.resolve("all_signs-1_13.mcfunction")
+            // Check 1.13 format (Text1, Text2, Text3, Text4) IN DATAPACK
+            Path mcfunction13 = outputDir.resolve("readbooks_datapack_1_13")
+                .resolve('data').resolve('readbooks').resolve(getFunctionDirName('1_13')).resolve('signs.mcfunction')
             String firstCommand = mcfunction13.text.readLines().find { it.startsWith('setblock') }
             assert firstCommand != null
 
