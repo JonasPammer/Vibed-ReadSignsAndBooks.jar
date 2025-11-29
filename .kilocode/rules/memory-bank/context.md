@@ -15,36 +15,31 @@
 - ✅ Spock integration tests with real-world Minecraft data (1_21_10-44-3 test world)
 - ✅ GitHub Actions CI/CD pipeline with automated JAR commits
 - ✅ Comprehensive documentation and README
-- ✅ **Shulker Box Export Feature** (Version 1.0.1) - Author-organized container export
-  - Deterministic author → color mapping (16 shulker box colors)
-  - Multi-version command generation (1.13, 1.14, 1.20.5, 1.21)
-  - Overflow handling for authors with >27 books (multiple boxes with numbering)
-  - Version-appropriate JSON/NBT syntax for all formats
-  - item_name component displaying author in container UI
-  - 3 new integration tests validating JSON structure, slot capacity, color determinism
-  - All 14 integration tests passing (11 existing + 3 new shulker tests)
-- ✅ **Sign mcfunction File Generation Feature** (Version 1.0.2)
-  - Multi-version setblock command generation (1.13, 1.14, 1.20, 1.20.5, 1.21)
-  - Sign position tracking: unique signs at incrementing X coordinates (~1, ~2, etc.), duplicates offset in Z (~0, ~1, ~2, etc.)
-  - Version-specific NBT formatting for each Minecraft version
-  - All sign NBT data preserved (front_text, back_text, block states, glowing, waxed status)
-  - 3 new integration tests validating sign mcfunction generation, X coordinate incrementing, Z offset deduplication
-  - Regression test assertions for Z coordinate format (line 1: "~ ~0", line 2: "~ ~1", etc.)
-  - All 17 integration tests passing (14 existing + 3 new sign tests)
-- ✅ **Failed Region State File Tracking** (Version 1.0.3)
-  - Persistent state file `.failed_regions_state.json` in output folder
-  - Tracks region/entity files that fail to read across multiple runs
-  - World-aware key system supports processing multiple worlds
-  - Consolidated startup notice displays all known problematic regions
-  - Error suppression: Known failures logged at debug level, new failures at warning level
-  - Automatic recovery tracking: Successfully read regions removed from state file
-  - Dynamic state persistence: State updated only with remaining failures
-  - 16/17 integration tests passing (pre-existing failure unrelated to feature)
+- ✅ **Clickable Signs Feature** (PR #8, Issue #4) - Interactive sign mcfunction generation
+  - Players can click signs to see original world coordinates and teleport back to source location
+  - Implemented for all Minecraft versions (1.13, 1.14, 1.20.5, 1.21)
+  - Nested clickEvent structure: Sign → /tellraw → /tp command
+  - Version-specific JSON escaping (triple-escape for 1.13/1.14, double-escape for 1.20+)
+  - Signs written to `data/readbooks/function/signs.mcfunction` in each datapack
+  - Comprehensive Minecraft wiki documentation in code comments
+  - All integration tests passing
+- ✅ **Complete Datapack Structure Generation** (PR #9, Issue #5) - Ready-to-use Minecraft datapacks
+  - Generate 4 complete datapacks instead of standalone mcfunction files:
+    - `readbooks_datapack_1_13/` - Minecraft 1.13-1.14.3 (pack_format 4)
+    - `readbooks_datapack_1_14/` - Minecraft 1.14.4-1.19.4 (pack_format 4)
+    - `readbooks_datapack_1_20_5/` - Minecraft 1.20.5-1.20.6 (pack_format 41)
+    - `readbooks_datapack_1_21/` - Minecraft 1.21+ (pack_format 48)
+  - Each datapack contains proper directory structure with pack.mcmeta
+  - Version-aware directory naming: pre-1.21 uses `functions/` (plural), 1.21+ uses `function/` (singular)
+  - Users can directly copy datapack folders into world/datapacks/ and use immediately
+  - Comprehensive technical reference added: `.kilocode/rules/memory-bank/minecraft-datapacks.md`
+  - All integration tests passing with datapack structure validation
 
 ## Current Focus / Active Areas
-- **Maintenance Mode**: Monitoring for new Minecraft version releases
-- **Bug Fixes**: Addressing any edge cases in NBT parsing or container handling
-- **Performance Optimization**: Monitoring memory usage on large-scale worlds
+- **Maintenance Mode**: Both major features (clickable signs and datapack structure) complete and merged
+- **Version Monitoring**: Tracking Minecraft version updates for format changes
+- **Testing**: All integration tests passing with expanded coverage for new features
+- **Documentation**: Complete technical reference for Minecraft datapacks maintained
 
 ## Known Issues or Limitations
 - **Monolithic Design**: All code in single Main.groovy file (1637 lines) - refactoring deferred
@@ -54,10 +49,10 @@
 - **Format Version Fallback**: Relies on format detection heuristics for version compatibility
 
 ## Next Planned Work
-- Monitor for Minecraft 1.21+ format changes and adapt parsing logic
-- Consider optional refactoring into modular components if codebase exceeds 2000 lines
-- Evaluate performance improvements for ultra-large worlds
-- Gather community feedback on output formats and usability
+- Monitor for Minecraft 1.22+ format changes and adapt parsing logic
+- Gather community feedback on clickable signs and datapack generation features
+- Consider optional refactoring if codebase grows significantly beyond current size
+- Evaluate performance improvements for ultra-large worlds based on user feedback
 
 ## Team Status
 - **Author**: Community-maintained, open-source
