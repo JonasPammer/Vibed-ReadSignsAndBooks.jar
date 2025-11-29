@@ -192,7 +192,7 @@ runtime {
         
         jvmArgs = [
             '-Xmx10G',
-            '-XX:+UseG16GC',
+            '-XX:+UseG1GC',
             '-XX:MaxGCPauseMillis=200'
         ]
     }
