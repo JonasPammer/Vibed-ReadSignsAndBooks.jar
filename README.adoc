@@ -9,7 +9,22 @@ All changes are just vibe coded with help of Claude 4.5.
 
 == Download
 
-link:https://github.com/JonasPammer/Vibed-ReadSignsAndBooks.jar/releases/latest/download/ReadSignsAndBooks.jar[*Download Latest ReadSignsAndBooks.jar*]
+**Option 1: JAR (All Platforms)** +
+link:https://github.com/JonasPammer/Vibed-ReadSignsAndBooks.jar/releases/latest/download/ReadSignsAndBooks.jar[*Download ReadSignsAndBooks.jar*] - Requires Java 21+
+
+Run with:
+```bash
+java -Xmx10G -jar ReadSignsAndBooks.jar
+```
+
+**Option 2: Windows (No Java Required)** +
+link:https://github.com/JonasPammer/Vibed-ReadSignsAndBooks.jar/releases/latest/download/ReadSignsAndBooks-Windows.zip[*Download ReadSignsAndBooks-Windows.zip*]
+
+1. Extract the ZIP file
+2. Double-click `ReadSignsAndBooks.exe` to open the GUI
+3. Or run from command line: `ReadSignsAndBooks.exe --world "C:\path\to\world"`
+
+The Windows version includes a bundled Java runtime - no Java installation needed!
 
 == Features
 

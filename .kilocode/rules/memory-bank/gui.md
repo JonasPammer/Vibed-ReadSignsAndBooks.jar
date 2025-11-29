@@ -42,6 +42,32 @@ static boolean shouldUseGui(String[] args) {
 - `outputFolder` - Selected output folder File
 - `actualOutputFolder` - Computed output folder for "Open" button
 
+### Custom Application Icon
+**Location:** `src/main/resources/icons/`
+**Integration:** GUI.groovy lines 45-53
+
+**Icon Files:**
+- `icon.svg` - Animated SVG with book, sign, scanner beam, and Galactic Alphabet text (8,662 bytes)
+- `icon-512.png` - High-resolution PNG for GUI window icon (44,521 bytes)
+- `icon.ico` - Multi-resolution Windows icon for EXE packaging (122,625 bytes)
+
+**Implementation:**
+```groovy
+try {
+    def iconStream = getClass().getResourceAsStream('/icons/icon-512.png')
+    if (iconStream) {
+        stage.icons.add(new javafx.scene.image.Image(iconStream))
+    }
+} catch (Exception e) {
+    // Silently fail if icon cannot be loaded - not critical
+}
+```
+
+**Easter Eggs in SVG:**
+- "vibe" (⍊╎ʖᒷ) - Vibe coded attribution
+- "matt" (ᒲᔑℸ ̣ ℸ ̣) - Original author /u/worldseed
+- "sign" (ᓭ╎⊣リ) - Signs extraction feature
+
 ### Key Components
 
 #### 1. Menu Bar

@@ -42,6 +42,16 @@ class GUI extends Application {
         // Apply theme before creating UI (AtlantaFX)
         applyTheme()
 
+        // Set application icon (using 512px for best quality - JavaFX will scale as needed)
+        try {
+            def iconStream = getClass().getResourceAsStream('/icons/icon-512.png')
+            if (iconStream) {
+                stage.icons.add(new javafx.scene.image.Image(iconStream))
+            }
+        } catch (Exception e) {
+            // Silently fail if icon cannot be loaded - not critical
+        }
+
         // Set up GUI log handler
         GuiLogAppender.setLogHandler { message ->
             logArea.appendText(message)

@@ -8,6 +8,7 @@
 
 ## Build-Time Plugins
 - **JavaFX Plugin** 0.1.0 - Manages JavaFX dependencies and modules
+- **Badass Runtime Plugin** 1.13.1 - jpackage wrapper for native distribution
 - **Dependency License Report** 3.0.1 - Auto-generates third-party license reports
   - Plugin: `com.github.jk1.dependency-license-report`
   - Outputs to: `src/main/resources/licenses/THIRD-PARTY-LICENSES.txt`
@@ -112,8 +113,9 @@ sdk env; java -Xmx10G -jar ReadSignsAndBooks.jar /path/to/minecraft/world
 ### Gradle Files
 - **build.gradle** - Main build configuration
   - Dependency declarations
-  - Task definitions (build, test, fatJar)
+  - Task definitions (build, test, fatJar, createWindowsZip)
   - JAR manifest configuration
+  - jpackage configuration for Windows distribution
 - **settings.gradle** - Project settings
 - **gradle/wrapper/** - Gradle wrapper for reproducible builds
 
@@ -121,6 +123,8 @@ sdk env; java -Xmx10G -jar ReadSignsAndBooks.jar /path/to/minecraft/world
 - `./gradlew build` - Compile, package, and run tests
 - `./gradlew test` - Run integration tests only
 - `./gradlew fatJar` - Create standalone JAR with all dependencies
+- `./gradlew jpackageImage` - Create native distribution with bundled JRE
+- `./gradlew createWindowsZip` - Package Windows distribution as ZIP
 - `./gradlew clean` - Remove build artifacts
 - `./gradlew dependencies` - Show dependency tree
 
@@ -129,6 +133,51 @@ sdk env; java -Xmx10G -jar ReadSignsAndBooks.jar /path/to/minecraft/world
 - **Fat JAR:** All dependencies included in single JAR
 - **Auto-location:** JAR auto-copied to project root after build
 - **Size:** Approximately 15-20MB with all dependencies
+
+### Windows Distribution Configuration
+**Location:** `build.gradle` lines 173-223
+
+```gradle
+runtime {
+    options = ['--strip-debug', '--compress', '2', '--no-header-files', '--no-man-pages']
+    
+    modules = [
+        'java.base', 'java.desktop', 'java.logging', 'java.management',
+        'java.naming', 'java.prefs', 'java.sql', 'java.xml', 'jdk.unsupported'
+    ]
+    
+    jpackage {
+        imageName = 'ReadSignsAndBooks'
+        imageOptions = ['--icon', 'src/main/resources/icons/icon.ico']
+        
+        jvmArgs = [
+            '-Xmx10G',
+            '-XX:+UseG1GC',
+            '-XX:MaxGCPauseMillis=200'
+        ]
+    }
+}
+
+task createWindowsZip {
+    dependsOn 'jpackageImage'
+    description = 'Creates Windows distribution ZIP for releases'
+    group = 'distribution'
+    
+    doLast {
+        def jpackageDir = file("$buildDir/build/jpackage/ReadSignsAndBooks")
+        def zipFile = file("ReadSignsAndBooks-Windows.zip")
+        
+        ant.zip(destfile: zipFile.absolutePath, basedir: jpackageDir.absolutePath)
+    }
+}
+```
+
+**Distribution Contents:**
+- `ReadSignsAndBooks.exe` - Launcher executable with custom icon
+- `app/` - Application JAR and dependencies
+- `runtime/` - Bundled Java 21 runtime environment
+
+**User Experience:** Extract ZIP → Double-click EXE (no Java installation required)
 
 ## Runtime Configuration
 
@@ -220,10 +269,21 @@ java -Xmx10G -jar ReadSignsAndBooks.jar /path/to/world --output-format stendhal
 **Location:** `.github/workflows/ci.yml`
 
 ### Pipeline Steps
-1. **Build** - Compile with Gradle
-2. **Test** - Run Spock integration tests (10-minute timeout)
-3. **Package** - Create fat JAR with all dependencies
-4. **Deploy** - Auto-commit JAR to main branch
+1. **Build and Test** (Ubuntu) - Compile with Gradle, run integration tests
+2. **Build Windows ZIP** (Windows) - Create jpackage distribution and ZIP
+3. **Create Release** - Upload both JAR and Windows ZIP to GitHub releases
+
+### Dual Distribution System
+**JAR Distribution:**
+- Cross-platform compatibility
+- Requires Java 21+ installation
+- Smaller download (~15-20MB)
+
+**Windows ZIP Distribution:**
+- Windows-only (EXE + bundled JRE)
+- No Java installation required
+- Larger download (~150MB with JRE)
+- Industry-standard approach (used by IntelliJ IDEA, NetBeans)
 
 ### Triggers
 - Push to main branch
@@ -231,7 +291,8 @@ java -Xmx10G -jar ReadSignsAndBooks.jar /path/to/world --output-format stendhal
 
 ### Artifacts
 - JAR auto-committed to repository
-- Available in GitHub releases section
+- Windows ZIP created for releases
+- Both available in GitHub releases section
 
 ## Dependency Version Management
 
@@ -278,7 +339,7 @@ java -Xmx10G -jar ReadSignsAndBooks.jar /path/to/world --output-format stendhal
 ## Documentation & Resources
 
 ### Project Documentation
-- **README.md** - Usage guide and overview
+- **README.adoc** - Usage guide and overview
 - **Architecture.md** - System design and decisions
 - **This file** - Technical setup and constraints
 
@@ -315,12 +376,22 @@ java -Xmx10G -jar ReadSignsAndBooks.jar /path/to/world --output-format stendhal
 ## Deployment Considerations
 
 ### Distribution Methods
-- GitHub Releases - Tagged releases with JAR artifacts
-- Repository - Latest JAR committed to main branch
-- Maven Central - Not currently published
+- **GitHub Releases** - Automated dual-asset releases (JAR + Windows ZIP)
+- **JAR Distribution** - Cross-platform, requires Java 21+
+- **Windows ZIP Distribution** - Self-contained with bundled JRE
+- **Repository** - Latest JAR committed to main branch (deprecated, use releases)
+- **Maven Central** - Not currently published
 
 ### End-User Requirements
+
+**JAR Distribution:**
 - Java 21 runtime (download from adoptopenjdk.net or oracle.com)
+- 10GB minimum available RAM (for large worlds)
+- Read access to Minecraft world directory
+
+**Windows ZIP Distribution:**
+- Windows operating system
+- No Java installation required (bundled)
 - 10GB minimum available RAM (for large worlds)
 - Read access to Minecraft world directory
 
@@ -328,7 +399,8 @@ java -Xmx10G -jar ReadSignsAndBooks.jar /path/to/world --output-format stendhal
 - [ ] Build succeeds locally
 - [ ] All tests pass (10-minute runtime acceptable)
 - [ ] JAR created and tested
+- [ ] Windows ZIP created and tested
 - [ ] Version number updated in build.gradle
 - [ ] Commit to main triggers CI/CD
 - [ ] GitHub Actions workflow completes successfully
-- [ ] JAR auto-committed to repository
+- [ ] Both JAR and Windows ZIP uploaded to releases

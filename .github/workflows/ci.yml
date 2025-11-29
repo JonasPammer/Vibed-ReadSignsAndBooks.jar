@@ -58,9 +58,37 @@ jobs:
           path: build/libs/ReadSignsAndBooks.jar
           retention-days: 90
 
+  build-windows-zip:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: "temurin"
+          cache: gradle
+
+      - name: Build Windows distribution ZIP
+        uses: gradle/gradle-build-action@v3
+        with:
+          gradle-version: wrapper
+          arguments: clean build createWindowsZip --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-zip-artifact
+          path: ReadSignsAndBooks-Windows.zip
+          retention-days: 90
+
   create-release:
     runs-on: ubuntu-latest
-    needs: build-and-test
+    needs: [build-and-test, build-windows-zip]
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     permissions:
       contents: write
@@ -93,14 +121,31 @@ jobs:
           echo "$COMMIT_MSG" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
+      - name: Download JAR artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: jar-artifact
+          path: build/libs/
+
+      - name: Download Windows ZIP artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-zip-artifact
+          path: ./
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "release-${{ steps.release_info.outputs.date }}"
           name: "Automated Release ${{ steps.release_info.outputs.date }}"
           body: |
-            Old Releases will continously be deleted, please only link to
-            https://github.com/JonasPammer/Vibed-ReadSignsAndBooks.jar/releases/latest/download/ReadSignsAndBooks.jar
+            Old Releases will continously be deleted, please only link to:
+            - JAR: https://github.com/JonasPammer/Vibed-ReadSignsAndBooks.jar/releases/latest/download/ReadSignsAndBooks.jar
+            - Windows: https://github.com/JonasPammer/Vibed-ReadSignsAndBooks.jar/releases/latest/download/ReadSignsAndBooks-Windows.zip
+
+            ## Files
+            - **ReadSignsAndBooks.jar** - Cross-platform JAR file (requires Java 21+)
+            - **ReadSignsAndBooks-Windows.zip** - Windows distribution with bundled JRE (extract and run EXE)
 
             ## Commit Message
             ${{ steps.commit.outputs.message }}
@@ -114,7 +159,9 @@ jobs:
             ---
 
             Commit: ${{ steps.release_info.outputs.sha8 }}
-          files: build/libs/ReadSignsAndBooks.jar
+          files: |
+            build/libs/ReadSignsAndBooks.jar
+            ReadSignsAndBooks-Windows.zip
           make_latest: true
 
       - name: Delete old releases

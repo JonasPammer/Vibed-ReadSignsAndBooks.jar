@@ -34,12 +34,26 @@
   - Users can directly copy datapack folders into world/datapacks/ and use immediately
   - Comprehensive technical reference added: `.kilocode/rules/memory-bank/minecraft-datapacks.md`
   - All integration tests passing with datapack structure validation
+- ✅ **Custom Icon Integration** (November 2025) - Professional branding with animated SVG
+  - Custom icons created by Claude Opus 4.5: animated SVG with book, sign, scanner beam, and Galactic Alphabet text
+  - Icons stored in `src/main/resources/icons/`: icon.svg, icon-512.png, icon.ico
+  - GUI window icon integration in GUI.groovy (lines 45-53)
+  - README.adoc displays animated SVG icon in introduction section
+  - Easter eggs in SVG: "vibe" (vibe coded), "matt" (original author), "sign" (signs extraction)
+- ✅ **Windows Distribution System** (November 2025) - Industry-standard ZIP distribution
+  - jpackage integration via `org.beryx.runtime` plugin (build.gradle lines 173-199)
+  - Automated `createWindowsZip` task creates self-contained Windows distribution
+  - GitHub Actions workflow builds both JAR and Windows ZIP for releases
+  - README.adoc updated with two-option download structure (JAR vs Windows ZIP)
+  - Distribution includes EXE + bundled JRE (no Java installation required)
+  - Windows ZIP available in GitHub releases alongside JAR
 
 ## Current Focus / Active Areas
-- **Maintenance Mode**: Both major features (clickable signs and datapack structure) complete and merged
+- **Maintenance Mode**: All major features complete (clickable signs, datapack structure, Windows distribution)
 - **Version Monitoring**: Tracking Minecraft version updates for format changes
 - **Testing**: All integration tests passing with expanded coverage for new features
-- **Documentation**: Complete technical reference for Minecraft datapacks maintained
+- **Documentation**: Complete technical reference maintained, including Windows distribution system
+- **Icon Branding**: Professional custom icons implemented across GUI and documentation
 
 ## Known Issues or Limitations
 - **Monolithic Design**: All code in single Main.groovy file (1637 lines) - refactoring deferred
@@ -81,4 +95,3 @@
 1. Always include "(ai)" in their commit scope
 2. Document this convention in commit messages when first establishing it
 3. Reference this section if questioned about commit formatting
-
