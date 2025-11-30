@@ -11,30 +11,102 @@ All extracted content is deduplicated by content hash and output to user-selecte
 
 ## Core Components
 
-### Main.groovy (1637 lines)
+### Modular Architecture (Refactored)
+The application uses a modular architecture with Main.groovy as the orchestrator and specialized utility classes for different responsibilities:
+
+### Main.groovy (1812 lines)
 **Location:** `src/main/groovy/Main.groovy`
 
-Single monolithic Groovy file containing all application logic. This is intentional for simplicity and ease of deployment as a standalone JAR.
+Core orchestrator that coordinates extraction phases and delegates to utility modules. Contains CLI parsing, state management, and the three-phase extraction workflow.
 
 **Key Static Components:**
 - `main(String[] args)` - Entry point, CLI argument parsing via Picocli
 - `runExtraction()` - Orchestrates three-phase extraction
-- `extractPlayerData()` - Phase 1: Processes playerdata/*.dat files
-- `extractRegionFiles()` - Phase 2: Scans region/*.mca files for containers
-- `extractEntityFiles()` - Phase 3: Processes entities/*.mca files
+- `readPlayerData()` - Phase 1: Processes playerdata/*.dat files
+- `readSignsAndBooks()` - Phase 2: Scans region/*.mca files for containers
+- `readEntities()` - Phase 3: Processes entities/*.mca files
 - `processContainer()` - Recursive container traversal (handles nesting)
-- `writeOutput()` - Formats and writes results
 
 **Static Field Management:**
 ```groovy
-static Set<String> extractedBooks = [] as Set  // Content-based dedup
-static Set<String> extractedSigns = [] as Set
-static int totalFiles = 0
-static int processedFiles = 0
-static ConsoleProgressBar progressBar = null
+static Set<Integer> bookHashes = [] as Set  // Content-based dedup
+static Set<String> signHashes = [] as Set
+static int bookCounter = 0
+static Map<String, Integer> booksByContainerType = [:]
 ```
 
 Intentional static state simplifies single-threaded processing without complex object threading.
+
+### NbtUtils.groovy (310 lines)
+**Location:** `src/main/groovy/NbtUtils.groovy`
+
+NBT (Named Binary Tag) parsing utilities for Minecraft data structures.
+
+**Key Methods:**
+- `readCompressedNBT(File)` - Read compressed NBT files
+- `hasKey(CompoundTag, String)` - Safe key existence check
+- `getCompoundTag(CompoundTag, String)` - Safe compound tag retrieval
+- `getListTag(CompoundTag, String)` - Safe list tag retrieval
+- `convertNbtToJson(Object)` - Convert NBT to JSON for output
+
+### TextUtils.groovy (308 lines)
+**Location:** `src/main/groovy/TextUtils.groovy`
+
+Text extraction and formatting utilities.
+
+**Key Methods:**
+- `sanitizeFilename(String)` - Clean filenames for filesystem
+- `extractPlayerName(String)` - Parse player names from paths
+- `extractPageText(Object, String)` - Extract text from book pages
+- `extractTextContent(Object)` - Recursive JSON text extraction
+- `removeTextFormatting(String)` - Strip Minecraft formatting codes
+- `padSignLine(String)` - Pad sign lines to consistent width
+
+### MinecraftCommands.groovy (430 lines)
+**Location:** `src/main/groovy/MinecraftCommands.groovy`
+
+Minecraft command generation for books and signs across all versions.
+
+**Key Methods:**
+- `escapeForMinecraftCommand(String, String)` - Version-specific escaping
+- `generateBookCommand(String, String, ListTag, String, int)` - Book give commands
+- `generateBookNBT(String, String, ListTag, String, int)` - NBT format for 1.13/1.14
+- `generateBookComponents(String, String, ListTag, String, int)` - Component format for 1.20.5+
+- `generateSignCommand_1_13/1_14/1_20/1_20_5/1_21()` - Version-specific sign commands
+
+### ShulkerBoxGenerator.groovy (168 lines)
+**Location:** `src/main/groovy/ShulkerBoxGenerator.groovy`
+
+Shulker box command generation organized by author.
+
+**Key Methods:**
+- `getShulkerColorForAuthor(String)` - Deterministic color mapping
+- `generateShulkerBoxCommand(String, List, int, String)` - Create shulker box commands
+- `generateShulkerBox_1_13/1_14/1_20_5/1_21()` - Version-specific formats
+
+### DatapackGenerator.groovy (160 lines)
+**Location:** `src/main/groovy/DatapackGenerator.groovy`
+
+Minecraft datapack structure creation with version-specific directories.
+
+**Key Methods:**
+- `createDatapackStructure(String, String, String)` - Create directory structure
+- `createPackMcmeta(String, String, String, int, String)` - Generate pack.mcmeta
+- `getPackFormat(String)` - Map version to pack_format number
+- `getVersionDescription(String)` - Human-readable version descriptions
+
+**CRITICAL**: Handles `function/` vs `functions/` directory naming for 1.21+ compatibility.
+
+### OutputWriters.groovy (232 lines)
+**Location:** `src/main/groovy/OutputWriters.groovy`
+
+CSV export and summary statistics generation.
+
+**Key Methods:**
+- `writeBooksCSV(String, String, List)` - Export books to CSV
+- `writeSignsCSV(String, String, List)` - Export signs to CSV
+- `escapeCsvField(String)` - CSV field escaping
+- `printSummaryStatistics(...)` - Generate summary report with ASCII tables
 
 ## Data Processing Pipeline
 
@@ -103,11 +175,13 @@ Fallback logic: New format attempted first, old format on failure
 
 ## Architectural Decisions & Rationale
 
-### Monolithic Design
-- **Decision**: Single Main.groovy file instead of modular classes
-- **Rationale**: Simplified deployment (single JAR), easier standalone distribution, clear linear flow for tool purpose
-- **Trade-off**: Not modular, harder to unit test individual components
-- **Future**: Consider refactoring if exceeds 2000 lines
+### Modular Design (Refactored from Monolithic)
+- **Decision**: Split Main.groovy into specialized utility classes while keeping Main as orchestrator
+- **Rationale**: Main.groovy exceeded 2800 lines/28K tokens; needed to reduce for AI assistant context limits
+- **Implementation**: Extracted 6 utility classes (NbtUtils, TextUtils, MinecraftCommands, ShulkerBoxGenerator, DatapackGenerator, OutputWriters)
+- **Result**: Main.groovy reduced from 2809 to 1812 lines (35% reduction), total codebase ~4000 lines across 7 files
+- **Benefits**: Better separation of concerns, easier testing, improved maintainability
+- **Trade-off**: Slightly more complex deployment, but all files still compile into single JAR
 
 ### Static Field State Management
 - **Decision**: Use static fields for global extraction state
@@ -225,11 +299,21 @@ Fallback logic: New format attempted first, old format on failure
 project-root/
 ├── src/
 │   ├── main/groovy/
-│   │   └── Main.groovy (1637 lines - all application logic)
+│   │   ├── Main.groovy (1812 lines - orchestrator and extraction logic)
+│   │   ├── NbtUtils.groovy (310 lines - NBT parsing utilities)
+│   │   ├── TextUtils.groovy (308 lines - text extraction/formatting)
+│   │   ├── MinecraftCommands.groovy (430 lines - command generation)
+│   │   ├── ShulkerBoxGenerator.groovy (168 lines - shulker box commands)
+│   │   ├── DatapackGenerator.groovy (160 lines - datapack structure)
+│   │   ├── OutputWriters.groovy (232 lines - CSV and summary output)
+│   │   ├── GUI.groovy (484 lines - JavaFX GUI)
+│   │   └── GuiLogAppender.groovy (121 lines - GUI log integration)
 │   ├── main/resources/
 │   │   └── logback.xml (Logging configuration)
 │   └── test/groovy/
-│       └── ReadBooksIntegrationSpec.groovy (Spock tests)
+│       ├── ReadBooksIntegrationSpec.groovy (Spock tests)
+│       ├── GuiIntegrationSpec.groovy (GUI tests)
+│       └── GuiFullIntegrationSpec.groovy (Full GUI tests)
 ├── src/test/resources/
 │   └── 1_21_10-44-3/ (Real Minecraft world test data)
 │       ├── region/ (Block containers)
@@ -342,7 +426,7 @@ Main.runExtraction()  // Direct call, avoids System.exit()
 
 ## Future Architectural Considerations
 
-- **Modularization**: Separate NBT parsing, container handling, output formatting into modules if monolith exceeds 2000 lines
+- **Modularization**: ✅ COMPLETED - Extracted 6 utility classes from Main.groovy (NbtUtils, TextUtils, MinecraftCommands, ShulkerBoxGenerator, DatapackGenerator, OutputWriters)
 - **Parallelization**: Process multiple region/entity files concurrently (requires thread-safe deduplication)
 - **Streaming NBT**: Avoid full structure load for large containers
 - **Plugin System**: Allow custom output format extensions

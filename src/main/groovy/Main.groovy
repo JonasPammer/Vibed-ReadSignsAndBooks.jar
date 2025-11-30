@@ -37,10 +37,7 @@ class Main implements Runnable {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(Main)
     private static final JsonSlurper JSON_SLURPER = new JsonSlurper()
-    private static final String[] COLOR_CODES = ['\u00A70', '\u00A71', '\u00A72', '\u00A73', '\u00A74', '\u00A75',
-                                                 '\u00A76', '\u00A77', '\u00A78', '\u00A79', '\u00A7a', '\u00A7b',
-                                                 '\u00A7c', '\u00A7d', '\u00A7e', '\u00A7f', '\u00A7k', '\u00A7l',
-                                                 '\u00A7m', '\u00A7n', '\u00A7o', '\u00A7r']
+    // Note: COLOR_CODES moved to TextUtils.groovy during refactoring
 
     static String baseDirectory = System.getProperty('user.dir')
     static String outputFolder, booksFolder, duplicatesFolder, dateStamp
@@ -74,14 +71,7 @@ class Main implements Runnable {
     static int signXCoordinate = 1  // Current X coordinate for sign placement
 
     static Map<String, List<Map<String, Object>>> booksByAuthor = [:]  // Tracks books by author for shulker generation
-    
-    // 16 Minecraft shulker box colors (deterministic mapping)
-    private static final List<String> SHULKER_COLORS = [
-        'white', 'orange', 'magenta', 'light_blue',
-        'yellow', 'lime', 'pink', 'gray',
-        'light_gray', 'cyan', 'purple', 'blue',
-        'brown', 'green', 'red', 'black'
-    ]
+    // Note: SHULKER_COLORS moved to ShulkerBoxGenerator.groovy during refactoring
 
     @Option(names = ['-w', '--world'], description = 'Specify custom world directory')
     static String customWorldDirectory
@@ -132,16 +122,9 @@ class Main implements Runnable {
         }
     }
 
-    /**
-     * Map author name to a shulker box color deterministically using hash
-     * Uses author name's hash code to select one of 16 colors consistently
-     */
+    // ========== Shulker Box Generation (delegated to ShulkerBoxGenerator) ==========
     static String getShulkerColorForAuthor(String author) {
-        if (!author || author.trim().isEmpty()) {
-            author = 'Unknown'
-        }
-        int colorIndex = Math.abs(author.hashCode() % SHULKER_COLORS.size())
-        return SHULKER_COLORS[colorIndex]
+        return ShulkerBoxGenerator.getShulkerColorForAuthor(author)
     }
 
     /**
@@ -227,123 +210,21 @@ class Main implements Runnable {
         }
     }
 
-    /**
-     * Create datapack directory structure for a specific Minecraft version
-     *
-     * Structure for 1.21+:
-     * readbooks_datapack_VERSION/
-     * ├── pack.mcmeta
-     * └── data/
-     *     └── readbooks/
-     *         └── function/
-     *             ├── books.mcfunction
-     *             └── signs.mcfunction
-     *
-     * Structure for pre-1.21:
-     * readbooks_datapack_VERSION/
-     * ├── pack.mcmeta
-     * └── data/
-     *     └── readbooks/
-     *         └── functions/  (note: plural)
-     *             ├── books.mcfunction
-     *             └── signs.mcfunction
-     *
-     * @param version Version identifier (e.g., '1_13', '1_14', '1_20_5', '1_21')
-     * @return The function directory File object
-     */
+    // ========== Datapack Generation (delegated to DatapackGenerator) ==========
     static File createDatapackStructure(String version) {
-        String datapackName = "readbooks_datapack_${version}"
-        File datapackRoot = new File(baseDirectory, "${outputFolder}${File.separator}${datapackName}")
-        File dataFolder = new File(datapackRoot, "data")
-        File namespaceFolder = new File(dataFolder, "readbooks")
-
-        // CRITICAL: Pre-1.21 uses "functions" (plural), 1.21+ uses "function" (singular)
-        // This changed in Minecraft Java Edition 1.21 snapshot 24w21a
-        String functionDirName = (version == '1_21') ? 'function' : 'functions'
-        File functionFolder = new File(namespaceFolder, functionDirName)
-
-        // Create all directories
-        functionFolder.mkdirs()
-
-        LOGGER.debug("Created datapack structure: ${datapackRoot.absolutePath} with ${functionDirName}/ directory")
-        return functionFolder
+        return DatapackGenerator.createDatapackStructure(baseDirectory, outputFolder, version)
     }
 
-    /**
-     * Create pack.mcmeta file for a datapack
-     *
-     * @param version Version identifier (e.g., '1_13', '1_14', '1_20_5', '1_21')
-     * @param packFormat The pack_format number for this Minecraft version
-     * @param description Human-readable description of the datapack
-     */
     static void createPackMcmeta(String version, int packFormat, String description) {
-        String datapackName = "readbooks_datapack_${version}"
-        File datapackRoot = new File(baseDirectory, "${outputFolder}${File.separator}${datapackName}")
-        File packMcmetaFile = new File(datapackRoot, "pack.mcmeta")
-
-        // Create pack.mcmeta JSON content
-        Map<String, Object> packData = [
-            pack: [
-                pack_format: packFormat,
-                description: description
-            ]
-        ]
-
-        packMcmetaFile.withWriter('UTF-8') { BufferedWriter writer ->
-            writer.write(new groovy.json.JsonBuilder(packData).toPrettyString())
-        }
-
-        LOGGER.debug("Created pack.mcmeta for ${datapackName} with pack_format ${packFormat}")
+        DatapackGenerator.createPackMcmeta(baseDirectory, outputFolder, version, packFormat, description)
     }
 
-    /**
-     * Get pack_format number for a Minecraft version
-     *
-     * @param version Version identifier (e.g., '1_13', '1_14', '1_20_5', '1_21')
-     * @return The appropriate pack_format number
-     */
     static int getPackFormat(String version) {
-        switch (version) {
-            case '1_13':
-            case '1_14':
-                return 4  // Minecraft 1.13-1.14.4
-            case '1_20':
-                return 15  // Minecraft 1.20-1.20.4
-            case '1_20_5':
-                return 41  // Minecraft 1.20.5-1.20.6
-            case '1_21':
-                return 48  // Minecraft 1.21+
-            default:
-                LOGGER.warn("Unknown version ${version}, defaulting to pack_format 48")
-                return 48
-        }
+        return DatapackGenerator.getPackFormat(version)
     }
 
-    /**
-     * Get human-readable Minecraft version range for description
-     *
-     * IMPORTANT: These descriptions reflect COMMAND COMPATIBILITY, not pack_format compatibility.
-     * The datapacks use specific pack_format numbers but the commands inside work across
-     * broader version ranges due to command syntax changes being independent of pack format.
-     *
-     * @param version Version identifier (e.g., '1_13', '1_14', '1_20_5', '1_21')
-     * @return Human-readable version string
-     */
     static String getVersionDescription(String version) {
-        switch (version) {
-            case '1_13':
-                return 'Minecraft 1.13-1.14.3 (uses pack_format 4, functions/ directory)'
-            case '1_14':
-                return 'Minecraft 1.14.4-1.19.4 (uses pack_format 4, functions/ directory)'
-            case '1_20':
-                return 'Minecraft 1.20-1.20.4 (uses pack_format 15, functions/ directory)'
-            case '1_20_5':
-                return 'Minecraft 1.20.5-1.20.6 (uses pack_format 41, functions/ directory)'
-            case '1_21':
-                return 'Minecraft 1.21+ (uses pack_format 48, function/ directory)'
-            default:
-                return "Minecraft ${version}"
-        }
+        return DatapackGenerator.getVersionDescription(version)
     }
 
     static void runExtraction() {
@@ -495,420 +376,62 @@ class Main implements Runnable {
         rootLogger.addAppender(fileAppender)
     }
 
-    /**
-     * Write books data to CSV file
-     * CSV format: X,Y,Z,FoundWhere,Bookname,Author,PageCount,Generation,Pages
-     */
+    // ========== Output Writers (delegated to OutputWriters) ==========
     static void writeBooksCSV() {
-        File csvFile = new File(baseDirectory, "${outputFolder}${File.separator}all_books.csv")
-        LOGGER.info("Writing books CSV to: ${csvFile.absolutePath}")
-
-        csvFile.withWriter('UTF-8') { BufferedWriter writer ->
-            // Write header
-            writer.writeLine('X,Y,Z,FoundWhere,Bookname,Author,PageCount,Generation,Pages')
-
-            // Write data
-            bookCsvData.each { Map<String, Object> book ->
-                String x = book.x != null ? book.x.toString() : '0'
-                String y = book.y != null ? book.y.toString() : '0'
-                String z = book.z != null ? book.z.toString() : '0'
-                String foundWhere = escapeCsvField(book.foundWhere?.toString() ?: 'undefined')
-                String bookname = escapeCsvField(book.bookname?.toString() ?: 'undefined')
-                String author = escapeCsvField(book.author?.toString() ?: 'undefined')
-                String pageCount = book.pageCount != null ? book.pageCount.toString() : '0'
-                String generationName = escapeCsvField(book.generationName?.toString() ?: 'Original')
-                String pages = escapeCsvField(book.pages?.toString() ?: 'undefined')
-
-                writer.writeLine("${x},${y},${z},${foundWhere},${bookname},${author},${pageCount},${generationName},${pages}")
-            }
-        }
-
-        LOGGER.info("Books CSV written successfully with ${bookCsvData.size()} entries")
+        OutputWriters.writeBooksCSV(baseDirectory, outputFolder, bookCsvData)
     }
 
-    /**
-     * Write signs data to CSV file
-     * CSV format: X,Y,Z,FoundWhere,SignText,Line1,Line2,Line3,Line4
-     */
     static void writeSignsCSV() {
-        File csvFile = new File(baseDirectory, "${outputFolder}${File.separator}all_signs.csv")
-        LOGGER.info("Writing signs CSV to: ${csvFile.absolutePath}")
-
-        csvFile.withWriter('UTF-8') { BufferedWriter writer ->
-            // Write header
-            writer.writeLine('X,Y,Z,FoundWhere,SignText,Line1,Line2,Line3,Line4')
-
-            // Write data
-            signCsvData.each { Map<String, Object> sign ->
-                String x = sign.x?.toString() ?: '0'
-                String y = sign.y?.toString() ?: '0'
-                String z = sign.z?.toString() ?: '0'
-                String foundWhere = escapeCsvField(sign.foundWhere?.toString() ?: 'unknown')
-                String signText = escapeCsvField(sign.signText?.toString() ?: 'undefined')
-                String line1 = escapeCsvField(sign.line1?.toString() ?: '')
-                String line2 = escapeCsvField(sign.line2?.toString() ?: '')
-                String line3 = escapeCsvField(sign.line3?.toString() ?: '')
-                String line4 = escapeCsvField(sign.line4?.toString() ?: '')
-
-                writer.writeLine("${x},${y},${z},${foundWhere},${signText},${line1},${line2},${line3},${line4}")
-            }
-        }
-
-        LOGGER.info("Signs CSV written successfully with ${signCsvData.size()} entries")
+        OutputWriters.writeSignsCSV(baseDirectory, outputFolder, signCsvData)
     }
 
-    /**
-     * Escape CSV field by wrapping in quotes if it contains comma, newline, or quote
-     */
     static String escapeCsvField(String field) {
-        if (!field) {
-            return ''
-        }
-
-        // Replace newlines with space for readability
-        String escaped = field.replace('\n', ' ').replace('\r', ' ')
-
-        // If field contains comma, quote, or was modified, wrap in quotes
-        if (escaped.contains(',') || escaped.contains('"') || escaped != field) {
-            // Escape quotes by doubling them
-            escaped = escaped.replace('"', '""')
-            return "\"${escaped}\""
-        }
-
-        return escaped
+        return OutputWriters.escapeCsvField(field)
     }
 
-    /**
-     * Escape text for Minecraft commands based on version
-     * @param text The text to escape
-     * @param version The Minecraft version ('1_13', '1_14', '1_20_5', '1_21')
-     */
+    // ========== Minecraft Command Generation (delegated to MinecraftCommands & ShulkerBoxGenerator) ==========
     static String escapeForMinecraftCommand(String text, String version) {
-        if (!text) {
-            return ''
-        }
-
-        String escaped = text
-
-        // Version-specific escaping
-        if (version in ['1_13', '1_14']) {
-            // Older versions need double backslash escaping
-            escaped = escaped.replace('\\', '\\\\\\\\')
-            escaped = escaped.replace('"', '\\\\"')
-            escaped = escaped.replace("'", "\\'")
-            escaped = escaped.replace('\n', '\\\\n')
-        } else {
-            // 1.20.5+ uses single backslash escaping
-            escaped = escaped.replace('\\', '\\\\')
-            escaped = escaped.replace('"', '\\"')
-            escaped = escaped.replace("'", "\\'")
-            escaped = escaped.replace('\n', '\\n')
-        }
-
-        return escaped
+        return MinecraftCommands.escapeForMinecraftCommand(text, version)
     }
 
-    /**
-     * Generate book NBT tag (pre-1.20.5 format)
-     * Used for creating book entries in shulker boxes for versions 1.13-1.20.4
-     * Now uses raw NBT ListTag to preserve JSON text components
-     */
     static String generateBookNBT(String title, String author, ListTag<?> pages, String version, int generation = 0) {
-        String escapedTitle = escapeForMinecraftCommand(title ?: 'Untitled', version)
-        String escapedAuthor = escapeForMinecraftCommand(author ?: 'Unknown', version)
-
-        String pagesStr = (0..<pages.size()).collect { int i ->
-            String rawText = getStringAt(pages, i)
-            // Convert § formatting codes to JSON text components if needed
-            String jsonComponent = rawText.startsWith('{') ? rawText : "{\"text\":\"${rawText}\"}"
-            // Escape backslashes, single quotes, AND newlines for NBT syntax
-            String escaped = jsonComponent.replace('\\', '\\\\').replace("'", "\\'").replace('\n', '\\n').replace('\r', '\\r')
-            "'${escaped}'"
-        }.join(',')
-
-        return "{title:\"${escapedTitle}\",author:\"${escapedAuthor}\",generation:${generation},pages:[${pagesStr}]}"
+        return MinecraftCommands.generateBookNBT(title, author, pages, version, generation)
     }
 
-    /**
-     * Generate book components (1.20.5+ format)
-     * Used for creating book entries in shulker boxes for versions 1.20.5+
-     * Now uses raw NBT ListTag to preserve JSON text components
-     */
     static String generateBookComponents(String title, String author, ListTag<?> pages, String version, int generation = 0) {
-        String escapedTitle = escapeForMinecraftCommand(title ?: 'Untitled', version)
-        String escapedAuthor = escapeForMinecraftCommand(author ?: 'Unknown', version)
-
-        String pagesStr = (0..<pages.size()).collect { int i ->
-            String rawText = getStringAt(pages, i)
-            // Convert § formatting codes to JSON text components if needed
-            String jsonComponent = rawText.startsWith('{') ? rawText : "{\"text\":\"${rawText}\"}"
-            // Escape backslashes, double quotes, AND newlines for component syntax
-            String escaped = jsonComponent.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r')
-            "\"${escaped}\""
-        }.join(',')
-
-        return "{title:\"${escapedTitle}\",author:\"${escapedAuthor}\",generation:${generation},pages:[${pagesStr}]}"
+        return MinecraftCommands.generateBookComponents(title, author, pages, version, generation)
     }
 
-    /**
-     * Generate a Minecraft /give command for a shulker box containing books (organized by author)
-     * Supports versions: 1.13, 1.14, 1.20.5, 1.21
-     *
-     * @param authorName Author name to display on shulker box
-     * @param books List of book maps [{title, author, pages}, ...]
-     * @param boxIndex Index for this author's shulker box (0 for first, 1+ for overflow)
-     * @param version Minecraft version ('1_13', '1_14', '1_20_5', '1_21')
-     */
     static String generateShulkerBoxCommand(String authorName, List<Map<String, Object>> books, int boxIndex, String version) {
-        String boxColor = getShulkerColorForAuthor(authorName)
-        
-        // Cap at 27 books per shulker (slots 0-26)
-        List<Map<String, Object>> booksForBox = books.drop(boxIndex * 27).take(27)
-        
-        if (booksForBox.isEmpty()) {
-            return ''
-        }
-        
-        String displayName = "Author: ${authorName}${boxIndex > 0 ? " (${boxIndex + 1})" : ''}"
-        
-        switch (version) {
-            case '1_13':
-                return generateShulkerBox_1_13(boxColor, authorName, displayName, booksForBox)
-            case '1_14':
-            case '1_20':
-                return generateShulkerBox_1_14(boxColor, authorName, displayName, booksForBox)
-            case '1_20_5':
-                return generateShulkerBox_1_20_5(boxColor, authorName, displayName, booksForBox)
-            case '1_21':
-                return generateShulkerBox_1_21(boxColor, authorName, displayName, booksForBox)
-            default:
-                return ''
-        }
+        return ShulkerBoxGenerator.generateShulkerBoxCommand(authorName, books, boxIndex, version)
     }
 
-    /**
-     * Generate shulker box command for Minecraft 1.13
-     * Format: /give @a color_shulker_box{BlockEntityTag:{Items:[{Slot:N,id:written_book,Count:1,tag:...}]},display:{Name:'{...}'}}
-     */
     static String generateShulkerBox_1_13(String color, String author, String displayName, List<Map<String, Object>> books) {
-        StringBuilder itemsStr = new StringBuilder()
-        
-        books.eachWithIndex { Map<String, Object> book, int index ->
-            if (index > 0) itemsStr.append(',')
-            int gen = (book.generation as Integer) ?: 0
-            String bookNBT = generateBookNBT(book.title as String, book.author as String, book.pages as ListTag<?>, '1_13', gen)
-            itemsStr.append("{Slot:${index},id:written_book,Count:1,tag:${bookNBT}}")
-        }
-
-        // 1.13 display name uses single-quoted JSON
-        String escapedDisplayName = displayName.replace('\\', '\\\\').replace('"', '\\"')
-        String displayJson = '{"text":"' + escapedDisplayName + '","italic":false}'
-        
-        return "give @a ${color}_shulker_box{BlockEntityTag:{Items:[${itemsStr}]},display:{Name:'${displayJson}'}}"
+        return ShulkerBoxGenerator.generateShulkerBox_1_13(color, author, displayName, books)
     }
 
-    /**
-     * Generate shulker box command for Minecraft 1.14
-     * Format: /give @a color_shulker_box{BlockEntityTag:{Items:[{Slot:N,id:written_book,Count:1,tag:...}]},display:{Name:'["",{"text":"...","italic":false}]'}}
-     */
     static String generateShulkerBox_1_14(String color, String author, String displayName, List<Map<String, Object>> books) {
-        StringBuilder itemsStr = new StringBuilder()
-        
-        books.eachWithIndex { Map<String, Object> book, int index ->
-            if (index > 0) itemsStr.append(',')
-            int gen = (book.generation as Integer) ?: 0
-            String bookNBT = generateBookNBT(book.title as String, book.author as String, book.pages as ListTag<?>, '1_14', gen)
-            itemsStr.append("{Slot:${index},id:written_book,Count:1,tag:${bookNBT}}")
-        }
-
-        // 1.14 uses single quotes with JSON inside
-        String escapedDisplayName = displayName.replace('"', '\\"')
-        String displayJson = '["",{"text":"' + escapedDisplayName + '","italic":false}]'
-        
-        return "give @a ${color}_shulker_box{BlockEntityTag:{Items:[${itemsStr}]},display:{Name:'${displayJson}'}}"
+        return ShulkerBoxGenerator.generateShulkerBox_1_14(color, author, displayName, books)
     }
 
-    /**
-     * Generate shulker box command for Minecraft 1.20.5+
-     * Format: /give @a color_shulker_box[container=[{slot:N,item:{id:written_book,count:1,components:...}}],item_name="''["",{"text":"...","italic":false}]''"]
-     */
     static String generateShulkerBox_1_20_5(String color, String author, String displayName, List<Map<String, Object>> books) {
-        StringBuilder containerStr = new StringBuilder()
-        
-        books.eachWithIndex { Map<String, Object> book, int index ->
-            if (index > 0) containerStr.append(',')
-            int gen = (book.generation as Integer) ?: 0
-            String bookComponents = generateBookComponents(book.title as String, book.author as String, book.pages as ListTag<?>, '1_20_5', gen)
-            containerStr.append("{slot:${index},item:{id:written_book,count:1,components:${bookComponents}}}")
-        }
-
-        // 1.20.5+ uses escaped JSON for item_name
-        // Escape quotes in display name for JSON
-        String escapedDisplayName = displayName.replace('"', '\\"')
-        // Build JSON string with literal quotes (single quotes around JSON, double quotes inside)
-        // Result: '["":{"text":"...","italic":false}]'
-        String nameJson = "'[\"\":{\"text\":\"${escapedDisplayName}\",\"italic\":false}]'"
-        
-        return "give @a minecraft:${color}_shulker_box[minecraft:container=[${containerStr}],item_name=${nameJson}]"
+        return ShulkerBoxGenerator.generateShulkerBox_1_20_5(color, author, displayName, books)
     }
 
-    /**
-     * Generate shulker box command for Minecraft 1.21+
-     * Format: /give @a color_shulker_box[container=[{slot:N,item:{id:written_book,count:1,components:...}}],item_name="''["",{"text":"...","italic":false}]''"]
-     * (Same as 1.20.5 but without minecraft: prefix for shulker_box)
-     */
     static String generateShulkerBox_1_21(String color, String author, String displayName, List<Map<String, Object>> books) {
-        StringBuilder containerStr = new StringBuilder()
-        
-        books.eachWithIndex { Map<String, Object> book, int index ->
-            if (index > 0) containerStr.append(',')
-            int gen = (book.generation as Integer) ?: 0
-            String bookComponents = generateBookComponents(book.title as String, book.author as String, book.pages as ListTag<?>, '1_21', gen)
-            containerStr.append("{slot:${index},item:{id:written_book,count:1,components:${bookComponents}}}")
-        }
-
-        // 1.21 uses same escaping as 1.20.5
-        String escapedDisplayName = displayName.replace('"', '\\"')
-        // Build JSON with literal quotes that test can find
-        String nameJson = "'[\"\":{\"text\":\"${escapedDisplayName}\",\"italic\":false}]'"
-        
-        return "give @a ${color}_shulker_box[container=[${containerStr}],item_name=${nameJson}]"
+        return ShulkerBoxGenerator.generateShulkerBox_1_21(color, author, displayName, books)
     }
 
-    /**
-     * Convert Minecraft formatting codes (§) to JSON text components
-     * For now, we extract just the text content and lose formatting.
-     * Formats like §lBold§r become a simple JSON wrapper: {"text":"Bold"}
-     */
     static String convertFormattingCodesToJson(String text) {
-        if (!text || !text.contains('§')) {
-            // Already plain text - wrap in JSON
-            return "{\"text\":\"${text}\"}"
-        }
-
-        // Remove all § formatting codes
-        String plainText = text.replaceAll(/§./, '')
-        
-        // Return as plain text in JSON wrapper
-        return "{\"text\":\"${plainText}\"}"
+        return MinecraftCommands.convertFormattingCodesToJson(text)
     }
 
-    /**
-     * Map Minecraft color code to Minecraft color name
-     */
     static String mapColorCode(char code) {
-        switch (code) {
-            case '0': return 'black'
-            case '1': return 'dark_blue'
-            case '2': return 'dark_green'
-            case '3': return 'dark_aqua'
-            case '4': return 'dark_red'
-            case '5': return 'dark_purple'
-            case '6': return 'gold'
-            case '7': return 'gray'
-            case '8': return 'dark_gray'
-            case '9': return 'blue'
-            case 'a': return 'green'
-            case 'b': return 'aqua'
-            case 'c': return 'red'
-            case 'd': return 'light_purple'
-            case 'e': return 'yellow'
-            case 'f': return 'white'
-            default: return null
-        }
+        return MinecraftCommands.mapColorCode(code)
     }
 
-    /**
-     * Generate a Minecraft /give command for a written book
-     * Supports versions: 1.13+, 1.14+, 1.20.5+, 1.21+
-     * Includes generation parameter (0=Original, 1=Copy of Original, 2=Copy of Copy, 3=Tattered)
-     */
     static String generateBookCommand(String title, String author, ListTag<?> pages, String version, int generation = 0) {
-        String escapedTitle = escapeForMinecraftCommand(title ?: 'Untitled', version)
-        String escapedAuthor = escapeForMinecraftCommand(author ?: 'Unknown', version)
-
-        String pagesStr
-
-        switch (version) {
-            case '1_20':
-                // 1.20 uses same format as 1.14
-                pagesStr = (0..<pages.size()).collect { int i ->
-                    String rawText = getStringAt(pages, i)
-                    String jsonArray
-                    if (rawText.startsWith('[')) {
-                        jsonArray = rawText
-                    } else if (rawText.startsWith('{')) {
-                        jsonArray = "[${rawText}]"
-                    } else {
-                        jsonArray = "[\"${rawText}\"]"
-                    }
-                    String escaped = jsonArray.replace('\\', '\\\\')
-                    "'${escaped}'"
-                }.join(',')
-                return "give @p written_book{title:\"${escapedTitle}\",author:\"${escapedAuthor}\",generation:${generation},pages:[${pagesStr}]}"
-
-            case '1_13':
-                // 1.13: /give @p written_book{title:"Title",author:"Author",generation:N,pages:['{"text":"page1"}','{"text":"page2"}']}
-                pagesStr = (0..<pages.size()).collect { int i ->
-                    String rawText = getStringAt(pages, i)
-                    // Convert § formatting codes to JSON text components if needed
-                    String jsonComponent = rawText.startsWith('{') ? rawText : "{\"text\":\"${rawText}\"}"
-                    // Single quotes don't require internal quote escaping, only backslashes
-                    String escaped = jsonComponent.replace('\\', '\\\\')
-                    "'${escaped}'"
-                }.join(',')
-                return "give @p written_book{title:\"${escapedTitle}\",author:\"${escapedAuthor}\",generation:${generation},pages:[${pagesStr}]}"
-
-            case '1_14':
-                // 1.14: /give @p written_book{title:"Title",author:"Author",generation:N,pages:['["page1"]','["page2"]']}
-                // 1.14 wraps JSON in array brackets - note: uses single quotes so internal quotes don't need escaping
-                pagesStr = (0..<pages.size()).collect { int i ->
-                    String rawText = getStringAt(pages, i)
-                    // If rawText is JSON (starts with '[' or '{'), use it directly
-                    // If it's plain text, wrap in JSON array format
-                    String jsonArray
-                    if (rawText.startsWith('[')) {
-                        jsonArray = rawText  // Already a JSON array
-                    } else if (rawText.startsWith('{')) {
-                        jsonArray = "[${rawText}]"  // Wrap JSON object in array
-                    } else {
-                        // Plain text: wrap in JSON array format ["text"]
-                        // Note: Inside single quotes, we can use \" directly without escaping
-                        jsonArray = "[\"${rawText}\"]"
-                    }
-                    // Escape backslashes only (single quotes don't need quote escaping)
-                    String escaped = jsonArray.replace('\\', '\\\\')
-                    "'${escaped}'"
-                }.join(',')
-                return "give @p written_book{title:\"${escapedTitle}\",author:\"${escapedAuthor}\",generation:${generation},pages:[${pagesStr}]}"
-
-            case '1_20_5':
-                // 1.20.5: /give @p written_book[minecraft:written_book_content={title:"Title",author:"Author",generation:N,pages:["page1","page2"]}]
-                pagesStr = (0..<pages.size()).collect { int i ->
-                    String rawText = getStringAt(pages, i)
-                    // Convert § formatting codes to JSON text components if needed
-                    String jsonComponent = rawText.startsWith('{') ? rawText : "{\"text\":\"${rawText}\"}"
-                    // Escape for NBT syntax: backslashes, double quotes, and newlines
-                    String escaped = jsonComponent.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r')
-                    "\"${escaped}\""
-                }.join(',')
-                return "give @p written_book[minecraft:written_book_content={title:\"${escapedTitle}\",author:\"${escapedAuthor}\",generation:${generation},pages:[${pagesStr}]}]"
-
-            case '1_21':
-                // 1.21: /give @p written_book[written_book_content={title:"Title",author:"Author",generation:N,pages:["page1","page2"]}]
-                pagesStr = (0..<pages.size()).collect { int i ->
-                    String rawText = getStringAt(pages, i)
-                    // Convert § formatting codes to JSON text components if needed
-                    String jsonComponent = rawText.startsWith('{') ? rawText : "{\"text\":\"${rawText}\"}"
-                    // Escape for NBT syntax: backslashes, double quotes, and newlines
-                    String escaped = jsonComponent.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r')
-                    "\"${escaped}\""
-                }.join(',')
-                return "give @p written_book[written_book_content={title:\"${escapedTitle}\",author:\"${escapedAuthor}\",generation:${generation},pages:[${pagesStr}]}]"
-
-            default:
-                return ''
-        }
+        return MinecraftCommands.generateBookCommand(title, author, pages, version, generation)
     }
 
     /**
@@ -936,196 +459,28 @@ class Main implements Runnable {
         return signsByHash[signKey]
     }
 
-    /**
-     * Generate a Minecraft setblock command for a sign (all Minecraft versions)
-     * Supports versions: 1.12-1.19, 1.20, 1.21.5+
-     * Places signs at incrementing X coordinates, with Z offset for duplicates
-     */
     static String generateSignCommand(List<String> frontLines, Map<String, Object> position, String version, List<String> backLines = null) {
-        if (!frontLines || frontLines.size() == 0) {
-            return ''
-        }
-
-        int x = position.x as int
-        int z = position.z as int
-
-        switch (version) {
-            case '1_13':
-                return generateSignCommand_1_13(frontLines, x, z, position)
-            case '1_14':
-                return generateSignCommand_1_14(frontLines, x, z, position)
-            case '1_20':
-                return generateSignCommand_1_20(frontLines, x, z, position, backLines)
-            case '1_20_5':
-                return generateSignCommand_1_20_5(frontLines, x, z, position, backLines)
-            case '1_21':
-                return generateSignCommand_1_21(frontLines, x, z, position, backLines)
-            default:
-                return ''
-        }
+        return MinecraftCommands.generateSignCommand(frontLines, position, version, backLines)
     }
 
-    /**
-     * Generate sign for Minecraft 1.13-1.19 (old format with Text1-Text4)
-     *
-     * References:
-     * - Sign NBT format: https://minecraft.wiki/w/Sign#Block_data
-     * - setblock command: https://minecraft.wiki/w/Commands/setblock
-     * - tellraw command: https://minecraft.wiki/w/Commands/tellraw
-     * - JSON text format: https://minecraft.wiki/w/Raw_JSON_text_format
-     * - clickEvent documentation: https://minecraft.wiki/w/Raw_JSON_text_format#Java_Edition
-     */
     static String generateSignCommand_1_13(List<String> frontLines, int x, int z, Map<String, Object> position) {
-        // Extract original world coordinates for clickEvent
-        int origX = position.originalX as int
-        int origY = position.originalY as int
-        int origZ = position.originalZ as int
-
-        // Create tellraw command that displays coordinates and allows teleporting
-        // Format: /tellraw @s {"text":"...", "color":"...", "clickEvent":{"action":"run_command","value":"..."}}
-        // The tellraw itself has a clickEvent that runs /tp command to teleport player to original location
-        String tellrawCmd = "/tellraw @s {\\\\\\\"text\\\\\\\":\\\\\\\"Sign from (${origX} ${origY} ${origZ})\\\\\\\",\\\\\\\"color\\\\\\\":\\\\\\\"gray\\\\\\\",\\\\\\\"clickEvent\\\\\\\":{\\\\\\\"action\\\\\\\":\\\\\\\"run_command\\\\\\\",\\\\\\\"value\\\\\\\":\\\\\\\"/tp @s ${origX} ${origY} ${origZ}\\\\\\\"}}"
-
-        // Add clickEvent to first line if it has text
-        // Format: {"text":"...", "clickEvent":{"action":"run_command","value":"..."}}
-        String text1 = escapeForMinecraftCommand(frontLines.size() > 0 ? frontLines[0] : '', '1_13')
-        String text1Json = text1 ? "{\\\"text\\\":\\\"${text1}\\\",\\\"clickEvent\\\":{\\\"action\\\":\\\"run_command\\\",\\\"value\\\":\\\"${tellrawCmd}\\\"}}" : "{\\\"text\\\":\\\"${text1}\\\"}"
-
-        String text2 = escapeForMinecraftCommand(frontLines.size() > 1 ? frontLines[1] : '', '1_13')
-        String text3 = escapeForMinecraftCommand(frontLines.size() > 2 ? frontLines[2] : '', '1_13')
-        String text4 = escapeForMinecraftCommand(frontLines.size() > 3 ? frontLines[3] : '', '1_13')
-
-        return "setblock ~${x} ~ ~${z} oak_sign[rotation=0,waterlogged=false]{Text1:'${text1Json}',Text2:'{\"text\":\"${text2}\"}',Text3:'{\"text\":\"${text3}\"}',Text4:'{\"text\":\"${text4}\"}',GlowingText:0} replace"
+        return MinecraftCommands.generateSignCommand_1_13(frontLines, x, z, position)
     }
 
-    /**
-     * Generate sign for Minecraft 1.14-1.19 (old format)
-     *
-     * References:
-     * - Sign NBT format (1.14+): https://minecraft.wiki/w/Sign#Block_data
-     * - Raw JSON text changes in 1.14: https://minecraft.wiki/w/Raw_JSON_text_format#History
-     * - 1.14 changed text component format to use array syntax: ["",{"text":"..."}]
-     */
     static String generateSignCommand_1_14(List<String> frontLines, int x, int z, Map<String, Object> position) {
-        // Extract original world coordinates for clickEvent
-        int origX = position.originalX as int
-        int origY = position.originalY as int
-        int origZ = position.originalZ as int
-
-        // Create tellraw command that displays coordinates and allows teleporting
-        // Note: 1.14 requires additional escaping due to array format
-        String tellrawCmd = "/tellraw @s {\\\\\\\\\\\\\\\"text\\\\\\\\\\\\\\\":\\\\\\\\\\\\\\\"Sign from (${origX} ${origY} ${origZ})\\\\\\\\\\\\\\\",\\\\\\\\\\\\\\\"color\\\\\\\\\\\\\\\":\\\\\\\\\\\\\\\"gray\\\\\\\\\\\\\\\",\\\\\\\\\\\\\\\"clickEvent\\\\\\\\\\\\\\\":{\\\\\\\\\\\\\\\"action\\\\\\\\\\\\\\\":\\\\\\\\\\\\\\\"run_command\\\\\\\\\\\\\\\",\\\\\\\\\\\\\\\"value\\\\\\\\\\\\\\\":\\\\\\\\\\\\\\\"/tp @s ${origX} ${origY} ${origZ}\\\\\\\\\\\\\\\"}}"
-
-        // Add clickEvent to first line if it has text
-        // 1.14 format: ["",{"text":"...","clickEvent":{...}}]
-        String text1 = escapeForMinecraftCommand(frontLines.size() > 0 ? frontLines[0] : '', '1_14')
-        String text1Json = text1 ? "[\\\"\\\":{\\\"text\\\":\\\"${text1}\\\",\\\"clickEvent\\\":{\\\"action\\\":\\\"run_command\\\",\\\"value\\\":\\\"${tellrawCmd}\\\"}}]" : "[\\\"\\\":{\\\"text\\\":\\\"${text1}\\\"}]"
-
-        String text2 = escapeForMinecraftCommand(frontLines.size() > 1 ? frontLines[1] : '', '1_14')
-        String text3 = escapeForMinecraftCommand(frontLines.size() > 2 ? frontLines[2] : '', '1_14')
-        String text4 = escapeForMinecraftCommand(frontLines.size() > 3 ? frontLines[3] : '', '1_14')
-
-        return "setblock ~${x} ~ ~${z} oak_sign[rotation=0,waterlogged=false]{Text1:'${text1Json}',Text2:'[\\\"\\\":{\\\"text\\\":\\\"${text2}\\\"}]',Text3:'[\\\"\\\":{\\\"text\\\":\\\"${text3}\\\"}]',Text4:'[\\\"\\\":{\\\"text\\\":\\\"${text4}\\\"}]',GlowingText:0} replace"
+        return MinecraftCommands.generateSignCommand_1_14(frontLines, x, z, position)
     }
 
-    /**
-     * Generate sign for Minecraft 1.20 (new front_text/back_text format)
-     *
-     * References:
-     * - Sign format changes in 1.20: https://minecraft.wiki/w/Sign#History (Java Edition 1.20 section)
-     * - New front_text/back_text structure: https://minecraft.wiki/w/Sign#Block_data
-     * - Signs now support text on both sides with separate front_text and back_text NBT compounds
-     * - Each side has: messages (array of 4 text components), has_glowing_text (byte), color (string)
-     */
     static String generateSignCommand_1_20(List<String> frontLines, int x, int z, Map<String, Object> position, List<String> backLines = null) {
-        // Extract original world coordinates for clickEvent
-        int origX = position.originalX as int
-        int origY = position.originalY as int
-        int origZ = position.originalZ as int
-
-        // Create tellraw command that displays coordinates and allows teleporting
-        String tellrawCmd = "/tellraw @s {\\\\\\\\\\\\\\\"text\\\\\\\\\\\\\\\":\\\\\\\\\\\\\\\"Sign from (${origX} ${origY} ${origZ})\\\\\\\\\\\\\\\",\\\\\\\\\\\\\\\"color\\\\\\\\\\\\\\\":\\\\\\\\\\\\\\\"gray\\\\\\\\\\\\\\\",\\\\\\\\\\\\\\\"clickEvent\\\\\\\\\\\\\\\":{\\\\\\\\\\\\\\\"action\\\\\\\\\\\\\\\":\\\\\\\\\\\\\\\"run_command\\\\\\\\\\\\\\\",\\\\\\\\\\\\\\\"value\\\\\\\\\\\\\\\":\\\\\\\\\\\\\\\"/tp @s ${origX} ${origY} ${origZ}\\\\\\\\\\\\\\\"}}"
-
-        String frontMessages = (0..3).collect { int i ->
-            String line = i < frontLines.size() ? frontLines[i] : ''
-            String escaped = escapeForMinecraftCommand(line, '1_20')
-            // Add clickEvent to first line
-            // Format: ["",{"text":"...","clickEvent":{...}}]
-            if (i == 0 && line) {
-                "'[\\\"\\\":{\\\"text\\\":\\\"${escaped}\\\",\\\"clickEvent\\\":{\\\"action\\\":\\\"run_command\\\",\\\"value\\\":\\\"${tellrawCmd}\\\"}}]'"
-            } else {
-                "'[\\\"\\\":{\\\"text\\\":\\\"${escaped}\\\"}]'"
-            }
-        }.join(',')
-        
-        // Generate back_text messages if provided, otherwise empty array
-        String backMessages
-        if (backLines && backLines.any { it }) {
-            backMessages = (0..3).collect { int i ->
-                String line = i < backLines.size() ? backLines[i] : ''
-                String escaped = escapeForMinecraftCommand(line, '1_20')
-                "'[\\\"\\\":{\\\"text\\\":\\\"${escaped}\\\"}]'"
-            }.join(',')
-        } else {
-            backMessages = "''[\\\"\\\":{\\\"text\\\":\\\"\\\"}]'', ''[\\\"\\\":{\\\"text\\\":\\\"\\\"}]'', ''[\\\"\\\":{\\\"text\\\":\\\"\\\"}]'', ''[\\\"\\\":{\\\"text\\\":\\\"\\\"}]''"
-        }
-        
-        return "setblock ~${x} ~ ~${z} oak_sign[rotation=0,waterlogged=false]{front_text:{messages:[${frontMessages}],has_glowing_text:0},back_text:{messages:[${backMessages}],has_glowing_text:0},is_waxed:0} replace"
+        return MinecraftCommands.generateSignCommand_1_20(frontLines, x, z, position, backLines)
     }
 
-    /**
-     * Generate sign for Minecraft 1.20.5+ (new front_text/back_text with component format)
-     *
-     * References:
-     * - Sign text component changes (1.20.5): https://minecraft.wiki/w/Sign#History (see 24w09a snapshot)
-     * - Text components simplified: messages now use [[{"text":"..."}]] instead of ["",{"text":"..."}]
-     * - Discussion on format changes: https://bugs.mojang.com/browse/MC-268359
-     * - clickEvent on signs: Clicking the sign text triggers the clickEvent action
-     * - The clickEvent runs a tellraw that shows original coordinates with its own clickEvent for teleportation
-     */
     static String generateSignCommand_1_20_5(List<String> frontLines, int x, int z, Map<String, Object> position, List<String> backLines = null) {
-        // Extract original world coordinates for clickEvent
-        int origX = position.originalX as int
-        int origY = position.originalY as int
-        int origZ = position.originalZ as int
-
-        // Create tellraw command that displays coordinates and allows teleporting
-        // This command will be executed when player clicks on the sign's first line
-        // Format: /tellraw @s {"text":"Sign from (X Y Z)","color":"gray","clickEvent":{"action":"run_command","value":"/tp @s X Y Z"}}
-        String tellrawCmd = "/tellraw @s {\\\"text\\\":\\\"Sign from (${origX} ${origY} ${origZ})\\\",\\\"color\\\":\\\"gray\\\",\\\"clickEvent\\\":{\\\"action\\\":\\\"run_command\\\",\\\"value\\\":\\\"/tp @s ${origX} ${origY} ${origZ}\\\"}}"
-
-        String frontMessages = (0..3).collect { int i ->
-            String line = i < frontLines.size() ? frontLines[i] : ''
-            String escaped = escapeForMinecraftCommand(line, '1_20_5')
-            // Add clickEvent to first line
-            // 1.20.5+ format: [[{"text":"...","clickEvent":{...}}]]
-            if (i == 0 && line) {
-                '[[{"text":"' + escaped + '","clickEvent":{"action":"run_command","value":"' + tellrawCmd + '"}}]]'
-            } else {
-                '[[{"text":"' + escaped + '"}]]'
-            }
-        }.join(',')
-        
-        // Generate back_text messages if provided, otherwise empty array
-        String backMessages
-        if (backLines && backLines.any { it }) {
-            backMessages = (0..3).collect { int i ->
-                String line = i < backLines.size() ? backLines[i] : ''
-                String escaped = escapeForMinecraftCommand(line, '1_20_5')
-                '[[{"text":"' + escaped + '"}]]'
-            }.join(',')
-        } else {
-            backMessages = '[[{"text":""}]], [[{"text":""}]], [[{"text":""}]], [[{"text":""}]]'
-        }
-        
-        return "setblock ~${x} ~ ~${z} oak_sign[rotation=0,waterlogged=false]{front_text:{messages:[${frontMessages}],has_glowing_text:0},back_text:{messages:[${backMessages}],has_glowing_text:0},is_waxed:0} replace"
+        return MinecraftCommands.generateSignCommand_1_20_5(frontLines, x, z, position, backLines)
     }
 
-    /**
-     * Generate sign for Minecraft 1.21+ (same as 1.20.5)
-     */
     static String generateSignCommand_1_21(List<String> frontLines, int x, int z, Map<String, Object> position, List<String> backLines = null) {
-        return generateSignCommand_1_20_5(frontLines, x, z, position, backLines)
+        return MinecraftCommands.generateSignCommand_1_21(frontLines, x, z, position, backLines)
     }
 
     /**
@@ -1243,62 +598,11 @@ class Main implements Runnable {
 
 
     static void printSummaryStatistics(long elapsedMillis) {
-        File summaryFile = new File(baseDirectory, "${outputFolder}${File.separator}summary.txt")
-        summaryFile.withWriter { BufferedWriter w ->
-            w.writeLine('=' * 80)
-            w.writeLine('SUMMARY STATISTICS')
-            w.writeLine('=' * 80)
-
-            w.writeLine('\nBooks:')
-            w.writeLine("  Total unique books found: ${bookHashes.size()}")
-            w.writeLine("  Total books extracted (including duplicates): ${bookCounter}")
-            w.writeLine("  Duplicate books: ${bookCounter - bookHashes.size()}")
-
-            if (booksByLocationType) {
-                w.writeLine('\n  Books by location type:')
-                booksByLocationType.sort { Map.Entry<String, Integer> entry -> -entry.value }.each { String k, Integer v ->
-                    w.writeLine("    ${k}: ${v}")
-                }
-            }
-
-            if (booksByContainerType) {
-                w.writeLine('\n  Books by container type:')
-                booksByContainerType.sort { Map.Entry<String, Integer> entry -> -entry.value }.each { String k, Integer v ->
-                    w.writeLine("    ${k}: ${v}")
-                }
-            }
-
-            w.writeLine('\nSigns:')
-            w.writeLine("  Total signs found: ${signHashes.size()}")
-            if (emptySignsRemoved > 0) {
-                w.writeLine("  Empty signs removed: ${emptySignsRemoved}")
-            }
-
-            w.writeLine('\nPerformance:')
-            w.writeLine("  Total processing time: ${DurationFormatUtils.formatDurationWords(elapsedMillis, true, true)} (${elapsedMillis / 1000} seconds)")
-
-            // Generate ASCII table of books with detailed information (moved to end)
-            if (bookMetadataList) {
-                w.writeLine('\n  Books extracted:')
-                List<Column> columns = [
-                    new Column().header('Title').dataAlign(HorizontalAlign.LEFT).with({ Map<String, Object> book -> book.title?.toString() ?: '' } as java.util.function.Function),
-                    new Column().header('Author').dataAlign(HorizontalAlign.LEFT).with({ Map<String, Object> book -> book.author?.toString() ?: '' } as java.util.function.Function),
-                    new Column().header('PageCount').dataAlign(HorizontalAlign.RIGHT).with({ Map<String, Object> book -> book.pageCount?.toString() ?: '0' } as java.util.function.Function),
-                    new Column().header('FoundWhere').dataAlign(HorizontalAlign.LEFT).with({ Map<String, Object> book -> book.foundWhere?.toString() ?: '' } as java.util.function.Function),
-                    new Column().header('Coordinates').dataAlign(HorizontalAlign.LEFT).with({ Map<String, Object> book -> book.coordinates?.toString() ?: '' } as java.util.function.Function)
-                ]
-                String table = AsciiTable.getTable(bookMetadataList, columns)
-                w.writeLine(table)
-            }
-
-            w.writeLine("\n${'=' * 80}")
-            w.writeLine('Completed successfully!')
-            w.writeLine('=' * 80)
-}
-
-        LOGGER.info("\n${'=' * 80}")
-        LOGGER.info("Summary statistics written to: ${summaryFile.absolutePath}")
-        LOGGER.info('=' * 80)
+        OutputWriters.printSummaryStatistics(
+            baseDirectory, outputFolder, elapsedMillis,
+            bookHashes, signHashes, bookCounter, emptySignsRemoved,
+            booksByLocationType, booksByContainerType, bookMetadataList
+        )
     }
 
     static void incrementBookStats(String containerType, String locationType) {
@@ -1764,11 +1068,9 @@ class Main implements Runnable {
         // Decorated pots are handled as block entities with "Items" tag (standard container)
     }
 
+    // ========== Text Utility Methods (delegated to TextUtils) ==========
     static String sanitizeFilename(String name) {
-        if (!name) {
-            return 'unnamed'
-        }
-        return name.replaceAll(/[\\/:*?<>|]/, '_').take(200)
+        return TextUtils.sanitizeFilename(name)
     }
 
     /**
@@ -2249,20 +1551,7 @@ class Main implements Runnable {
      * Example: "Inventory of player abc123-def456.dat" -> "abc123-def456"
      */
     static String extractPlayerName(String bookInfo, String prefix) {
-        try {
-            int startIndex = bookInfo.indexOf(prefix)
-            if (startIndex >= 0) {
-                String remainder = bookInfo.substring(startIndex + prefix.length())
-                // Remove .dat extension if present
-                if (remainder.endsWith('.dat')) {
-                    remainder = remainder.substring(0, remainder.length() - 4)
-                }
-                return remainder.trim()
-            }
-        } catch (Exception e) {
-            LOGGER.debug("Failed to extract player name from: ${bookInfo}", e)
-        }
-        return 'unknown'
+        return TextUtils.extractPlayerName(bookInfo, prefix)
     }
 
     /**
@@ -2273,43 +1562,11 @@ class Main implements Runnable {
      * - 1.20.5+: Pages are compound list with "raw"/"filtered" fields
      */
     public static String extractPageText(ListTag<?> pages, int index) {
-        if (isStringList(pages)) {
-            return getStringAt(pages, index)
-        } else if (isCompoundList(pages)) {
-            CompoundTag pageCompound = getCompoundAt(pages, index)
-            return pageCompound.getString('raw') ?: pageCompound.getString('filtered') ?: ''
-        }
-        return ''
+        return TextUtils.extractPageText(pages, index)
     }
 
     static String extractTextContent(String pageText) {
-        if (!pageText) {
-            return ''
-        }
-
-        if (!pageText.startsWith('{')) {
-            return removeTextFormatting(pageText)
-        }
-
-        try {
-            Object pageJSON = JSON_SLURPER.parseText(pageText)
-
-            if (pageJSON.extra) {
-                return pageJSON.extra.collect { Object item ->
-                    if (item instanceof String) {
-                        removeTextFormatting((String) item)
-                    } else {
-                        removeTextFormatting(item.text ?: '')
-                    }
-                }.join('')
-            } else if (pageJSON.text) {
-                return removeTextFormatting(pageJSON.text)
-            }
-        } catch (groovy.json.JsonException e) {
-            LOGGER.debug("Page text is not valid JSON, returning as-is: ${e.message}")
-        }
-
-        return removeTextFormatting(pageText)
+        return TextUtils.extractTextContent(pageText, removeFormatting)
     }
 
     /**
@@ -2317,33 +1574,7 @@ class Main implements Runnable {
      * Used for .stendhal files
      */
     static String extractTextContentPreserveFormatting(String pageText) {
-        if (!pageText) {
-            return ''
-        }
-
-        if (!pageText.startsWith('{')) {
-            return pageText
-        }
-
-        try {
-            Object pageJSON = JSON_SLURPER.parseText(pageText)
-
-            if (pageJSON.extra) {
-                return pageJSON.extra.collect { Object item ->
-                    if (item instanceof String) {
-                        (String) item
-                    } else {
-                        item.text ?: ''
-                    }
-                }.join('')
-            } else if (pageJSON.text) {
-                return pageJSON.text
-            }
-        } catch (groovy.json.JsonException e) {
-            LOGGER.debug("Page text is not valid JSON, returning as-is: ${e.message}")
-        }
-
-        return pageText
+        return TextUtils.extractTextContentPreserveFormatting(pageText)
     }
 
     /**
@@ -2352,38 +1583,14 @@ class Main implements Runnable {
      * Returns: [x, y, z, blockId]
      */
     static List<Object> extractSignCoordinates(String signInfo) {
-        Integer x = null
-        Integer y = null
-        Integer z = null
-
-        try {
-            // Extract coordinates from format: "Chunk [x, z]\t(X Y Z)\t\t"
-            int startParen = signInfo.indexOf('(')
-            int endParen = signInfo.indexOf(')')
-            if (startParen >= 0 && endParen > startParen) {
-                String coords = signInfo.substring(startParen + 1, endParen)
-                String[] parts = coords.split(' ')
-                if (parts.length >= 3) {
-                    x = Integer.parseInt(parts[0])
-                    y = Integer.parseInt(parts[1])
-                    z = Integer.parseInt(parts[2])
-                }
-            }
-        } catch (Exception e) {
-            LOGGER.debug("Failed to parse sign coordinates from: ${signInfo}")
-        }
-
-        return [x, y, z]
+        return TextUtils.extractSignCoordinates(signInfo)
     }
 
     /**
      * Pad sign line to exactly 15 characters (Minecraft's max sign line width)
      */
     static String padSignLine(String text) {
-        if (text.length() >= 15) {
-            return text.substring(0, 15)
-        }
-        return text.padRight(15, ' ')
+        return TextUtils.padSignLine(text)
     }
 
     /**
@@ -2532,278 +1739,64 @@ class Main implements Runnable {
     }
 
     static String extractSignLineText(String line) {
-        if (!line || line == '' || line == 'null') {
-            return ''
-        }
-        if (!line.startsWith('{')) {
-            return line
-        }
-
-        try {
-            JSONObject json = new JSONObject(line)
-
-            if (json.has('extra')) {
-                Object extra = json.get('extra')
-                if (extra instanceof JSONArray) {
-                    StringBuilder sb = new StringBuilder()
-                    JSONArray extraArray = (JSONArray) extra
-                    for (int i = 0; i < extraArray.length(); i++) {
-                        Object item = extraArray.get(i)
-                        if (item instanceof String) {
-                            sb.append(item)
-                        } else if (item instanceof JSONObject) {
-                            JSONObject temp = (JSONObject) item
-                            if (temp.has('text')) {
-                                sb.append(temp.get('text'))
-                            }
-                        }
-                    }
-                    return sb.toString()
-                } else if (extra instanceof JSONObject) {
-                    JSONObject extraObj = (JSONObject) extra
-                    if (extraObj.has('text')) {
-                        return String.valueOf(extraObj.get('text'))
-                    }
-                }
-            } else if (json.has('text')) {
-                String text = String.valueOf(json.get('text'))
-                // Filter out empty text with only empty key-value pairs
-                if (text == '' && json.length() == 1) {
-                    return ''
-                }
-                return text
-            }
-        } catch (JSONException e) {
-            LOGGER.debug("Sign line is not valid JSON: ${e.message}")
-        }
-
-        // Filter out empty JSON objects like {"":""} or {}
-        if (line == '{}' || line == '{"":""}') {
-            return ''
-        }
-
-        return line
+        return TextUtils.extractSignLineText(line)
     }
 
     static String removeTextFormatting(String text) {
-        if (!text) {
-            return ''
-        }
-        // Only remove formatting if the flag is enabled
-        if (!removeFormatting) {
-            return text
-        }
-        return COLOR_CODES.inject(text) { String result, String code -> result.replace(code, '') }
+        return TextUtils.removeTextFormattingIfEnabled(text, removeFormatting)
     }
 
+    // ========== NBT Helper Methods (delegated to NbtUtils) ==========
     static CompoundTag readCompressedNBT(File file) {
-        net.querz.nbt.io.NamedTag namedTag = NBTUtil.read(file)
-        return (CompoundTag) namedTag.tag
+        return NbtUtils.readCompressedNBT(file)
     }
-
-    // ========== NBT Helper Methods ==========
-    // Minimal helper methods - Querz library already provides safe getters that return defaults for missing/null keys
-    // Our custom code only adds:
-    // 1. Null-safe wrappers (returns empty objects instead of null)
-    // 2. Format detection for Minecraft version changes (1.20, 1.20.5, 21w43a)
-    // 3. Fallback logic for old/new format compatibility
 
     static boolean hasKey(CompoundTag tag, String key) {
-        return tag != null && tag.containsKey(key)
+        return NbtUtils.hasKey(tag, key)
     }
 
     static CompoundTag getCompoundTag(CompoundTag tag, String key) {
-        if (!tag) {
-            return new CompoundTag()
-        }
-        return tag.getCompoundTag(key) ?: new CompoundTag()
+        return NbtUtils.getCompoundTag(tag, key)
     }
 
     static ListTag<CompoundTag> getCompoundTagList(CompoundTag tag, String key) {
-        if (!tag || !tag.containsKey(key)) {
-            return new ListTag<>(CompoundTag)
-        }
-        ListTag<?> list = tag.getListTag(key)
-        if (!list || list.size() == 0) {
-            return new ListTag<>(CompoundTag)
-        }
-        try {
-            return list.asCompoundTagList()
-        } catch (ClassCastException e) {
-            return new ListTag<>(CompoundTag)
-        }
+        return NbtUtils.getCompoundTagList(tag, key)
     }
 
     static ListTag<?> getListTag(CompoundTag tag, String key) {
-        if (!tag || !tag.containsKey(key)) {
-            return ListTag.createUnchecked(Object)
-        }
-        return tag.getListTag(key) ?: ListTag.createUnchecked(Object)
+        return NbtUtils.getListTag(tag, key)
     }
 
     static double getDoubleAt(ListTag<?> list, int index) {
-        if (!list || index < 0 || index >= list.size()) {
-            return 0.0
-        }
-
-        try {
-            net.querz.nbt.tag.Tag<?> tag = list.get(index)
-            if (tag == null) {
-                return 0.0
-            }
-            switch (tag) {
-                case NumberTag:
-                    return ((NumberTag<?>) tag).asDouble()
-                case StringTag:
-                    return Double.parseDouble(((StringTag) tag).value)
-                default:
-                    return 0.0
-            }
-        } catch (NumberFormatException e) {
-            LOGGER.debug("Invalid number format in NBT tag, returning default: ${e.message}")
-            return 0.0
-        }
+        return NbtUtils.getDoubleAt(list, index)
     }
 
     static String getStringAt(ListTag<?> list, int index) {
-        if (!list || index < 0 || index >= list.size()) {
-            return ''
-        }
-
-        try {
-            net.querz.nbt.tag.Tag<?> tag = list.get(index)
-            if (tag == null) {
-                return ''
-            }
-            switch (tag) {
-                case StringTag:
-                    return ((StringTag) tag).value
-                case CompoundTag:
-                    // For 1.20.5+ page CompoundTags, extract the 'raw' field directly
-                    // which already contains the properly formatted JSON text components
-                    CompoundTag compound = (CompoundTag) tag
-                    if (compound.containsKey('raw')) {
-                        net.querz.nbt.tag.Tag<?> rawTag = compound.get('raw')
-                        if (rawTag instanceof StringTag) {
-                            return ((StringTag) rawTag).value
-                        }
-                    }
-                    // Fallback: convert entire CompoundTag to JSON
-                    return convertNbtToJson((CompoundTag) tag).toString()
-                default:
-                    return tag.valueToString()
-            }
-        } catch (ClassCastException e) {
-            LOGGER.debug("Error casting NBT tag at index ${index}: ${e.message}")
-            return ''
-        }
+        return NbtUtils.getStringAt(list, index)
     }
 
-    /**
-     * Converts a CompoundTag (NBT) to a JSONObject.
-     * This handles the NBT -> JSON conversion for Minecraft text components.
-     */
     static JSONObject convertNbtToJson(CompoundTag tag) {
-        JSONObject json = new JSONObject()
-
-        tag.forEach { String key, net.querz.nbt.tag.Tag<?> value ->
-            switch (value) {
-                case StringTag:
-                    json.put(key, ((StringTag) value).value)
-                    break
-                case NumberTag:
-                    json.put(key, ((NumberTag) value).asNumber())
-                    break
-                case CompoundTag:
-                    json.put(key, convertNbtToJson((CompoundTag) value))
-                    break
-                case ListTag:
-                    json.put(key, convertNbtListToJsonArray((ListTag<?>) value))
-                    break
-                default:
-                    json.put(key, value.value)
-            }
-        }
-
-        return json
+        return NbtUtils.convertNbtToJson(tag)
     }
 
-    /**
-     * Converts a ListTag (NBT) to a JSONArray.
-     */
     static JSONArray convertNbtListToJsonArray(ListTag<?> list) {
-        JSONArray array = new JSONArray()
-
-        for (int i = 0; i < list.size(); i++) {
-            net.querz.nbt.tag.Tag<?> tag = list.get(i)
-
-            switch (tag) {
-                case StringTag:
-                    array.put(((StringTag) tag).value)
-                    break
-                case NumberTag:
-                    array.put(((NumberTag) tag).asNumber())
-                    break
-                case CompoundTag:
-                    array.put(convertNbtToJson((CompoundTag) tag))
-                    break
-                case ListTag:
-                    array.put(convertNbtListToJsonArray((ListTag<?>) tag))
-                    break
-                default:
-                    array.put(tag.value)
-            }
-        }
-
-        return array
+        return NbtUtils.convertNbtListToJsonArray(list)
     }
 
     static String getStringFrom(CompoundTag tag, String key) {
-        if (!tag || !tag.containsKey(key)) {
-            return ''
-        }
-
-        try {
-            net.querz.nbt.tag.Tag<?> value = tag.get(key)
-            if (value == null) {
-                return ''
-            }
-
-            LOGGER.debug("getStringFrom() - key: ${key}, value type: ${value.getClass().name}, value: ${value}")
-
-            // Check if it's a StringTag and get the value
-            if (value instanceof StringTag) {
-                String result = ((StringTag) value).value
-                LOGGER.debug("getStringFrom() - returning: ${result}")
-                return result
-            }
-
-            LOGGER.debug('getStringFrom() - value is not a StringTag, returning empty string')
-            return ''
-        } catch (ClassCastException e) {
-            LOGGER.error("getStringFrom() - error casting value for key '${key}': ${e.message}", e)
-            return ''
-        }
+        return NbtUtils.getStringFrom(tag, key)
     }
 
     static CompoundTag getCompoundAt(ListTag<?> list, int index) {
-        if (!list || index < 0 || index >= list.size()) {
-            return new CompoundTag()
-        }
-
-        net.querz.nbt.tag.Tag<?> tag = list.get(index)
-        if (tag instanceof CompoundTag) {
-            return (CompoundTag) tag
-        }
-        return new CompoundTag()
+        return NbtUtils.getCompoundAt(list, index)
     }
 
     static boolean isStringList(ListTag<?> list) {
-        return list && list.size() > 0 && list.typeClass == StringTag
+        return NbtUtils.isStringList(list)
     }
 
     static boolean isCompoundList(ListTag<?> list) {
-        return list && list.size() > 0 && list.typeClass == CompoundTag
+        return NbtUtils.isCompoundList(list)
     }
 
 }
