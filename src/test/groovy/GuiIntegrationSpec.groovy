@@ -2,11 +2,13 @@ import javafx.application.Platform
 import javafx.embed.swing.JFXPanel
 import javafx.stage.Stage
 import org.testfx.framework.spock.ApplicationSpec
+import spock.lang.IgnoreIf
 import spock.lang.Shared
 import spock.lang.Specification
 import spock.lang.Timeout
 import spock.lang.Unroll
 
+import java.awt.GraphicsEnvironment
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -19,7 +21,12 @@ import java.util.concurrent.atomic.AtomicInteger
  * - GUI launch and basic functionality
  *
  * Uses TestFX with Monocle for headless testing in CI environments.
+ *
+ * IMPORTANT: These tests require a display to run. They will be skipped
+ * automatically in headless environments (CI without xvfb, etc.) because
+ * GuiLogAppender uses Platform.runLater() which requires JavaFX initialization.
  */
+@IgnoreIf({ GraphicsEnvironment.isHeadless() })
 class GuiIntegrationSpec extends Specification {
 
     @Shared
