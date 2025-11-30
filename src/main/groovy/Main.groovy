@@ -48,6 +48,13 @@ class Main implements Runnable {
 
     static Set<Integer> bookHashes = [] as Set
     static Set<String> signHashes = [] as Set
+
+    // Generation tracking for original-prioritization
+    // Maps pages.hashCode() -> [generation: Int, filePath: String] for swapping if more original found
+    static Map<Integer, Map<String, Object>> bookGenerationByHash = [:]
+
+    // Human-readable generation names
+    private static final List<String> GENERATION_NAMES = ['Original', 'Copy of Original', 'Copy of Copy', 'Tattered']
     
     // State file management for tracking failed region files
     static Map<String, Set<String>> failedRegionsByWorld = [:]  // worldFolderName -> Set of failed region filenames
@@ -341,7 +348,7 @@ class Main implements Runnable {
 
     static void runExtraction() {
         // Reset state
-        [bookHashes, signHashes, booksByContainerType, booksByLocationType, bookMetadataList, bookCsvData, signCsvData, booksByAuthor, signsByHash].each { collection -> collection.clear() }
+        [bookHashes, signHashes, booksByContainerType, booksByLocationType, bookMetadataList, bookCsvData, signCsvData, booksByAuthor, signsByHash, bookGenerationByHash].each { collection -> collection.clear() }
         bookCounter = 0
         emptySignsRemoved = 0
         signXCoordinate = 1  // Reset sign coordinate counter
@@ -490,7 +497,7 @@ class Main implements Runnable {
 
     /**
      * Write books data to CSV file
-     * CSV format: X,Y,Z,FoundWhere,Bookname,Author,PageCount,Pages
+     * CSV format: X,Y,Z,FoundWhere,Bookname,Author,PageCount,Generation,Pages
      */
     static void writeBooksCSV() {
         File csvFile = new File(baseDirectory, "${outputFolder}${File.separator}all_books.csv")
@@ -498,7 +505,7 @@ class Main implements Runnable {
 
         csvFile.withWriter('UTF-8') { BufferedWriter writer ->
             // Write header
-            writer.writeLine('X,Y,Z,FoundWhere,Bookname,Author,PageCount,Pages')
+            writer.writeLine('X,Y,Z,FoundWhere,Bookname,Author,PageCount,Generation,Pages')
 
             // Write data
             bookCsvData.each { Map<String, Object> book ->
@@ -509,9 +516,10 @@ class Main implements Runnable {
                 String bookname = escapeCsvField(book.bookname?.toString() ?: 'undefined')
                 String author = escapeCsvField(book.author?.toString() ?: 'undefined')
                 String pageCount = book.pageCount != null ? book.pageCount.toString() : '0'
+                String generationName = escapeCsvField(book.generationName?.toString() ?: 'Original')
                 String pages = escapeCsvField(book.pages?.toString() ?: 'undefined')
 
-                writer.writeLine("${x},${y},${z},${foundWhere},${bookname},${author},${pageCount},${pages}")
+                writer.writeLine("${x},${y},${z},${foundWhere},${bookname},${author},${pageCount},${generationName},${pages}")
             }
         }
 
@@ -605,10 +613,10 @@ class Main implements Runnable {
      * Used for creating book entries in shulker boxes for versions 1.13-1.20.4
      * Now uses raw NBT ListTag to preserve JSON text components
      */
-    static String generateBookNBT(String title, String author, ListTag<?> pages, String version) {
+    static String generateBookNBT(String title, String author, ListTag<?> pages, String version, int generation = 0) {
         String escapedTitle = escapeForMinecraftCommand(title ?: 'Untitled', version)
         String escapedAuthor = escapeForMinecraftCommand(author ?: 'Unknown', version)
-        
+
         String pagesStr = (0..<pages.size()).collect { int i ->
             String rawText = getStringAt(pages, i)
             // Convert § formatting codes to JSON text components if needed
@@ -617,8 +625,8 @@ class Main implements Runnable {
             String escaped = jsonComponent.replace('\\', '\\\\').replace("'", "\\'").replace('\n', '\\n').replace('\r', '\\r')
             "'${escaped}'"
         }.join(',')
-        
-        return "{title:\"${escapedTitle}\",author:\"${escapedAuthor}\",pages:[${pagesStr}]}"
+
+        return "{title:\"${escapedTitle}\",author:\"${escapedAuthor}\",generation:${generation},pages:[${pagesStr}]}"
     }
 
     /**
@@ -626,10 +634,10 @@ class Main implements Runnable {
      * Used for creating book entries in shulker boxes for versions 1.20.5+
      * Now uses raw NBT ListTag to preserve JSON text components
      */
-    static String generateBookComponents(String title, String author, ListTag<?> pages, String version) {
+    static String generateBookComponents(String title, String author, ListTag<?> pages, String version, int generation = 0) {
         String escapedTitle = escapeForMinecraftCommand(title ?: 'Untitled', version)
         String escapedAuthor = escapeForMinecraftCommand(author ?: 'Unknown', version)
-        
+
         String pagesStr = (0..<pages.size()).collect { int i ->
             String rawText = getStringAt(pages, i)
             // Convert § formatting codes to JSON text components if needed
@@ -638,8 +646,8 @@ class Main implements Runnable {
             String escaped = jsonComponent.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r')
             "\"${escaped}\""
         }.join(',')
-        
-        return "{title:\"${escapedTitle}\",author:\"${escapedAuthor}\",pages:[${pagesStr}]}"
+
+        return "{title:\"${escapedTitle}\",author:\"${escapedAuthor}\",generation:${generation},pages:[${pagesStr}]}"
     }
 
     /**
@@ -687,10 +695,11 @@ class Main implements Runnable {
         
         books.eachWithIndex { Map<String, Object> book, int index ->
             if (index > 0) itemsStr.append(',')
-            String bookNBT = generateBookNBT(book.title as String, book.author as String, book.pages as ListTag<?>, '1_13')
+            int gen = (book.generation as Integer) ?: 0
+            String bookNBT = generateBookNBT(book.title as String, book.author as String, book.pages as ListTag<?>, '1_13', gen)
             itemsStr.append("{Slot:${index},id:written_book,Count:1,tag:${bookNBT}}")
         }
-        
+
         // 1.13 display name uses single-quoted JSON
         String escapedDisplayName = displayName.replace('\\', '\\\\').replace('"', '\\"')
         String displayJson = '{"text":"' + escapedDisplayName + '","italic":false}'
@@ -707,10 +716,11 @@ class Main implements Runnable {
         
         books.eachWithIndex { Map<String, Object> book, int index ->
             if (index > 0) itemsStr.append(',')
-            String bookNBT = generateBookNBT(book.title as String, book.author as String, book.pages as ListTag<?>, '1_14')
+            int gen = (book.generation as Integer) ?: 0
+            String bookNBT = generateBookNBT(book.title as String, book.author as String, book.pages as ListTag<?>, '1_14', gen)
             itemsStr.append("{Slot:${index},id:written_book,Count:1,tag:${bookNBT}}")
         }
-        
+
         // 1.14 uses single quotes with JSON inside
         String escapedDisplayName = displayName.replace('"', '\\"')
         String displayJson = '["",{"text":"' + escapedDisplayName + '","italic":false}]'
@@ -727,10 +737,11 @@ class Main implements Runnable {
         
         books.eachWithIndex { Map<String, Object> book, int index ->
             if (index > 0) containerStr.append(',')
-            String bookComponents = generateBookComponents(book.title as String, book.author as String, book.pages as ListTag<?>, '1_20_5')
+            int gen = (book.generation as Integer) ?: 0
+            String bookComponents = generateBookComponents(book.title as String, book.author as String, book.pages as ListTag<?>, '1_20_5', gen)
             containerStr.append("{slot:${index},item:{id:written_book,count:1,components:${bookComponents}}}")
         }
-        
+
         // 1.20.5+ uses escaped JSON for item_name
         // Escape quotes in display name for JSON
         String escapedDisplayName = displayName.replace('"', '\\"')
@@ -751,10 +762,11 @@ class Main implements Runnable {
         
         books.eachWithIndex { Map<String, Object> book, int index ->
             if (index > 0) containerStr.append(',')
-            String bookComponents = generateBookComponents(book.title as String, book.author as String, book.pages as ListTag<?>, '1_21')
+            int gen = (book.generation as Integer) ?: 0
+            String bookComponents = generateBookComponents(book.title as String, book.author as String, book.pages as ListTag<?>, '1_21', gen)
             containerStr.append("{slot:${index},item:{id:written_book,count:1,components:${bookComponents}}}")
         }
-        
+
         // 1.21 uses same escaping as 1.20.5
         String escapedDisplayName = displayName.replace('"', '\\"')
         // Build JSON with literal quotes that test can find
@@ -809,8 +821,9 @@ class Main implements Runnable {
     /**
      * Generate a Minecraft /give command for a written book
      * Supports versions: 1.13+, 1.14+, 1.20.5+, 1.21+
+     * Includes generation parameter (0=Original, 1=Copy of Original, 2=Copy of Copy, 3=Tattered)
      */
-    static String generateBookCommand(String title, String author, ListTag<?> pages, String version) {
+    static String generateBookCommand(String title, String author, ListTag<?> pages, String version, int generation = 0) {
         String escapedTitle = escapeForMinecraftCommand(title ?: 'Untitled', version)
         String escapedAuthor = escapeForMinecraftCommand(author ?: 'Unknown', version)
 
@@ -832,10 +845,10 @@ class Main implements Runnable {
                     String escaped = jsonArray.replace('\\', '\\\\')
                     "'${escaped}'"
                 }.join(',')
-                return "give @p written_book{title:\"${escapedTitle}\",author:\"${escapedAuthor}\",pages:[${pagesStr}]}"
+                return "give @p written_book{title:\"${escapedTitle}\",author:\"${escapedAuthor}\",generation:${generation},pages:[${pagesStr}]}"
 
             case '1_13':
-                // 1.13: /give @p written_book{title:"Title",author:"Author",pages:['{"text":"page1"}','{"text":"page2"}']}
+                // 1.13: /give @p written_book{title:"Title",author:"Author",generation:N,pages:['{"text":"page1"}','{"text":"page2"}']}
                 pagesStr = (0..<pages.size()).collect { int i ->
                     String rawText = getStringAt(pages, i)
                     // Convert § formatting codes to JSON text components if needed
@@ -844,10 +857,10 @@ class Main implements Runnable {
                     String escaped = jsonComponent.replace('\\', '\\\\')
                     "'${escaped}'"
                 }.join(',')
-                return "give @p written_book{title:\"${escapedTitle}\",author:\"${escapedAuthor}\",pages:[${pagesStr}]}"
+                return "give @p written_book{title:\"${escapedTitle}\",author:\"${escapedAuthor}\",generation:${generation},pages:[${pagesStr}]}"
 
             case '1_14':
-                // 1.14: /give @p written_book{title:"Title",author:"Author",pages:['["page1"]','["page2"]']}
+                // 1.14: /give @p written_book{title:"Title",author:"Author",generation:N,pages:['["page1"]','["page2"]']}
                 // 1.14 wraps JSON in array brackets - note: uses single quotes so internal quotes don't need escaping
                 pagesStr = (0..<pages.size()).collect { int i ->
                     String rawText = getStringAt(pages, i)
@@ -867,10 +880,10 @@ class Main implements Runnable {
                     String escaped = jsonArray.replace('\\', '\\\\')
                     "'${escaped}'"
                 }.join(',')
-                return "give @p written_book{title:\"${escapedTitle}\",author:\"${escapedAuthor}\",pages:[${pagesStr}]}"
+                return "give @p written_book{title:\"${escapedTitle}\",author:\"${escapedAuthor}\",generation:${generation},pages:[${pagesStr}]}"
 
             case '1_20_5':
-                // 1.20.5: /give @p written_book[minecraft:written_book_content={title:"Title",author:"Author",pages:["page1","page2"]}]
+                // 1.20.5: /give @p written_book[minecraft:written_book_content={title:"Title",author:"Author",generation:N,pages:["page1","page2"]}]
                 pagesStr = (0..<pages.size()).collect { int i ->
                     String rawText = getStringAt(pages, i)
                     // Convert § formatting codes to JSON text components if needed
@@ -879,10 +892,10 @@ class Main implements Runnable {
                     String escaped = jsonComponent.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r')
                     "\"${escaped}\""
                 }.join(',')
-                return "give @p written_book[minecraft:written_book_content={title:\"${escapedTitle}\",author:\"${escapedAuthor}\",pages:[${pagesStr}]}]"
+                return "give @p written_book[minecraft:written_book_content={title:\"${escapedTitle}\",author:\"${escapedAuthor}\",generation:${generation},pages:[${pagesStr}]}]"
 
             case '1_21':
-                // 1.21: /give @p written_book[written_book_content={title:"Title",author:"Author",pages:["page1","page2"]}]
+                // 1.21: /give @p written_book[written_book_content={title:"Title",author:"Author",generation:N,pages:["page1","page2"]}]
                 pagesStr = (0..<pages.size()).collect { int i ->
                     String rawText = getStringAt(pages, i)
                     // Convert § formatting codes to JSON text components if needed
@@ -891,7 +904,7 @@ class Main implements Runnable {
                     String escaped = jsonComponent.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r')
                     "\"${escaped}\""
                 }.join(',')
-                return "give @p written_book[written_book_content={title:\"${escapedTitle}\",author:\"${escapedAuthor}\",pages:[${pagesStr}]}]"
+                return "give @p written_book[written_book_content={title:\"${escapedTitle}\",author:\"${escapedAuthor}\",generation:${generation},pages:[${pagesStr}]}]"
 
             default:
                 return ''
@@ -1150,8 +1163,9 @@ class Main implements Runnable {
 
     /**
      * Write a book command to all mcfunction version files AND collect for shulker boxes
+     * Includes generation parameter (0=Original, 1=Copy of Original, 2=Copy of Copy, 3=Tattered)
      */
-    static void writeBookToMcfunction(String title, String author, ListTag<?> pages) {
+    static void writeBookToMcfunction(String title, String author, ListTag<?> pages, int generation = 0) {
         if (!pages || pages.size() == 0) {
             return
         }
@@ -1164,14 +1178,15 @@ class Main implements Runnable {
         booksByAuthor[authorName].add([
             title: title ?: 'Untitled',
             author: authorName,
-            pages: pages  // Store the raw NBT ListTag
+            pages: pages,  // Store the raw NBT ListTag
+            generation: generation
         ])
 
         ['1_13', '1_14', '1_20_5', '1_21'].each { String version ->
             BufferedWriter writer = mcfunctionWriters[version]
             if (writer) {
                 try {
-                    String command = generateBookCommand(title, author, pages, version)
+                    String command = generateBookCommand(title, author, pages, version, generation)
                     writer.writeLine(command)
                 } catch (Exception e) {
                     LOGGER.warn("Failed to write book to ${version} mcfunction: ${e.message}")
@@ -1765,6 +1780,11 @@ class Main implements Runnable {
      * - Pages changed from string list to compound list with "raw"/"filtered" fields
      * - Title changed from plain string to filterable string (CompoundTag with "raw"/"filtered")
      * - Author remains a plain string in both formats
+     *
+     * GENERATION TAG:
+     * - generation: Int tag indicating copy status (0=Original, 1=Copy of Original, 2=Copy of Copy, 3=Tattered)
+     * - Defaults to 0 if not present
+     * - Used for original-prioritization in duplicates folder
      */
     public static void readWrittenBook(CompoundTag item, String bookInfo) {
         CompoundTag tag = null
@@ -1791,10 +1811,37 @@ class Main implements Runnable {
             return
         }
 
-        // Check for duplicates
-        boolean isDuplicate = !bookHashes.add(pages.hashCode())
+        // Extract generation tag: 0 = Original (default), 1 = Copy of Original, 2 = Copy of Copy, 3 = Tattered
+        int generation = 0
+        if (tag != null && hasKey(tag, 'generation')) {
+            net.querz.nbt.tag.Tag<?> genTag = tag.get('generation')
+            if (genTag instanceof NumberTag) {
+                generation = ((NumberTag) genTag).asInt()
+                // Clamp to valid range 0-3
+                generation = Math.max(0, Math.min(3, generation))
+            }
+        }
+        String generationName = GENERATION_NAMES[generation]
+
+        // Check for duplicates with original-prioritization
+        int pagesHash = pages.hashCode()
+        boolean isDuplicate = bookHashes.contains(pagesHash)
+        boolean shouldSwap = false
+        Map<String, Object> existingBookInfo = null
+
         if (isDuplicate) {
-            LOGGER.debug('Written book is a duplicate - saving to .duplicates folder')
+            // Check if this book is more "original" than the existing one
+            existingBookInfo = bookGenerationByHash[pagesHash]
+            if (existingBookInfo != null && generation < (existingBookInfo.generation as int)) {
+                // This book is more original - we should swap
+                shouldSwap = true
+                LOGGER.debug("Found more original version (${generationName} vs ${GENERATION_NAMES[existingBookInfo.generation as int]}) - will swap")
+            } else {
+                LOGGER.debug("Written book is a duplicate (${generationName}) - saving to .duplicates folder")
+            }
+        } else {
+            // First occurrence - add to hash set
+            bookHashes.add(pagesHash)
         }
 
         // Extract author and title - handle both old format (plain string) and new format (filterable string)
@@ -1812,7 +1859,7 @@ class Main implements Runnable {
             title = tag.getString('title')
         }
 
-        LOGGER.debug("Extracted written book: \"${title}\" by ${author} (${pages.size()} pages, format: ${format})")
+        LOGGER.debug("Extracted written book: \"${title}\" by ${author} (${pages.size()} pages, format: ${format}, generation: ${generationName})")
 
         bookCounter++
 
@@ -1831,7 +1878,8 @@ class Main implements Runnable {
             author: author ?: '',
             pageCount: pages.size(),
             foundWhere: foundWhere,
-            coordinates: (x != null && y != null && z != null) ? "${x}, ${y}, ${z}" : ''
+            coordinates: (x != null && y != null && z != null) ? "${x}, ${y}, ${z}" : '',
+            generation: generationName
         ])
 
         // Collect all page content for CSV
@@ -1853,6 +1901,8 @@ class Main implements Runnable {
             bookname: title ?: 'untitled',
             author: author ?: 'unknown',
             pageCount: pages.size(),
+            generation: generation,
+            generationName: generationName,
             pages: concatenatedPages
         ])
 
@@ -1871,8 +1921,37 @@ class Main implements Runnable {
             baseFilename = "${titlePart}_(${pages.size()})_by_${authorPart}~${locationPart}"
         }
 
+        // Original-prioritization logic:
+        // If shouldSwap is true, the existing book in main folder is a copy and this book is more original
+        // We need to: 1) Move existing book to duplicates, 2) Put this book in main folder
+        String targetFolder
+        if (shouldSwap) {
+            // Move existing book from booksFolder to duplicatesFolder
+            String existingFilePath = existingBookInfo.filePath as String
+            File existingFile = new File(existingFilePath)
+            if (existingFile.exists()) {
+                File newDuplicateLocation = new File(baseDirectory, "${duplicatesFolder}${File.separator}${existingFile.name}")
+                // Ensure unique filename in duplicates folder
+                int dupCounter = 2
+                while (newDuplicateLocation.exists()) {
+                    String nameWithoutExt = existingFile.name.replace('.stendhal', '')
+                    newDuplicateLocation = new File(baseDirectory, "${duplicatesFolder}${File.separator}${nameWithoutExt}_${dupCounter}.stendhal")
+                    dupCounter++
+                }
+                existingFile.renameTo(newDuplicateLocation)
+                LOGGER.debug("Moved existing copy to duplicates: ${newDuplicateLocation.name}")
+            }
+            // This more original book goes to main folder
+            targetFolder = booksFolder
+        } else if (isDuplicate) {
+            // Regular duplicate goes to duplicates folder
+            targetFolder = duplicatesFolder
+        } else {
+            // First occurrence goes to main folder
+            targetFolder = booksFolder
+        }
+
         // Ensure filename uniqueness by appending counter if file exists
-        String targetFolder = isDuplicate ? duplicatesFolder : booksFolder
         String filename = "${baseFilename}.stendhal"
         File bookFile = new File(baseDirectory, "${targetFolder}${File.separator}${filename}")
         int counter = 2
@@ -1926,10 +2005,20 @@ class Main implements Runnable {
             flush() // Flush immediately to ensure streaming output
         }
 
+        // Update generation tracking for original-prioritization
+        // Track this book's generation and file path so we can swap if a more original version is found later
+        if (!isDuplicate || shouldSwap) {
+            // This is either the first occurrence or we just swapped in a more original version
+            bookGenerationByHash[pagesHash] = [
+                generation: generation,
+                filePath: bookFile.absolutePath
+            ]
+        }
+
         // Write to mcfunction file - pass raw NBT pages to preserve JSON text components
         // IMPORTANT: Pass the raw NBT ListTag directly, not extracted text
         if (pages && pages.size() > 0) {
-            writeBookToMcfunction(title, author, pages)
+            writeBookToMcfunction(title, author, pages, generation)
         }
     }
 
@@ -1981,12 +2070,14 @@ class Main implements Runnable {
         String foundWhere = locationInfo[5]
 
         // Store book metadata for summary table (writable books have no title/author)
+        // Writable books are always "Original" since they can't be copied
         bookMetadataList.add([
             title: 'Writable Book',
             author: '',
             pageCount: pages.size(),
             foundWhere: foundWhere,
-            coordinates: (x != null && y != null && z != null) ? "${x}, ${y}, ${z}" : ''
+            coordinates: (x != null && y != null && z != null) ? "${x}, ${y}, ${z}" : '',
+            generation: 'Original'
         ])
 
         // Collect all page content for CSV
@@ -1999,7 +2090,7 @@ class Main implements Runnable {
         }
         String concatenatedPages = allPageContents.join(' ')
 
-        // Add to CSV data
+        // Add to CSV data (writable books are always generation 0/Original)
         bookCsvData.add([
             x: x,
             y: y,
@@ -2008,6 +2099,8 @@ class Main implements Runnable {
             bookname: 'Writable Book',
             author: '',
             pageCount: pages.size(),
+            generation: 0,
+            generationName: 'Original',
             pages: concatenatedPages
         ])
 
@@ -2079,8 +2172,9 @@ class Main implements Runnable {
         }
 
         // Write to mcfunction file - pass raw NBT pages to preserve formatting
+        // Writable books (book_and_quill) always have generation=0 since they can't be copied
         if (pages && pages.size() > 0) {
-            writeBookToMcfunction('Writable Book', '', pages)
+            writeBookToMcfunction('Writable Book', '', pages, 0)
         }
     }
 
