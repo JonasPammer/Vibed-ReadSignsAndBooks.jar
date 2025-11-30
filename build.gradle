@@ -205,7 +205,7 @@ task createWindowsZip {
     group = 'distribution'
     
     doLast {
-        def jpackageDir = file("$buildDir/build/jpackage/ReadSignsAndBooks")
+        def jpackageDir = file("$buildDir/jpackage/ReadSignsAndBooks")
         def zipFile = file("ReadSignsAndBooks-Windows.zip")
         
         if (jpackageDir.exists()) {
