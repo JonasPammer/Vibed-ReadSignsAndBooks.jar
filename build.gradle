@@ -97,8 +97,9 @@ dependencies {
     testImplementation 'org.testfx:testfx-core:4.0.18'
     testImplementation 'org.testfx:testfx-spock:4.0.18'
 
-    // Monocle for headless JavaFX testing in CI environments
-    testRuntimeOnly 'org.testfx:openjfx-monocle:jdk-12.0.1+2'
+    // Note: Monocle for headless testing is NOT compatible with JavaFX 21 yet
+    // See: https://github.com/TestFX/Monocle/issues
+    // GUI tests will run in headed mode when a display is available
 }
 
 application {
@@ -151,14 +152,13 @@ test {
     // Increase test timeout for integration tests
     timeout = java.time.Duration.ofMinutes(10)
 
-    // Enable headless mode for JavaFX GUI testing in CI environments
-    // Uses Monocle (software renderer) when no display is available
+    // JavaFX GUI testing configuration
+    // Note: Monocle headless testing is not compatible with JavaFX 21 yet
+    // Tests run in headed mode when display is available, skip otherwise
     jvmArgs = [
-        '-Dtestfx.robot=glass',
-        '-Dtestfx.headless=true',
-        '-Dprism.order=sw',
-        '-Dprism.text=t2k',
-        '-Djava.awt.headless=true'
+        '-Dtestfx.robot=awt',  // Use AWT robot (more compatible than Glass)
+        '-Dprism.order=sw',    // Software rendering for consistency
+        '-Dprism.text=t2k'
     ]
 }
 
