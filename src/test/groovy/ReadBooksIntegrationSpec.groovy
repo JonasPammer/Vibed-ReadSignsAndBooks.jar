@@ -1389,19 +1389,21 @@ class ReadBooksIntegrationSpec extends Specification {
      * Run the ReadSignsAndBooks program
      */
     private void runReadBooksProgram() {
-        // Save current directory
-        String originalUserDir = System.getProperty('user.dir')
+        // Set the world directory directly using Main's static field
+        // This is more reliable than System.setProperty('user.dir', ...) which
+        // doesn't actually change the JVM's working directory
+        String originalWorldDir = Main.customWorldDirectory
 
         try {
-            // Change to test world directory
-            System.setProperty('user.dir', testWorldDir.toString())
+            // Set the custom world directory to our test world
+            Main.customWorldDirectory = testWorldDir.toString()
 
             // Run the extraction directly (avoid System.exit() in main())
             Main.runExtraction()
 
         } finally {
             // Restore original directory
-            System.setProperty('user.dir', originalUserDir)
+            Main.customWorldDirectory = originalWorldDir
         }
     }
 
