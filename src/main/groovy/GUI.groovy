@@ -276,13 +276,13 @@ class GUI extends Application {
         statusLabel.text = 'Extracting...'
 
         // Start elapsed time timer (updates button text every second)
+        // Note: Timeline KeyFrame handlers already run on the JavaFX Application Thread,
+        // so no Platform.runLater is needed (see GitHub issue #12)
         elapsedTimeTimer = new Timeline(new KeyFrame(Duration.seconds(1), { event ->
             def elapsed = (System.currentTimeMillis() - extractionStartTime) / 1000
             def minutes = (elapsed / 60) as int
             def seconds = (elapsed % 60) as int
-            Platform.runLater {
-                extractBtn.text = String.format('Extracting... %02d:%02d', minutes, seconds)
-            }
+            extractBtn.text = String.format('Extracting... %02d:%02d', minutes, seconds)
         }))
         elapsedTimeTimer.cycleCount = Timeline.INDEFINITE
         elapsedTimeTimer.play()

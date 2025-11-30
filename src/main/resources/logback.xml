@@ -11,7 +11,11 @@
     </appender>
 
     <!-- GUI appender for live log display in JavaFX TextArea -->
+    <!-- INFO level filter prevents DEBUG spam from flooding the UI (see GitHub issue #12) -->
     <appender name="GUI" class="GuiLogAppender">
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>INFO</level>
+        </filter>
     </appender>
 
     <!-- Root logger configuration - DEBUG level for file, INFO for console -->
