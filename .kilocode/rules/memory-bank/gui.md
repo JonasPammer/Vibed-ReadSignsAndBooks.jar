@@ -36,6 +36,7 @@ static boolean shouldUseGui(String[] args) {
 - `worldPathField` - TextField for world directory path
 - `outputPathField` - TextField for output folder path
 - `removeFormattingCheckBox` - CheckBox for formatting removal option
+- `extractCustomNamesCheckBox` - CheckBox for custom name extraction option
 - `logArea` - TextArea showing live Logback output
 - `statusLabel` - Label showing extraction status
 - `worldDir` - Selected world directory File
@@ -80,6 +81,7 @@ try {
 - **World Directory:** Optional - uses current working directory if not set (same as CLI `-w`)
 - **Output Folder:** Optional - shows dynamic prompt text with default path (same as CLI `-o`)
 - **Remove Formatting:** Checkbox - passes `--remove-formatting` flag to CLI
+- **Extract Custom Names:** Checkbox - passes `--extract-custom-names` flag to CLI
 
 #### 3. Action Buttons (Left-Aligned)
 - **Extract** (Green) - Runs extraction in background thread
@@ -147,6 +149,7 @@ void runExtraction() {
         if (worldDir) args += ['-w', worldDir.absolutePath]
         if (outputFolder) args += ['-o', outputFolder.absolutePath]
         if (removeFormattingCheckBox.selected) args += ['--remove-formatting']
+        if (extractCustomNamesCheckBox.selected) args += ['--extract-custom-names']
 
         Main.runCli(args as String[])  // Direct CLI call, not Main.main()
 
@@ -201,6 +204,7 @@ The GUI is designed to **perfectly mirror CLI behavior**:
 | No output selected | Uses default | `java -jar app.jar` (no `-o`) uses default |
 | Output selected | Passes `-o /path` | `java -jar app.jar -o /path` |
 | Formatting checkbox | Passes `--remove-formatting` | `java -jar app.jar --remove-formatting` |
+| Custom names checkbox | Passes `--extract-custom-names` | `java -jar app.jar --extract-custom-names` |
 
 **Design Philosophy:** GUI only passes arguments that are explicitly set by user. CLI handles all defaults and validation.
 

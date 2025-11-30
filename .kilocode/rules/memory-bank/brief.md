@@ -45,6 +45,12 @@ Server administrators and archivists need a reliable way to:
 Community-maintained open-source project with focus on reliability and version compatibility.
 
 ## Recent Features & Updates
+- ✅ **Custom Name Extraction**: Extract and export all custom-named items and entities from world saves
+  - Supports both pre-1.20.5 format (`tag.display.Name`) and 1.20.5+ format (`components.minecraft:custom_name`)
+  - Entity custom names extracted from `CustomName` field at root level
+  - Outputs in CSV, TXT, and JSON formats with coordinate tracking
+  - Content-based deduplication prevents duplicate entries
+  - Integrated into GUI with `--extract-custom-names` checkbox
 - ✅ **Clickable Signs** (GitHub issue #4): mcfunction files now generate interactive signs where clicking the first line shows original world coordinates with clickable teleport functionality
   - Implemented for all five Minecraft versions (1.13, 1.14, 1.20, 1.20.5, 1.21)
   - Nested clickEvent structure: Sign → tellraw → teleport

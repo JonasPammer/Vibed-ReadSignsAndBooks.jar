@@ -31,8 +31,10 @@ Core orchestrator that coordinates extraction phases and delegates to utility mo
 ```groovy
 static Set<Integer> bookHashes = [] as Set  // Content-based dedup
 static Set<String> signHashes = [] as Set
+static Set<String> customNameHashes = [] as Set  // Custom name dedup
 static int bookCounter = 0
 static Map<String, Integer> booksByContainerType = [:]
+static List<Map<String, Object>> customNames = []  // Custom name metadata
 ```
 
 Intentional static state simplifies single-threaded processing without complex object threading.
@@ -123,16 +125,25 @@ CSV export and summary statistics generation.
 
 **Version Compatibility Layer:**
 ```
-1.20.5+ format: 
+1.20.5+ format:
   - Books stored in CompoundTag with new structure
   - Page array format updated
+  - Custom names in components.minecraft:custom_name
 
 1.18/1.20 format:
   - Legacy page storage in CompoundTag
   - Different key naming conventions
-  
+  - Custom names in tag.display.Name
+
 Fallback logic: New format attempted first, old format on failure
 ```
+
+**Custom Name Extraction:**
+- **Items**: Extract from `tag.display.Name` (pre-1.20.5) or `components.minecraft:custom_name` (1.20.5+)
+- **Entities**: Extract from `CustomName` at root level
+- **Text Parsing**: JSON text components parsed using `TextUtils.extractTextContent()`
+- **Deduplication**: Hash of name + type + item ID prevents duplicates
+- **Coordinate Tracking**: Stores X/Y/Z coordinates for each named item/entity
 
 ### Container Type Support (17 types)
 - Chests, Barrels, Shulker Boxes, Bundles
@@ -151,7 +162,8 @@ Fallback logic: New format attempted first, old format on failure
 - Content-based: `hashCode()` of book pages array
 - Not reference-based equality
 - Single instance per unique text content regardless of copies
-- Applied to both books and signs
+- Applied to books, signs, and custom names
+- Custom names: Hash of name text + item/entity type + item ID
 
 ### Output Stage
 **Streaming Architecture:**
@@ -163,7 +175,10 @@ Fallback logic: New format attempted first, old format on failure
 1. **Stendhal JSON** - Preserves metadata (author, title, pages, type, location)
 2. **CSV** - Tabular format (type, title, author, page_count, content_preview)
 3. **Combined Text** - Human-readable merged output
-4. **Minecraft Datapacks** - Four complete, ready-to-use datapacks:
+4. **Custom Names CSV** - Tabular format with coordinates
+5. **Custom Names TXT** - Human-readable grouped by type
+6. **Custom Names JSON** - Structured with full metadata
+7. **Minecraft Datapacks** - Four complete, ready-to-use datapacks:
    - `readbooks_datapack_1_13/` - Minecraft 1.13-1.14.3 (pack_format 4)
    - `readbooks_datapack_1_14/` - Minecraft 1.14.4-1.19.4 (pack_format 4)
    - `readbooks_datapack_1_20_5/` - Minecraft 1.20.5-1.20.6 (pack_format 41)

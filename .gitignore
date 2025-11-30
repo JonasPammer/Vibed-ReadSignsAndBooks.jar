@@ -4,6 +4,9 @@ logs.txt
 # Generated license reports (auto-generated during build)
 src/main/resources/licenses/
 
+# ensure if output is accidentally not under build/ that we dont commit
+ReadBooks
+
 # Created by https://www.toptal.com/developers/gitignore/api/gradle,java,groovy
 # Edit at https://www.toptal.com/developers/gitignore?templates=gradle,java,groovy
 

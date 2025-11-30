@@ -46,6 +46,9 @@ ReadSignsAndBooks.jar provides a straightforward CLI tool that:
   - Preserves all four lines of text with proper escaping
   - Signs placed in organized grid pattern with relative coordinates
   - Deduplicates identical signs (same text stacked vertically)
+- **Custom Names CSV** - Tabular format with named items/entities and their coordinates
+- **Custom Names TXT** - Human-readable grouped report organized by item/entity type
+- **Custom Names JSON** - Structured format with full metadata for programmatic processing
 
 ### Content Processing
 - NBT binary format parsing and traversal
@@ -53,6 +56,7 @@ ReadSignsAndBooks.jar provides a straightforward CLI tool that:
 - Multi-version format compatibility (automatic detection and adaptation)
 - Content-based deduplication (hashCode of pages, not reference equality)
 - UTF-8 text encoding with special character support
+- Custom name extraction from items and entities with coordinate tracking
 
 ## User Experience Goals
 1. **Simplicity** - Single command execution: `java -jar ReadSignsAndBooks.jar /path/to/world`
@@ -60,6 +64,13 @@ ReadSignsAndBooks.jar provides a straightforward CLI tool that:
 3. **Reliability** - Handles corrupt data gracefully, doesn't crash on edge cases
 4. **Speed** - Can process large worlds (thousands of blocks/entities) in reasonable time
 5. **Flexibility** - Multiple output formats for different user needs
+
+## CLI Arguments
+- `<world>` - Required: Path to Minecraft world save directory
+- `--output-format` - Output format (stendhal, csv, text)
+- `--output-file` - Output file path (defaults to stdout)
+- `--log-file` - Custom log file location
+- `--extract-custom-names` - Enable custom name extraction from items and entities
 
 ## Success Metrics
 - Extraction accuracy: 100% of accessible books/signs extracted

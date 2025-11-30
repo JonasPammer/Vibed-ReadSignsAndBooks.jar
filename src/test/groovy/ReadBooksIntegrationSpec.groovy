@@ -1253,6 +1253,240 @@ class ReadBooksIntegrationSpec extends Specification {
         }
     }
 
+    // ============================================================
+    // Custom Name Extraction Tests (Issue #11)
+    // ============================================================
+
+    def "should create custom names output files when flag enabled"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'custom names files are created when flag is enabled'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+
+            // Enable custom name extraction
+            Main.extractCustomNames = true
+
+            try {
+                runReadBooksProgram()
+
+                // Custom name files should exist (may be empty if no custom names in test world)
+                Path csvFile = outputDir.resolve('all_custom_names.csv')
+                Path txtFile = outputDir.resolve('all_custom_names.txt')
+                Path jsonFile = outputDir.resolve('all_custom_names.json')
+
+                // Files are only created if custom names are found
+                // So we check if any were found and verify files accordingly
+                if (Main.customNameData.size() > 0) {
+                    assert Files.exists(csvFile), "Custom names CSV should exist when custom names found"
+                    assert Files.exists(txtFile), "Custom names TXT should exist when custom names found"
+                    assert Files.exists(jsonFile), "Custom names JSON should exist when custom names found"
+                    println "  ✓ Custom names output files created (${Main.customNameData.size()} custom names found)"
+                } else {
+                    println "  ✓ No custom names found in test world (files not created as expected)"
+                }
+
+                true
+            } finally {
+                // Reset flag
+                Main.extractCustomNames = false
+            }
+        }
+    }
+
+    def "should skip custom names extraction when flag disabled"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'custom names files are NOT created when flag is disabled'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+
+            // Ensure flag is disabled
+            Main.extractCustomNames = false
+
+            runReadBooksProgram()
+
+            // Custom name files should NOT exist
+            Path csvFile = outputDir.resolve('all_custom_names.csv')
+            Path txtFile = outputDir.resolve('all_custom_names.txt')
+            Path jsonFile = outputDir.resolve('all_custom_names.json')
+
+            assert !Files.exists(csvFile), "Custom names CSV should not exist when flag disabled"
+            assert !Files.exists(txtFile), "Custom names TXT should not exist when flag disabled"
+            assert !Files.exists(jsonFile), "Custom names JSON should not exist when flag disabled"
+
+            println "  ✓ Custom names files correctly not created when flag disabled"
+            true
+        }
+    }
+
+    def "should have correct CSV header format for custom names"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'custom names CSV has correct header'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+            Main.extractCustomNames = true
+
+            try {
+                runReadBooksProgram()
+
+                Path csvFile = outputDir.resolve('all_custom_names.csv')
+
+                if (Main.customNameData.size() > 0) {
+                    assert Files.exists(csvFile)
+                    String header = csvFile.text.readLines()[0]
+                    assert header == 'Type,ItemOrEntityID,CustomName,X,Y,Z,Location',
+                        "CSV header format incorrect: ${header}"
+                    println "  ✓ Custom names CSV has correct header format"
+                } else {
+                    println "  ✓ No custom names found (header format test skipped)"
+                }
+
+                true
+            } finally {
+                Main.extractCustomNames = false
+            }
+        }
+    }
+
+    def "should produce valid JSON array for custom names"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'custom names JSON is valid'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+            Main.extractCustomNames = true
+
+            try {
+                runReadBooksProgram()
+
+                Path jsonFile = outputDir.resolve('all_custom_names.json')
+
+                if (Main.customNameData.size() > 0) {
+                    assert Files.exists(jsonFile)
+                    String jsonContent = jsonFile.text
+
+                    // Parse JSON to verify validity
+                    def parsed = new groovy.json.JsonSlurper().parseText(jsonContent)
+                    assert parsed instanceof List, "JSON should be an array"
+
+                    // Verify each entry has required fields
+                    parsed.each { entry ->
+                        assert entry.containsKey('type'), "Entry missing 'type' field"
+                        assert entry.containsKey('itemOrEntityId'), "Entry missing 'itemOrEntityId' field"
+                        assert entry.containsKey('customName'), "Entry missing 'customName' field"
+                        assert entry.containsKey('x'), "Entry missing 'x' field"
+                        assert entry.containsKey('y'), "Entry missing 'y' field"
+                        assert entry.containsKey('z'), "Entry missing 'z' field"
+                        assert entry.containsKey('location'), "Entry missing 'location' field"
+                    }
+
+                    println "  ✓ Custom names JSON is valid with ${parsed.size()} entries"
+                } else {
+                    println "  ✓ No custom names found (JSON validation skipped)"
+                }
+
+                true
+            } finally {
+                Main.extractCustomNames = false
+            }
+        }
+    }
+
+    def "should deduplicate custom names correctly"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'custom names are deduplicated by name+type+id hash'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+            Main.extractCustomNames = true
+
+            try {
+                runReadBooksProgram()
+
+                if (Main.customNameData.size() > 0) {
+                    // Verify deduplication: customNameHashes size should match customNameData size
+                    assert Main.customNameHashes.size() == Main.customNameData.size(),
+                        "Hash count (${Main.customNameHashes.size()}) should match data count (${Main.customNameData.size()})"
+
+                    // Verify no duplicate entries by checking unique combinations
+                    Set<String> uniqueCombinations = [] as Set
+                    Main.customNameData.each { entry ->
+                        String combo = "${entry.customName}|${entry.type}|${entry.itemOrEntityId}"
+                        assert uniqueCombinations.add(combo), "Duplicate entry found: ${combo}"
+                    }
+
+                    println "  ✓ Custom names properly deduplicated (${Main.customNameData.size()} unique entries)"
+                } else {
+                    println "  ✓ No custom names found (deduplication test skipped)"
+                }
+
+                true
+            } finally {
+                Main.extractCustomNames = false
+            }
+        }
+    }
+
+    def "should extract entity custom names with coordinates"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'entity custom names include actual coordinates'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+            Main.extractCustomNames = true
+
+            try {
+                runReadBooksProgram()
+
+                // Find entity entries (should have non-zero coordinates if entities exist with names)
+                List<Map> entityEntries = Main.customNameData.findAll { it.type == 'entity' }
+
+                if (entityEntries.size() > 0) {
+                    entityEntries.each { entry ->
+                        // Entity coordinates should be actual values (not all zeros)
+                        // At least one coordinate should be non-zero for entities
+                        boolean hasCoordinates = entry.x != 0 || entry.y != 0 || entry.z != 0
+                        assert hasCoordinates, "Entity '${entry.customName}' should have non-zero coordinates"
+                        assert entry.location.contains('Entity'), "Entity location should mention 'Entity'"
+                    }
+                    println "  ✓ Entity custom names have proper coordinates (${entityEntries.size()} entities)"
+                } else {
+                    println "  ✓ No named entities found in test world"
+                }
+
+                true
+            } finally {
+                Main.extractCustomNames = false
+            }
+        }
+    }
+
     /**
      * Discover all test worlds in resources folder.
      * Test worlds must be named with pattern: WORLDNAME-BOOKCOUNT-SIGNCOUNT
