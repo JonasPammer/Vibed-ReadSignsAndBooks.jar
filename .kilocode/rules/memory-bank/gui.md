@@ -90,55 +90,93 @@ try {
 - **Exit** - Closes application
 
 #### 4. Extraction Log
-**Real-time Logback integration** - Shows live logging output from CLI execution
+**Real-time Logback integration** - Shows live logging output from CLI execution with rolling buffer to prevent UI freeze.
 
 ### Live Logging Implementation
 
 #### Custom Logback Appender
 **Location:** `src/main/groovy/GuiLogAppender.groovy`
 
-```groovy
-class GuiLogAppender extends AppenderBase<ILoggingEvent> {
-    static Closure<Void> logHandler
+Simple pass-through appender that forwards log messages to the GUI via `Platform.runLater`.
 
-    @Override
-    protected void append(ILoggingEvent event) {
-        if (logHandler) {
-            def formattedMessage = "${event.formattedMessage}\n"
-            Platform.runLater {
-                logHandler(formattedMessage)
-            }
-        }
+#### Rolling Buffer Fix (GitHub Issue #12)
+**Problem:** TextArea.appendText() has O(n) performance. With large worlds generating 166K+ log messages, the TextArea would accumulate megabytes of text, causing each append to trigger expensive layout recalculation. This starved the FX thread, freezing the GUI after ~1 second.
+
+**Solution:** Rolling buffer limits TextArea content:
+```groovy
+final int MAX_LOG_CHARS = 80000  // ~80KB of log text
+
+GuiLogAppender.setLogHandler { message ->
+    def currentLength = logArea.text.length()
+    def newLength = currentLength + message.length()
+
+    if (newLength > MAX_LOG_CHARS) {
+        // Remove oldest ~20% of text to make room
+        def trimAmount = (int)(MAX_LOG_CHARS * 0.2) + message.length()
+        logArea.deleteText(0, Math.min(trimAmount, currentLength))
     }
+    logArea.appendText(message)
 }
 ```
 
-**Configuration:** `src/main/resources/logback.xml`
-```xml
-<appender name="GUI" class="GuiLogAppender">
-</appender>
+**Result:** GUI stays responsive throughout extraction, even on massive worlds with 166K+ region files.
 
-<root level="DEBUG">
-    <appender-ref ref="CONSOLE"/>
-    <appender-ref ref="FILE"/>
-    <appender-ref ref="GUI"/>
-</root>
-```
+### Command-Line Argument Parsing (Picocli Integration)
 
-**Setup in GUI:**
+**Location:** `GUI.groovy` lines 183-217
+
+GUI mode now parses command-line arguments using Picocli, reusing Main's `@Option` definitions to avoid duplication:
+
 ```groovy
-void start(Stage stage) {
-    GuiLogAppender.setLogHandler { message ->
-        logArea.appendText(message)
-    }
+void parseGuiArguments() {
+    def args = getParameters().getRaw() as String[]
 
-    stage.onCloseRequest = {
-        GuiLogAppender.clearLogHandler()
-    }
+    // Parse args into Main's static fields using Picocli
+    new picocli.CommandLine(new Main()).parseArgs(args)
+
+    // Apply parsed values to GUI controls
+    if (Main.customWorldDirectory) { worldDir = new File(...) }
+    if (Main.customOutputDirectory) { outputFolder = new File(...) }
+    if (Main.removeFormatting) { removeFormattingCheckBox.selected = true }
+    if (Main.extractCustomNames) { extractCustomNamesCheckBox.selected = true }
 }
 ```
 
-**Result:** All `LOGGER.info()` and other log statements automatically appear in GUI TextArea in real-time. No manual output capturing needed.
+**Supported GUI Arguments:**
+- `-w, --world <path>` - Pre-set world directory
+- `-o, --output <path>` - Pre-set output directory
+- `--remove-formatting` - Pre-check formatting removal option
+- `--extract-custom-names` - Pre-check custom names option
+- `--start` - Auto-start extraction after 3-second countdown
+
+### Auto-Start Feature (`--start` flag)
+
+**Location:** `GUI.groovy` lines 223-245
+
+Enables hands-free extraction for testing and batch workflows:
+
+```groovy
+void handleAutoStart() {
+    logArea.appendText("Auto-start enabled. Beginning extraction in 3 seconds...\n")
+
+    int[] countdown = [3]
+    def countdownTimer = new Timeline(new KeyFrame(Duration.seconds(1), { event ->
+        countdown[0]--
+        statusLabel.text = countdown[0] > 0 ?
+            "Auto-starting in ${countdown[0]}..." : "Starting extraction..."
+    }))
+    countdownTimer.cycleCount = 3
+    countdownTimer.onFinished = { runExtraction() }
+
+    statusLabel.text = "Auto-starting in 3..."
+    countdownTimer.play()
+}
+```
+
+**Usage Example:**
+```bash
+java -jar ReadSignsAndBooks.jar --gui -w "C:\path\to\world" --start
+```
 
 ### Extraction Flow
 

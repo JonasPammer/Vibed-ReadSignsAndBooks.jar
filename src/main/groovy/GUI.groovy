@@ -53,8 +53,19 @@ class GUI extends Application {
             // Silently fail if icon cannot be loaded - not critical
         }
 
-        // Set up GUI log handler
+        // Set up GUI log handler with rolling buffer to prevent TextArea freeze
+        // (GitHub issue #12: TextArea.appendText() has O(n) performance, causing UI freeze with large logs)
+        final int MAX_LOG_CHARS = 80000  // ~80KB of log text (prevents exponential slowdown)
+
         GuiLogAppender.setLogHandler { message ->
+            def currentLength = logArea.text.length()
+            def newLength = currentLength + message.length()
+
+            if (newLength > MAX_LOG_CHARS) {
+                // Remove oldest ~20% of text to make room (avoids frequent trimming)
+                def trimAmount = (int)(MAX_LOG_CHARS * 0.2) + message.length()
+                logArea.deleteText(0, Math.min(trimAmount, currentLength))
+            }
             logArea.appendText(message)
         }
 
@@ -166,6 +177,82 @@ class GUI extends Application {
         stage.minWidth = 700
         stage.minHeight = 500
         stage.show()
+
+        // Parse command-line arguments using Picocli (reuses Main's @Option definitions)
+        parseGuiArguments()
+
+        // Handle auto-start if --start flag was provided
+        if (Main.autoStart) {
+            handleAutoStart()
+        }
+    }
+
+    /**
+     * Parse command-line arguments using Picocli into Main's static fields.
+     * This reuses Main's @Option definitions to avoid duplication.
+     */
+    void parseGuiArguments() {
+        def args = getParameters().getRaw() as String[]
+
+        // Use Picocli to parse args into Main's static fields
+        // parseArgs doesn't execute run(), just populates the @Option fields
+        new picocli.CommandLine(new Main()).parseArgs(args)
+
+        // Apply parsed values to GUI controls
+        if (Main.customWorldDirectory) {
+            def dir = new File(Main.customWorldDirectory)
+            if (dir.exists() && dir.isDirectory()) {
+                worldDir = dir
+                worldPathField.text = dir.absolutePath
+                updateOutputFolderPrompt()
+                logArea.appendText("World directory: ${Main.customWorldDirectory}\n")
+            } else {
+                logArea.appendText("WARNING: World directory not found: ${Main.customWorldDirectory}\n")
+            }
+        }
+
+        if (Main.customOutputDirectory) {
+            outputFolder = new File(Main.customOutputDirectory)
+            outputPathField.text = Main.customOutputDirectory
+            updateOutputFolderPrompt()
+            logArea.appendText("Output directory: ${Main.customOutputDirectory}\n")
+        }
+
+        if (Main.removeFormatting) {
+            removeFormattingCheckBox.selected = true
+        }
+
+        if (Main.extractCustomNames) {
+            extractCustomNamesCheckBox.selected = true
+        }
+    }
+
+    /**
+     * Handle auto-start countdown.
+     * Shows 3-second countdown in status label, then begins extraction.
+     */
+    void handleAutoStart() {
+        logArea.appendText("Auto-start enabled. Beginning extraction in 3 seconds...\n")
+
+        // Countdown timeline: 3... 2... 1... Extract!
+        int[] countdown = [3]  // Use array to allow modification in closure
+
+        def countdownTimer = new Timeline(new KeyFrame(Duration.seconds(1), { event ->
+            countdown[0]--
+            if (countdown[0] > 0) {
+                statusLabel.text = "Auto-starting in ${countdown[0]}..."
+            } else {
+                statusLabel.text = "Starting extraction..."
+            }
+        }))
+        countdownTimer.cycleCount = 3
+
+        countdownTimer.onFinished = {
+            runExtraction()
+        }
+
+        statusLabel.text = "Auto-starting in 3..."
+        countdownTimer.play()
     }
 
     MenuBar createMenuBar() {

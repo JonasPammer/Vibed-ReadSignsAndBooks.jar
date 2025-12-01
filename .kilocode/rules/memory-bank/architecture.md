@@ -436,7 +436,7 @@ Main.runExtraction()  // Direct call, avoids System.exit()
 3. **Large memory footprint** - 10GB JVM for large worlds
 4. **NBT format dependency** - Tightly coupled to Querz library (6.1)
 5. **Minecraft version tracking** - Must update parsing logic for new format versions
-6. **CLI input only** - No GUI, API, or programmatic interface
+6. **Dual interface** - CLI and JavaFX GUI (see gui.md for GUI architecture)
 7. **Stateful processing** - Static fields maintain extraction state
 
 ## Future Architectural Considerations

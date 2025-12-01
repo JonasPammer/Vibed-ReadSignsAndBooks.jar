@@ -45,6 +45,14 @@ Server administrators and archivists need a reliable way to:
 Community-maintained open-source project with focus on reliability and version compatibility.
 
 ## Recent Features & Updates
+- ✅ **GUI Freeze Fix** (GitHub issue #12): Fixed GUI freezing after ~1 second during extraction
+  - Root cause: TextArea.appendText() has O(n) performance, causing exponential slowdown with large logs
+  - Solution: Rolling buffer limits TextArea to 80KB, trimming oldest 20% when exceeded
+  - GUI now stays responsive throughout extraction on large worlds (166K+ region files tested)
+- ✅ **GUI Auto-Start Mode** (`--start` flag): Auto-start extraction after 3-second countdown
+  - Usage: `java -jar ReadSignsAndBooks.jar --gui -w /path/to/world --start`
+  - GUI arguments now parsed via Picocli, reusing Main's @Option definitions (no duplication)
+  - Enables hands-free testing and batch processing workflows
 - ✅ **Custom Name Extraction**: Extract and export all custom-named items and entities from world saves
   - Supports both pre-1.20.5 format (`tag.display.Name`) and 1.20.5+ format (`components.minecraft:custom_name`)
   - Entity custom names extracted from `CustomName` field at root level

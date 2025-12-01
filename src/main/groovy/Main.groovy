@@ -87,6 +87,12 @@ class Main implements Runnable {
     @Option(names = ['--extract-custom-names'], description = 'Extract custom names from items and entities (default: false)', defaultValue = 'false')
     static boolean extractCustomNames = false
 
+    @Option(names = ['--start'], description = 'GUI mode: auto-start extraction after 3 second countdown', defaultValue = 'false')
+    static boolean autoStart = false
+
+    @Option(names = ['-g', '--gui'], description = 'Launch GUI mode', defaultValue = 'false')
+    static boolean guiMode = false
+
     static void main(String[] args) {
         // Smart detection: GUI mode if no args (double-clicked JAR) or --gui flag
         if (shouldUseGui(args)) {
