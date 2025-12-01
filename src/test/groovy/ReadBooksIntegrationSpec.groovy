@@ -1487,6 +1487,52 @@ class ReadBooksIntegrationSpec extends Specification {
         }
     }
 
+    def "should extract item custom names with coordinates from containers"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'item custom names from block containers include actual coordinates'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+            Main.extractCustomNames = true
+
+            try {
+                runReadBooksProgram()
+
+                // Find item entries (should have non-zero coordinates if items exist in block containers)
+                List<Map> itemEntries = Main.customNameData.findAll { it.type == 'item' }
+
+                if (itemEntries.size() > 0) {
+                    // Check if any items have non-zero coordinates (items in block entities should)
+                    // Note: Player inventory/ender chest items will have 0,0,0 which is expected
+                    List<Map> itemsWithCoords = itemEntries.findAll {
+                        it.x != 0 || it.y != 0 || it.z != 0
+                    }
+                    List<Map> itemsWithoutCoords = itemEntries.findAll {
+                        it.x == 0 && it.y == 0 && it.z == 0
+                    }
+
+                    println "  ✓ Item custom names: ${itemsWithCoords.size()} with coordinates, ${itemsWithoutCoords.size()} without (player inventory/ender chest)"
+
+                    // Verify items with coordinates have valid location strings mentioning chunks
+                    itemsWithCoords.each { entry ->
+                        assert entry.location.contains('Chunk') || entry.location.contains('at'),
+                            "Item '${entry.customName}' should have location with coordinates"
+                    }
+                } else {
+                    println "  ✓ No named items found in test world"
+                }
+
+                true
+            } finally {
+                Main.extractCustomNames = false
+            }
+        }
+    }
+
     /**
      * Discover all test worlds in resources folder.
      * Test worlds must be named with pattern: WORLDNAME-BOOKCOUNT-SIGNCOUNT

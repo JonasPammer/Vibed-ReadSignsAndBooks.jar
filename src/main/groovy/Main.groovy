@@ -927,10 +927,13 @@ class Main implements Runnable {
 
                                          // Process containers with items
                                          if (hasKey(tileEntity, 'id')) {
+                                             int tileX = tileEntity.getInt('x')
+                                             int tileY = tileEntity.getInt('y')
+                                             int tileZ = tileEntity.getInt('z')
                                              getCompoundTagList(tileEntity, 'Items').each { CompoundTag item ->
-                                                 String bookInfo = "Chunk [${x}, ${z}] Inside ${blockId} at (${tileEntity.getInt('x')} ${tileEntity.getInt('y')} ${tileEntity.getInt('z')}) ${file.name}"
+                                                 String bookInfo = "Chunk [${x}, ${z}] Inside ${blockId} at (${tileX} ${tileY} ${tileZ}) ${file.name}"
                                                  int booksBefore = bookCounter
-                                                 parseItem(item, bookInfo)
+                                                 parseItem(item, bookInfo, tileX, tileY, tileZ)
                                                  if (bookCounter > booksBefore) {
                                                      incrementBookStats(blockId, 'Block Entity')
                                                  }
@@ -939,10 +942,13 @@ class Main implements Runnable {
 
                                          // Process lecterns (single book)
                                          if (hasKey(tileEntity, 'Book')) {
+                                             int lectX = tileEntity.getInt('x')
+                                             int lectY = tileEntity.getInt('y')
+                                             int lectZ = tileEntity.getInt('z')
                                              CompoundTag book = getCompoundTag(tileEntity, 'Book')
-                                             String bookInfo = "Chunk [${x}, ${z}] Inside ${blockId} at (${tileEntity.getInt('x')} ${tileEntity.getInt('y')} ${tileEntity.getInt('z')}) ${file.name}"
+                                             String bookInfo = "Chunk [${x}, ${z}] Inside ${blockId} at (${lectX} ${lectY} ${lectZ}) ${file.name}"
                                              int booksBefore = bookCounter
-                                             parseItem(book, bookInfo)
+                                             parseItem(book, bookInfo, lectX, lectY, lectZ)
                                              if (bookCounter > booksBefore) {
                                                  incrementBookStats('Lectern', 'Block Entity')
                                              }
@@ -974,7 +980,7 @@ class Main implements Runnable {
                                              getCompoundTagList(entity, 'Items').each { CompoundTag item ->
                                                  String bookInfo = "Chunk [${x}, ${z}] In ${entityId} at (${xPos} ${yPos} ${zPos}) ${file.name}"
                                                  int booksBefore = bookCounter
-                                                 parseItem(item, bookInfo)
+                                                 parseItem(item, bookInfo, xPos, yPos, zPos)
                                                  if (bookCounter > booksBefore) {
                                                      incrementBookStats(entityId, 'Entity')
                                                  }
@@ -986,7 +992,7 @@ class Main implements Runnable {
                                              CompoundTag item = getCompoundTag(entity, 'Item')
                                              String bookInfo = "Chunk [${x}, ${z}] In ${entityId} at (${xPos} ${yPos} ${zPos}) ${file.name}"
                                              int booksBefore = bookCounter
-                                             parseItem(item, bookInfo)
+                                             parseItem(item, bookInfo, xPos, yPos, zPos)
                                              if (bookCounter > booksBefore) {
                                                  incrementBookStats(entityId, 'Entity')
                                              }
@@ -1106,7 +1112,7 @@ class Main implements Runnable {
                                          getCompoundTagList(entity, 'Items').each { CompoundTag item ->
                                              String bookInfo = "Chunk [${x}, ${z}] In ${entityId} at (${xPos} ${yPos} ${zPos}) ${file.name}"
                                              int booksBefore = bookCounter
-                                             parseItem(item, bookInfo)
+                                             parseItem(item, bookInfo, xPos, yPos, zPos)
                                              if (bookCounter > booksBefore) {
                                                  incrementBookStats(entityId, 'Entity')
                                              }
@@ -1118,7 +1124,7 @@ class Main implements Runnable {
                                          CompoundTag item = getCompoundTag(entity, 'Item')
                                          String bookInfo = "Chunk [${x}, ${z}] In ${entityId} at (${xPos} ${yPos} ${zPos}) ${file.name}"
                                          int booksBefore = bookCounter
-                                         parseItem(item, bookInfo)
+                                         parseItem(item, bookInfo, xPos, yPos, zPos)
                                          if (bookCounter > booksBefore) {
                                              incrementBookStats(entityId, 'Entity')
                                          }
@@ -1181,14 +1187,14 @@ class Main implements Runnable {
      * - Flower Pot (can only hold flowers/plants)
      * - Jukebox (can only hold music discs)
      */
-    public static void parseItem(CompoundTag item, String bookInfo) {
+    public static void parseItem(CompoundTag item, String bookInfo, int x = 0, int y = 0, int z = 0) {
         String itemId = item.getString('id')
 
         // Extract custom name if enabled
         if (extractCustomNames) {
             String customName = extractCustomNameFromItem(item)
             if (customName) {
-                recordCustomName(customName, itemId, 'item', bookInfo, 0, 0, 0)
+                recordCustomName(customName, itemId, 'item', bookInfo, x, y, z)
             }
         }
 
@@ -1214,7 +1220,7 @@ class Main implements Runnable {
                 if (hasKey(components, 'minecraft:container')) {
                     getCompoundTagList(components, 'minecraft:container').each { CompoundTag containerEntry ->
                         CompoundTag shelkerItem = getCompoundTag(containerEntry, 'item')
-                        parseItem(shelkerItem, "${bookInfo} > shulker_box")
+                        parseItem(shelkerItem, "${bookInfo} > shulker_box", x, y, z)
                     }
                 }
             } else if (hasKey(item, 'tag')) {
@@ -1222,7 +1228,7 @@ class Main implements Runnable {
                 CompoundTag shelkerCompound = getCompoundTag(item, 'tag')
                 CompoundTag shelkerCompound2 = getCompoundTag(shelkerCompound, 'BlockEntityTag')
                 getCompoundTagList(shelkerCompound2, 'Items').each { CompoundTag shelkerItem ->
-                    parseItem(shelkerItem, "${bookInfo} > shulker_box")
+                    parseItem(shelkerItem, "${bookInfo} > shulker_box", x, y, z)
                 }
             }
         }
@@ -1237,7 +1243,7 @@ class Main implements Runnable {
                 CompoundTag components = getCompoundTag(item, 'components')
                 if (hasKey(components, 'minecraft:bundle_contents')) {
                     getCompoundTagList(components, 'minecraft:bundle_contents').each { CompoundTag bundleItem ->
-                        parseItem(bundleItem, "${bookInfo} > bundle")
+                        parseItem(bundleItem, "${bookInfo} > bundle", x, y, z)
                     }
                 }
             }
@@ -1255,7 +1261,7 @@ class Main implements Runnable {
                 if (hasKey(components, 'minecraft:container')) {
                     getCompoundTagList(components, 'minecraft:container').each { CompoundTag containerEntry ->
                         CompoundTag chestItem = getCompoundTag(containerEntry, 'item')
-                        parseItem(chestItem, "${bookInfo} > copper_chest")
+                        parseItem(chestItem, "${bookInfo} > copper_chest", x, y, z)
                     }
                 }
             } else if (hasKey(item, 'tag')) {
@@ -1263,7 +1269,7 @@ class Main implements Runnable {
                 CompoundTag chestCompound = getCompoundTag(item, 'tag')
                 CompoundTag chestCompound2 = getCompoundTag(chestCompound, 'BlockEntityTag')
                 getCompoundTagList(chestCompound2, 'Items').each { CompoundTag chestItem ->
-                    parseItem(chestItem, "${bookInfo} > copper_chest")
+                    parseItem(chestItem, "${bookInfo} > copper_chest", x, y, z)
                 }
             }
         }
