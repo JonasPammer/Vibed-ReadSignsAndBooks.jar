@@ -1,0 +1,99 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(minecraft.wiki:*)",
+      "WebFetch(wiki.vg:*)",
+      "WebFetch(mc-datapacks.github.io:*)",
+      "WebFetch(gamergeeks.net:*)",
+      "WebFetch(minecraftforum.net:*)",
+
+      "WebFetch(docs.groovy-lang.org:*)",
+      "WebFetch(groovy-lang.org:*)",
+      "WebFetch(docs.gradle.org:*)",
+      "WebFetch(gradle.org:*)",
+      "WebFetch(plugins.gradle.org:*)",
+      "WebFetch(services.gradle.org:*)",
+
+      "WebFetch(docs.oracle.com:*)",
+      "WebFetch(openjdk.org:*)",
+      "WebFetch(adoptium.net:*)",
+      "WebFetch(bell-sw.com:*)",
+      "WebFetch(sdkman.io:*)",
+
+      "WebFetch(openjfx.io:*)",
+      "WebFetch(fxdocs.github.io:*)",
+      "WebFetch(javacodegeeks.com:*)",
+
+      "WebFetch(picocli.info:*)",
+      "WebFetch(logback.qos.ch:*)",
+      "WebFetch(slf4j.org:*)",
+      "WebFetch(spockframework.org:*)",
+      "WebFetch(commons.apache.org:*)",
+
+      "WebFetch(search.maven.org:*)",
+      "WebFetch(mvnrepository.com:*)",
+      "WebFetch(repo1.maven.org:*)",
+      "WebFetch(central.sonatype.com:*)",
+
+      "WebFetch(github.com:*)",
+      "WebFetch(docs.github.com:*)",
+      "WebFetch(cli.github.com:*)",
+      "WebFetch(raw.githubusercontent.com:*)",
+      "WebFetch(api.github.com:*)",
+      "WebFetch(gist.github.com:*)",
+
+      "WebFetch(stackoverflow.com:*)",
+      "WebFetch(baeldung.com:*)",
+      "WebFetch(vogella.com:*)",
+      "WebFetch(geeksforgeeks.org:*)",
+      "WebFetch(reddit.com:*)",
+      "WebFetch(dzone.com:*)",
+      "WebFetch(medium.com:*)",
+      "WebFetch(dev.to:*)",
+
+      "WebFetch(asciidoctor.org:*)",
+      "WebFetch(asciidoc.org:*)",
+      "WebFetch(json.org:*)",
+      "WebFetch(yaml.org:*)",
+
+      "WebFetch(nipafx.dev:*)",
+      "WebFetch(foojay.io:*)",
+      "WebFetch(inside.java:*)",
+
+      "Bash(git:*)",
+      "Bash(gh:*)",
+      "Bash(./gradlew:*)",
+      "Bash(gradlew:*)",
+      "Bash(gradlew.bat:*)",
+      "Bash(java:*)",
+      "Bash(javac:*)",
+      "Bash(sdk:*)",
+
+      "Bash(gh issue:*)",
+      "Bash(gh pr:*)",
+      "Bash(gh run:*)",
+      "Bash(gh release:*)",
+      "Bash(gh repo:*)",
+      "Bash(gh workflow:*)",
+
+      "Bash(ls:*)",
+      "Bash(dir:*)",
+      "Bash(cat:*)",
+      "Bash(mkdir:*)",
+      "Bash(cp:*)",
+      "Bash(mv:*)",
+      "Bash(rm:*)",
+      "Bash(tree:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(wc:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+
+      "Bash(curl:*)",
+      "Bash(wget:*)",
+      "Bash(unzip:*)",
+      "Bash(tar:*)"
+    ]
+  }
+}

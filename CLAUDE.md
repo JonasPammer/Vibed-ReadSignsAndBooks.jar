@@ -8,6 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 @.kilocode/rules/memory-bank/product.md
 @.kilocode/rules/memory-bank/gui.md
 @.kilocode/rules/memory-bank/minecraft-datapacks.md
+@.kilocode/rules/memory-bank/minecraft-resources.md
 
 ## CRITICAL: Minecraft Datapack Directory Naming
 
