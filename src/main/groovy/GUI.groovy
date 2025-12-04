@@ -192,7 +192,11 @@ class GUI extends Application {
      * This reuses Main's @Option definitions to avoid duplication.
      */
     void parseGuiArguments() {
-        def args = getParameters().getRaw() as String[]
+        // Skip when not launched via Application.launch() (e.g., TestFX tests)
+        def params = getParameters()
+        if (params == null) return
+        
+        def args = params.getRaw() as String[]
 
         // Use Picocli to parse args into Main's static fields
         // parseArgs doesn't execute run(), just populates the @Option fields
