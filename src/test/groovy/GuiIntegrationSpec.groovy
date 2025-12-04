@@ -17,8 +17,12 @@ import java.util.concurrent.atomic.AtomicInteger
  * GUI Integration Tests for ReadSignsAndBooks
  *
  * Tests the GUI components including:
- * - GuiLogAppender throttling behavior (fixes GitHub issue #12)
- * - GUI launch and basic functionality
+ * - GuiLogAppender message delivery (related to GitHub issue #12)
+ * - GUI mode detection
+ *
+ * Note: The freeze prevention for GitHub issue #12 is handled by the rolling
+ * buffer in GUI.groovy, not by batching in GuiLogAppender. These tests verify
+ * that GuiLogAppender correctly delivers messages via Platform.runLater().
  *
  * Uses TestFX with Monocle for headless testing in CI environments.
  *
@@ -57,22 +61,18 @@ class GuiIntegrationSpec extends Specification {
     }
 
     // =========================================================================
-    // GuiLogAppender Throttling Tests (GitHub Issue #12)
+    // GuiLogAppender Message Delivery Tests (related to GitHub Issue #12)
     // =========================================================================
 
-    def "GuiLogAppender should batch multiple messages into single UI update"() {
-        given: "A counter to track UI updates"
-        def updateCount = new AtomicInteger(0)
+    def "GuiLogAppender should deliver all messages to handler"() {
+        given: "A counter to track received messages"
         def receivedMessages = new StringBuilder()
-        def latch = new CountDownLatch(1)
+        def latch = new CountDownLatch(10)
 
-        and: "A log handler that counts updates"
+        and: "A log handler that collects messages"
         GuiLogAppender.setLogHandler { message ->
-            updateCount.incrementAndGet()
             receivedMessages.append(message)
-            if (receivedMessages.toString().contains("Message 10")) {
-                latch.countDown()
-            }
+            latch.countDown()
         }
 
         and: "A mock logging event creator"
@@ -80,7 +80,7 @@ class GuiIntegrationSpec extends Specification {
             [getFormattedMessage: { msg }] as ch.qos.logback.classic.spi.ILoggingEvent
         }
 
-        when: "We send 10 messages rapidly"
+        when: "We send 10 messages"
         def appender = new GuiLogAppender()
         appender.start()
 
@@ -88,38 +88,27 @@ class GuiIntegrationSpec extends Specification {
             appender.append(createEvent("Message ${i + 1}"))
         }
 
-        and: "Wait for messages to be flushed"
-        latch.await(2, TimeUnit.SECONDS)
-
-        // Give extra time for any remaining flushes
-        Thread.sleep(200)
+        and: "Wait for messages to be delivered via Platform.runLater"
+        latch.await(5, TimeUnit.SECONDS)
 
         then: "All messages should be received"
         receivedMessages.toString().contains("Message 1")
         receivedMessages.toString().contains("Message 10")
 
-        and: "Messages should be batched (fewer updates than messages)"
-        updateCount.get() < 10
-
         cleanup:
         appender.stop()
     }
 
-    def "GuiLogAppender should not flood UI when receiving many messages quickly"() {
-        given: "A counter to track UI updates"
-        def updateCount = new AtomicInteger(0)
+    def "GuiLogAppender should handle many messages without losing them"() {
+        given: "A counter to track received messages"
         def messageCount = new AtomicInteger(0)
-        def latch = new CountDownLatch(1)
-        def targetMessages = 100
+        def targetMessages = 50
+        def latch = new CountDownLatch(targetMessages)
 
-        and: "A log handler that counts updates and messages"
+        and: "A log handler that counts messages"
         GuiLogAppender.setLogHandler { message ->
-            updateCount.incrementAndGet()
-            // Count newlines to determine message count
-            def count = message.count('\n')
-            if (messageCount.addAndGet(count) >= targetMessages) {
-                latch.countDown()
-            }
+            messageCount.incrementAndGet()
+            latch.countDown()
         }
 
         and: "A mock logging event creator"
@@ -127,23 +116,20 @@ class GuiIntegrationSpec extends Specification {
             [getFormattedMessage: { msg }] as ch.qos.logback.classic.spi.ILoggingEvent
         }
 
-        when: "We send 100 messages as fast as possible"
+        when: "We send many messages quickly"
         def appender = new GuiLogAppender()
         appender.start()
 
         targetMessages.times { i ->
-            appender.append(createEvent("Flood test message ${i + 1}"))
+            appender.append(createEvent("Test message ${i + 1}"))
         }
 
         and: "Wait for all messages to be processed"
-        def completed = latch.await(5, TimeUnit.SECONDS)
+        def completed = latch.await(10, TimeUnit.SECONDS)
 
-        then: "All messages should eventually be delivered"
-        completed || messageCount.get() >= targetMessages * 0.9  // Allow 90% delivery
-
-        and: "UI updates should be significantly fewer than messages (batching works)"
-        // With 100ms throttle and 100 messages sent instantly, we expect ~1-3 updates
-        updateCount.get() < targetMessages / 5  // At most 20 updates for 100 messages
+        then: "All messages should be delivered"
+        completed
+        messageCount.get() == targetMessages
 
         cleanup:
         appender.stop()
@@ -192,46 +178,6 @@ class GuiIntegrationSpec extends Specification {
 
         then: "Messages after clear should not be received"
         !received.toString().contains("Message after clear")
-
-        cleanup:
-        appender.stop()
-    }
-
-    def "GuiLogAppender should respect MAX_BATCH_SIZE limit"() {
-        given: "A handler that tracks batch sizes"
-        def batchSizes = []
-        def latch = new CountDownLatch(1)
-        def totalReceived = new AtomicInteger(0)
-        def targetMessages = 150  // More than MAX_BATCH_SIZE (100)
-
-        GuiLogAppender.setLogHandler { message ->
-            def count = message.count('\n')
-            batchSizes << count
-            if (totalReceived.addAndGet(count) >= targetMessages) {
-                latch.countDown()
-            }
-        }
-
-        def createEvent = { String msg ->
-            [getFormattedMessage: { msg }] as ch.qos.logback.classic.spi.ILoggingEvent
-        }
-
-        when: "We send more messages than MAX_BATCH_SIZE"
-        def appender = new GuiLogAppender()
-        appender.start()
-
-        targetMessages.times { i ->
-            appender.append(createEvent("Batch test ${i + 1}"))
-        }
-
-        and: "Wait for processing"
-        latch.await(5, TimeUnit.SECONDS)
-
-        then: "Each batch should be at most MAX_BATCH_SIZE"
-        batchSizes.every { it <= 100 }
-
-        and: "Multiple batches should be created"
-        batchSizes.size() >= 2
 
         cleanup:
         appender.stop()
