@@ -914,6 +914,9 @@ class ReadBooksIntegrationSpec extends Specification {
      * Helper to set up a test world
      */
     private void setupTestWorld(Map worldInfo) {
+        // Reset Main's static state before each test world to prevent accumulation
+        Main.resetState()
+        
         currentTestWorldName = worldInfo.name
         currentExpectedBookCount = worldInfo.bookCount
         currentExpectedSignCount = worldInfo.signCount
