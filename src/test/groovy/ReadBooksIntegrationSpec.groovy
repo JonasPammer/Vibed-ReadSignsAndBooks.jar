@@ -99,25 +99,8 @@ class ReadBooksIntegrationSpec extends Specification {
             println "Testing world: ${worldInfo.name} (expected ${worldInfo.bookCount} books, ${worldInfo.signCount} signs)"
             println '='.repeat(80)
 
-            currentTestWorldName = worldInfo.name
-            currentExpectedBookCount = worldInfo.bookCount
-            currentExpectedSignCount = worldInfo.signCount
-
-            // Set up test world directory in temp location
-            testWorldDir = tempDir.resolve(worldInfo.name)
-            Files.createDirectories(testWorldDir)
-
-            // Expected output directory
-            outputDir = testWorldDir.resolve('ReadBooks').resolve(dateStamp)
-
-            // Clean up ReadBooks folder from previous test runs
-            File readBooksDir = testWorldDir.resolve('ReadBooks').toFile()
-            if (readBooksDir.exists()) {
-                readBooksDir.deleteDir()
-            }
-
-            // Copy and run
-            copyTestWorldData(worldInfo.resourcePath)
+            // Use setupTestWorld() to ensure Main.resetState() is called before each iteration
+            setupTestWorld(worldInfo)
             runReadBooksProgram()
 
             // Verify output directory structure
