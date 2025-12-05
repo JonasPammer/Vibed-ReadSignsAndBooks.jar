@@ -292,9 +292,14 @@ class Main implements Runnable {
     }
 
     static void runExtraction() {
-        // Reset all static state before extraction to ensure test isolation
-        // This includes both collections AND @Option fields to prevent accumulation
-        resetState()
+        // Reset collections but preserve @Option fields that were intentionally set
+        // (e.g., customWorldDirectory set by tests or CLI arguments)
+        [bookHashes, signHashes, customNameHashes, customNameData, booksByContainerType,
+         booksByLocationType, bookMetadataList, bookCsvData, signCsvData, booksByAuthor,
+         signsByHash, bookGenerationByHash].each { collection -> collection.clear() }
+        bookCounter = 0
+        emptySignsRemoved = 0
+        signXCoordinate = 1  // Reset sign coordinate counter
 
         // Set directories
         baseDirectory = customWorldDirectory ?: System.getProperty('user.dir')
