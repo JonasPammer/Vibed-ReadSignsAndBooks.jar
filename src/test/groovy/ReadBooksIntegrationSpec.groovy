@@ -92,12 +92,13 @@ class ReadBooksIntegrationSpec extends Specification {
             file.listFiles()?.each { deleteRecursively(it) }
         }
         // Try multiple times to handle Windows file locking
-        for (int i = 0; i < 3; i++) {
+        // Increased retries and longer pauses for Windows file handle release
+        for (int i = 0; i < 5; i++) {
             if (file.delete()) {
                 return
             }
-            // Brief pause to allow file handles to be released
-            Thread.sleep(50)
+            // Longer pause to allow file handles to be released
+            Thread.sleep(100)
         }
         // If still exists after retries, log but don't fail
         if (file.exists()) {
@@ -935,8 +936,9 @@ class ReadBooksIntegrationSpec extends Specification {
         if (readBooksDir.exists()) {
             // Use deleteRecursively for thorough cleanup with retry logic
             deleteRecursively(readBooksDir)
-            // Wait to ensure Windows releases file handles
-            Thread.sleep(100)
+            // Wait LONGER to ensure Windows releases file handles
+            // File handles can take time to release after extraction completes
+            Thread.sleep(500)
         }
 
         copyTestWorldData(worldInfo.resourcePath)
