@@ -36,6 +36,25 @@ class ReadBooksIntegrationSpec extends Specification {
     int currentExpectedBookCount
     int currentExpectedSignCount
 
+    /**
+     * Runs ONCE before all tests to ensure clean state
+     */
+    void setupSpec() {
+        // Clean up entire build/test-worlds directory before any tests run
+        Path projectRoot = Paths.get(System.getProperty('user.dir'))
+        Path testWorldsDir = projectRoot.resolve('build').resolve('test-worlds')
+        File testWorldsDirFile = testWorldsDir.toFile()
+        
+        if (testWorldsDirFile.exists()) {
+            // Force delete everything with retry logic
+            testWorldsDirFile.deleteDir()
+            // Wait to ensure Windows releases file handles
+            Thread.sleep(200)
+        }
+        
+        println "setupSpec: Cleaned build/test-worlds directory"
+    }
+    
     void setup() {
         // Reset Main's static state to ensure test isolation
         Main.resetState()
