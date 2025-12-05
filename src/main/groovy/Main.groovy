@@ -93,6 +93,50 @@ class Main implements Runnable {
     @Option(names = ['-g', '--gui'], description = 'Launch GUI mode', defaultValue = 'false')
     static boolean guiMode = false
 
+    /**
+     * Reset all static state for testing purposes.
+     * This method clears all accumulated state from previous extraction runs,
+     * allowing tests to run in isolation without state bleeding between tests.
+     */
+    static void resetState() {
+        // Reset hash sets for deduplication
+        bookHashes = [] as Set
+        signHashes = [] as Set
+        customNameHashes = [] as Set
+        
+        // Reset data collections
+        customNameData = []
+        bookGenerationByHash = [:]
+        failedRegionsByWorld = [:]
+        recoveredRegions = [] as Set
+        
+        // Reset counters
+        bookCounter = 0
+        emptySignsRemoved = 0
+        signXCoordinate = 1
+        
+        // Reset maps and lists
+        booksByContainerType = [:]
+        booksByLocationType = [:]
+        bookMetadataList = []
+        bookCsvData = []
+        signCsvData = []
+        signsByHash = [:]
+        booksByAuthor = [:]
+        
+        // Reset writers (they should be closed, but clear the references)
+        mcfunctionWriters = [:]
+        signsMcfunctionWriters = [:]
+        combinedBooksWriter = null
+        
+        // Reset output paths (will be recomputed on next run)
+        outputFolder = null
+        booksFolder = null
+        duplicatesFolder = null
+        dateStamp = null
+        outputFolderParent = null
+    }
+
     static void main(String[] args) {
         // Smart detection: GUI mode if no args (double-clicked JAR) or --gui flag
         if (shouldUseGui(args)) {
