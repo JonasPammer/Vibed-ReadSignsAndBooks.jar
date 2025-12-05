@@ -37,15 +37,53 @@ class ReadBooksIntegrationSpec extends Specification {
     int currentExpectedSignCount
 
     void setup() {
+        // Reset Main's static state to ensure test isolation
+        Main.resetState()
+        
         // Create date stamp for expected output folder
         dateStamp = LocalDate.now().format(DateTimeFormatter.ofPattern('yyyy-MM-dd'))
 
         // Create temp directory in build/test-worlds (gitignored)
         Path projectRoot = Paths.get(System.getProperty('user.dir'))
         tempDir = projectRoot.resolve('build').resolve('test-worlds')
+        
+        // Clean up entire test-worlds directory before each test to prevent file accumulation
+        // This is necessary because deleteDir() can fail silently on Windows if files are locked
+        File tempDirFile = tempDir.toFile()
+        if (tempDirFile.exists()) {
+            // Force delete using a more robust approach
+            tempDirFile.listFiles()?.each { File worldDir ->
+                File readBooksDir = new File(worldDir, 'ReadBooks')
+                if (readBooksDir.exists()) {
+                    deleteRecursively(readBooksDir)
+                }
+            }
+        }
+        
         Files.createDirectories(tempDir)
 
         println "Test output directory: ${tempDir.toAbsolutePath()}"
+    }
+    
+    /**
+     * Recursively delete a directory with multiple attempts for Windows file locking issues
+     */
+    private void deleteRecursively(File file) {
+        if (file.isDirectory()) {
+            file.listFiles()?.each { deleteRecursively(it) }
+        }
+        // Try multiple times to handle Windows file locking
+        for (int i = 0; i < 3; i++) {
+            if (file.delete()) {
+                return
+            }
+            // Brief pause to allow file handles to be released
+            Thread.sleep(50)
+        }
+        // If still exists after retries, log but don't fail
+        if (file.exists()) {
+            println "Warning: Could not delete ${file.absolutePath}"
+        }
     }
 
     def "should extract books from test world and create individual book files"() {
