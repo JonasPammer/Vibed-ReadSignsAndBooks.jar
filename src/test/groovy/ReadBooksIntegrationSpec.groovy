@@ -929,9 +929,14 @@ class ReadBooksIntegrationSpec extends Specification {
         outputDir = testWorldDir.resolve('ReadBooks').resolve(dateStamp)
 
         // Clean up ReadBooks folder from previous test runs
+        // This is CRITICAL: must delete entire ReadBooks directory to prevent
+        // .stendhal file accumulation across test iterations
         File readBooksDir = testWorldDir.resolve('ReadBooks').toFile()
         if (readBooksDir.exists()) {
-            readBooksDir.deleteDir()
+            // Use deleteRecursively for thorough cleanup with retry logic
+            deleteRecursively(readBooksDir)
+            // Wait to ensure Windows releases file handles
+            Thread.sleep(100)
         }
 
         copyTestWorldData(worldInfo.resourcePath)
