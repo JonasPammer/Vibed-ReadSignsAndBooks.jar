@@ -135,6 +135,15 @@ class Main implements Runnable {
         duplicatesFolder = null
         dateStamp = null
         outputFolderParent = null
+        baseDirectory = System.getProperty('user.dir')
+        
+        // Reset command-line option fields to prevent test pollution
+        customWorldDirectory = null
+        customOutputDirectory = null
+        removeFormatting = false
+        extractCustomNames = false
+        autoStart = false
+        guiMode = false
     }
 
     static void main(String[] args) {
