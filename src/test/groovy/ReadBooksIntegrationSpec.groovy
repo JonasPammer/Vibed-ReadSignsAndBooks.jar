@@ -92,13 +92,17 @@ class ReadBooksIntegrationSpec extends Specification {
             file.listFiles()?.each { deleteRecursively(it) }
         }
         // Try multiple times to handle Windows file locking
-        // Increased retries and longer pauses for Windows file handle release
-        for (int i = 0; i < 5; i++) {
+        // AGGRESSIVELY increased retries and longer pauses for Windows file handle release
+        for (int i = 0; i < 10; i++) {
             if (file.delete()) {
                 return
             }
-            // Longer pause to allow file handles to be released
-            Thread.sleep(100)
+            // Force garbage collection between attempts to release file handles
+            if (i % 3 == 0) {
+                System.gc()
+            }
+            // Much longer pause to allow file handles to be released
+            Thread.sleep(200)
         }
         // If still exists after retries, log but don't fail
         if (file.exists()) {
@@ -934,11 +938,17 @@ class ReadBooksIntegrationSpec extends Specification {
         // .stendhal file accumulation across test iterations
         File readBooksDir = testWorldDir.resolve('ReadBooks').toFile()
         if (readBooksDir.exists()) {
+            // Force garbage collection to release file handles
+            System.gc()
+            Thread.sleep(200)
+            
             // Use deleteRecursively for thorough cleanup with retry logic
             deleteRecursively(readBooksDir)
-            // Wait LONGER to ensure Windows releases file handles
-            // File handles can take time to release after extraction completes
-            Thread.sleep(500)
+            
+            // Force another GC and wait MUCH LONGER for Windows to release file handles
+            // Windows file handles can take significant time to release after extraction
+            System.gc()
+            Thread.sleep(1000)  // Increased from 500ms to 1000ms (1 second)
         }
 
         copyTestWorldData(worldInfo.resourcePath)
