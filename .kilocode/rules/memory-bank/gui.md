@@ -97,12 +97,13 @@ try {
 #### Custom Logback Appender
 **Location:** `src/main/groovy/GuiLogAppender.groovy`
 
-Simple pass-through appender that forwards log messages to the GUI via `Platform.runLater`.
+Batching appender that buffers log messages and flushes to the GUI periodically via `Platform.runLater`.
 
-#### Rolling Buffer Fix (GitHub Issue #12)
-**Problem:** TextArea.appendText() has O(n) performance. With large worlds generating 166K+ log messages, the TextArea would accumulate megabytes of text, causing each append to trigger expensive layout recalculation. This starved the FX thread, freezing the GUI after ~1 second.
+#### GUI Freeze Fixes (GitHub Issue #12)
 
-**Solution:** Rolling buffer limits TextArea content:
+**Problem 1 (Original):** TextArea.appendText() has O(n) performance. With large worlds generating 166K+ log messages, the TextArea would accumulate megabytes of text, causing each append to trigger expensive layout recalculation.
+
+**Solution 1:** Rolling buffer limits TextArea content to 80KB in GUI.groovy:
 ```groovy
 final int MAX_LOG_CHARS = 80000  // ~80KB of log text
 
@@ -119,7 +120,28 @@ GuiLogAppender.setLogHandler { message ->
 }
 ```
 
-**Result:** GUI stays responsive throughout extraction, even on massive worlds with 166K+ region files.
+**Problem 2 (Recurrence):** Each log message triggered a separate `Platform.runLater()` call. During *.mca processing with thousands of messages/second, the FX event queue flooded with pending updates, starving user input events. Symptoms: GUI only updated when resizing window, otherwise frozen but extraction continued normally.
+
+**Solution 2:** Simple time-based batching in GuiLogAppender:
+```groovy
+private static StringBuilder buffer = new StringBuilder()
+private static long lastFlush = 0
+private static final long FLUSH_INTERVAL = 100  // ms
+
+void append(ILoggingEvent event) {
+    synchronized (buffer) {
+        buffer.append(event.formattedMessage).append('\n')
+        if (System.currentTimeMillis() - lastFlush >= FLUSH_INTERVAL) {
+            def text = buffer.toString()
+            buffer.setLength(0)
+            lastFlush = System.currentTimeMillis()
+            Platform.runLater { logHandler(text) }
+        }
+    }
+}
+```
+
+**Result:** Reduces Platform.runLater calls from thousands/second to ~10/second. GUI stays responsive throughout extraction.
 
 ### Command-Line Argument Parsing (Picocli Integration)
 
