@@ -1,3 +1,6 @@
+# weird windows
+nul
+
 *.log
 logs.txt
 

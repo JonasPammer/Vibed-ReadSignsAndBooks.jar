@@ -93,6 +93,9 @@ class Main implements Runnable {
     @Option(names = ['-g', '--gui'], description = 'Launch GUI mode', defaultValue = 'false')
     static boolean guiMode = false
 
+    @Option(names = ['--track-failed-regions'], description = 'Track and suppress errors for repeatedly failing region files (default: false)', defaultValue = 'false')
+    static boolean trackFailedRegions = false
+
     /**
      * Reset all static state for testing purposes.
      * This method clears all accumulated state from previous extraction runs,
@@ -144,6 +147,7 @@ class Main implements Runnable {
         extractCustomNames = false
         autoStart = false
         guiMode = false
+        trackFailedRegions = false
     }
 
     static void main(String[] args) {
@@ -334,19 +338,21 @@ class Main implements Runnable {
         LOGGER.info("Output folder: ${outputFolder}")
         LOGGER.info('=' * 80)
         
-        // Load state file with previously failed regions
-        loadFailedRegionsState()
-        
-        // Print message about suppressed regions if any known failures exist
-        String worldFolderName = new File(baseDirectory).name
-        if (failedRegionsByWorld.containsKey(worldFolderName)) {
-            Set<String> failedRegions = failedRegionsByWorld[worldFolderName]
-            LOGGER.info("")
-            LOGGER.info("⚠️  NOTICE: ${failedRegions.size()} region file(s) have previously failed to read. Error messages for these known problematic regions will be suppressed in this run's output:")
-            failedRegions.toList().sort().each { String regionFile ->
-                LOGGER.info("  - ${regionFile}")
+        // Load state file with previously failed regions (only if tracking enabled)
+        if (trackFailedRegions) {
+            loadFailedRegionsState()
+
+            // Print message about suppressed regions if any known failures exist
+            String worldFolderName = new File(baseDirectory).name
+            if (failedRegionsByWorld.containsKey(worldFolderName)) {
+                Set<String> failedRegions = failedRegionsByWorld[worldFolderName]
+                LOGGER.info("")
+                LOGGER.info("⚠️  NOTICE: ${failedRegions.size()} region file(s) have previously failed to read. Error messages for these known problematic regions will be suppressed in this run's output:")
+                failedRegions.toList().sort().each { String regionFile ->
+                    LOGGER.info("  - ${regionFile}")
+                }
+                LOGGER.info("")
             }
-            LOGGER.info("")
         }
 
         long startTime = System.currentTimeMillis()
@@ -406,14 +412,18 @@ class Main implements Runnable {
             printSummaryStatistics(elapsed)
             LOGGER.info("${elapsed / 1000} seconds to complete.")
             
-            // Save state file with any new failures discovered
-            saveFailedRegionsState()
+            // Save state file with any new failures discovered (only if tracking enabled)
+            if (trackFailedRegions) {
+                saveFailedRegionsState()
+            }
         } catch (IllegalStateException | IOException e) {
             LOGGER.error("Fatal error: ${e.message}", e)
             combinedBooksWriter?.close()
             mcfunctionWriters.values().each { it?.close() }
-            // Still save state file even if extraction had errors
-            saveFailedRegionsState()
+            // Still save state file even if extraction had errors (only if tracking enabled)
+            if (trackFailedRegions) {
+                saveFailedRegionsState()
+            }
             throw e
         }
     }
@@ -461,7 +471,15 @@ class Main implements Runnable {
      * Write custom names output files (CSV, TXT, JSON)
      */
     static void writeCustomNamesOutput() {
-        if (!extractCustomNames || customNameData.isEmpty()) {
+        LOGGER.debug("writeCustomNamesOutput() called: extractCustomNames=${extractCustomNames}, customNameData.size()=${customNameData.size()}")
+
+        if (!extractCustomNames) {
+            LOGGER.debug("Skipping custom names output: --extract-custom-names flag not set")
+            return
+        }
+
+        if (customNameData.isEmpty()) {
+            LOGGER.debug("Skipping custom names output: no custom names found")
             return
         }
 
@@ -470,12 +488,12 @@ class Main implements Runnable {
         // Write CSV file
         File csvFile = new File(baseDirectory, "${outputFolder}${File.separator}all_custom_names.csv")
         csvFile.withWriter('UTF-8') { BufferedWriter writer ->
-            writer.writeLine('Type,ItemOrEntityID,CustomName,X,Y,Z,Location')
+            writer.writeLine('CustomName,Type,ItemOrEntityID,X,Y,Z,Location')
             customNameData.each { Map<String, Object> data ->
                 writer.writeLine([
+                    escapeCsvField(data.customName as String),
                     escapeCsvField(data.type as String),
                     escapeCsvField(data.itemOrEntityId as String),
-                    escapeCsvField(data.customName as String),
                     data.x ?: '',
                     data.y ?: '',
                     data.z ?: '',
@@ -889,19 +907,32 @@ class Main implements Runnable {
                     LOGGER.debug("Processing player data: ${file.name}")
                     CompoundTag playerCompound = readCompressedNBT(file)
 
-                    // Process inventory
+                    // Extract player position from Pos tag (list of 3 doubles: [x, y, z])
+                    // Player position is used for items in inventory/ender chest that don't have world coordinates
+                    int playerX = 0, playerY = 0, playerZ = 0
+                    if (hasKey(playerCompound, 'Pos')) {
+                        ListTag<?> posTag = getListTag(playerCompound, 'Pos')
+                        if (posTag && posTag.size() >= 3) {
+                            playerX = getDoubleAt(posTag, 0) as int
+                            playerY = getDoubleAt(posTag, 1) as int
+                            playerZ = getDoubleAt(posTag, 2) as int
+                            LOGGER.debug("Player position: (${playerX}, ${playerY}, ${playerZ})")
+                        }
+                    }
+
+                    // Process inventory - pass player coordinates for items without world position
                     getCompoundTagList(playerCompound, 'Inventory').each { CompoundTag item ->
                         int booksBefore = bookCounter
-                        parseItem(item, "Inventory of player ${file.name}")
+                        parseItem(item, "Inventory of player ${file.name}", playerX, playerY, playerZ)
                         if (bookCounter > booksBefore) {
                             incrementBookStats('Player Inventory', 'Player')
                         }
                     }
 
-                    // Process ender chest
+                    // Process ender chest - pass player coordinates for items without world position
                     getCompoundTagList(playerCompound, 'EnderItems').each { CompoundTag item ->
                         int booksBefore = bookCounter
-                        parseItem(item, "Ender Chest of player ${file.name}")
+                        parseItem(item, "Ender Chest of player ${file.name}", playerX, playerY, playerZ)
                         if (bookCounter > booksBefore) {
                             incrementBookStats('Ender Chest', 'Player')
                         }
@@ -957,10 +988,12 @@ class Main implements Runnable {
                          try {
                              net.querz.mca.MCAFile mcaFile = MCAUtil.read(file, LoadFlags.RAW)
                              
-                             // Check if this region was previously marked as failed - if so, mark it as recovered
-                             String worldFolderName = new File(baseDirectory).name
-                             if (failedRegionsByWorld.containsKey(worldFolderName) && failedRegionsByWorld[worldFolderName].contains(file.name)) {
-                                 recoveredRegions.add(file.name)
+                             // Check if this region was previously marked as failed - if so, mark it as recovered (only if tracking enabled)
+                             if (trackFailedRegions) {
+                                 String worldFolderName = new File(baseDirectory).name
+                                 if (failedRegionsByWorld.containsKey(worldFolderName) && failedRegionsByWorld[worldFolderName].contains(file.name)) {
+                                     recoveredRegions.add(file.name)
+                                 }
                              }
 
                              (0..31).each { int x ->
@@ -1062,20 +1095,25 @@ class Main implements Runnable {
                                      }
                                  }
                              }
-                         } catch (IOException e) {
-                             // Check if this region is known to have failed before - if so, suppress the error message
-                             String worldFolderName = new File(baseDirectory).name
-                             boolean isKnownFailure = failedRegionsByWorld.containsKey(worldFolderName) && failedRegionsByWorld[worldFolderName].contains(file.name)
-                             
-                             if (isKnownFailure) {
-                                 LOGGER.debug("(Previously failed region, error suppressed) ${file.name}: ${e.message}")
-                             } else {
-                                 LOGGER.warn("Failed to read region file ${file.name}: ${e.message}")
-                                 // Track this as a new failure
-                                 if (!failedRegionsByWorld.containsKey(worldFolderName)) {
-                                     failedRegionsByWorld[worldFolderName] = [] as Set
+                         } catch (Exception e) {
+                             if (trackFailedRegions) {
+                                 // Check if this region is known to have failed before - if so, suppress the error message
+                                 String worldFolderName = new File(baseDirectory).name
+                                 boolean isKnownFailure = failedRegionsByWorld.containsKey(worldFolderName) && failedRegionsByWorld[worldFolderName].contains(file.name)
+
+                                 if (isKnownFailure) {
+                                     LOGGER.debug("(Previously failed region, error suppressed) ${file.name}: ${e.message}")
+                                 } else {
+                                     LOGGER.warn("Failed to read region file ${file.name}: ${e.message}")
+                                     // Track this as a new failure
+                                     if (!failedRegionsByWorld.containsKey(worldFolderName)) {
+                                         failedRegionsByWorld[worldFolderName] = [] as Set
+                                     }
+                                     failedRegionsByWorld[worldFolderName].add(file.name)
                                  }
-                                 failedRegionsByWorld[worldFolderName].add(file.name)
+                             } else {
+                                 // Always log when tracking is disabled
+                                 LOGGER.warn("Failed to read region file ${file.name}: ${e.message}")
                              }
                          }
 
@@ -1128,10 +1166,12 @@ class Main implements Runnable {
                      try {
                          net.querz.mca.MCAFile mcaFile = MCAUtil.read(file, LoadFlags.RAW)
                          
-                         // Check if this entity file was previously marked as failed - if so, mark it as recovered
-                         String worldFolderName = new File(baseDirectory).name
-                         if (failedRegionsByWorld.containsKey(worldFolderName) && failedRegionsByWorld[worldFolderName].contains(file.name)) {
-                             recoveredRegions.add(file.name)
+                         // Check if this entity file was previously marked as failed - if so, mark it as recovered (only if tracking enabled)
+                         if (trackFailedRegions) {
+                             String worldFolderName = new File(baseDirectory).name
+                             if (failedRegionsByWorld.containsKey(worldFolderName) && failedRegionsByWorld[worldFolderName].contains(file.name)) {
+                                 recoveredRegions.add(file.name)
+                             }
                          }
 
                          (0..31).each { int x ->
@@ -1194,20 +1234,25 @@ class Main implements Runnable {
                                  }
                              }
                          }
-                     } catch (IOException e) {
-                         // Check if this entity file is known to have failed before - if so, suppress the error message
-                         String worldFolderName = new File(baseDirectory).name
-                         boolean isKnownFailure = failedRegionsByWorld.containsKey(worldFolderName) && failedRegionsByWorld[worldFolderName].contains(file.name)
-                         
-                         if (isKnownFailure) {
-                             LOGGER.debug("(Previously failed entity file, error suppressed) ${file.name}: ${e.message}")
-                         } else {
-                             LOGGER.warn("Failed to read entity file ${file.name}: ${e.message}")
-                             // Track this as a new failure
-                             if (!failedRegionsByWorld.containsKey(worldFolderName)) {
-                                 failedRegionsByWorld[worldFolderName] = [] as Set
+                     } catch (Exception e) {
+                         if (trackFailedRegions) {
+                             // Check if this entity file is known to have failed before - if so, suppress the error message
+                             String worldFolderName = new File(baseDirectory).name
+                             boolean isKnownFailure = failedRegionsByWorld.containsKey(worldFolderName) && failedRegionsByWorld[worldFolderName].contains(file.name)
+
+                             if (isKnownFailure) {
+                                 LOGGER.debug("(Previously failed entity file, error suppressed) ${file.name}: ${e.message}")
+                             } else {
+                                 LOGGER.warn("Failed to read entity file ${file.name}: ${e.message}")
+                                 // Track this as a new failure
+                                 if (!failedRegionsByWorld.containsKey(worldFolderName)) {
+                                     failedRegionsByWorld[worldFolderName] = [] as Set
+                                 }
+                                 failedRegionsByWorld[worldFolderName].add(file.name)
                              }
-                             failedRegionsByWorld[worldFolderName].add(file.name)
+                         } else {
+                             // Always log when tracking is disabled
+                             LOGGER.warn("Failed to read entity file ${file.name}: ${e.message}")
                          }
                      }
 
