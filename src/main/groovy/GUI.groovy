@@ -28,6 +28,10 @@ class GUI extends Application {
     static TextField outputPathField
     static CheckBox removeFormattingCheckBox
     static CheckBox extractCustomNamesCheckBox
+    static CheckBox findPortalsCheckBox
+    static CheckBox overworldCheckBox
+    static CheckBox netherCheckBox
+    static CheckBox endCheckBox
     static TextArea logArea
     static Label statusLabel
     static File worldDir
@@ -123,6 +127,34 @@ class GUI extends Application {
         extractCustomNamesCheckBox.selected = false
         customNamesBox.children.addAll(new Label('').with { it.minWidth = 120; it }, extractCustomNamesCheckBox)
 
+        // Block Search section with visual grouping
+        def blockSearchSection = new VBox(8)
+        blockSearchSection.style = '-fx-padding: 10; -fx-background-color: #f5f5f5; -fx-background-radius: 5;'
+
+        def blockSearchHeader = new Label('Block Search Options')
+        blockSearchHeader.style = '-fx-font-weight: bold; -fx-font-size: 12px;'
+
+        // Find portals checkbox
+        def findPortalsBox = new HBox(10)
+        findPortalsBox.alignment = Pos.CENTER_LEFT
+        findPortalsCheckBox = new CheckBox('Find nether portals (with intelligent clustering)')
+        findPortalsCheckBox.selected = false
+        findPortalsBox.children.addAll(findPortalsCheckBox)
+
+        // Dimension selection checkboxes
+        def dimensionsBox = new HBox(10)
+        dimensionsBox.alignment = Pos.CENTER_LEFT
+        overworldCheckBox = new CheckBox('Overworld')
+        overworldCheckBox.selected = true
+        netherCheckBox = new CheckBox('Nether')
+        netherCheckBox.selected = true
+        endCheckBox = new CheckBox('The End')
+        endCheckBox.selected = true
+        def dimensionsLabel = new Label('Search dimensions:')
+        dimensionsBox.children.addAll(dimensionsLabel, overworldCheckBox, netherCheckBox, endCheckBox)
+
+        blockSearchSection.children.addAll(blockSearchHeader, findPortalsBox, dimensionsBox)
+
         // Action buttons (left-aligned)
         def btnBox = new HBox(15)
         btnBox.alignment = Pos.CENTER_LEFT
@@ -160,6 +192,7 @@ class GUI extends Application {
             outputBox,
             formattingBox,
             customNamesBox,
+            blockSearchSection,
             new Separator(),
             btnBox,
             new Separator(),
@@ -228,6 +261,17 @@ class GUI extends Application {
 
         if (Main.extractCustomNames) {
             extractCustomNamesCheckBox.selected = true
+        }
+
+        if (Main.findPortals) {
+            findPortalsCheckBox.selected = true
+        }
+
+        // Handle dimension flags
+        if (Main.searchDimensions) {
+            overworldCheckBox.selected = Main.searchDimensions.contains('overworld')
+            netherCheckBox.selected = Main.searchDimensions.contains('nether')
+            endCheckBox.selected = Main.searchDimensions.contains('end')
         }
     }
 
@@ -404,6 +448,18 @@ class GUI extends Application {
                 if (extractCustomNamesCheckBox.selected) {
                     args += ['--extract-custom-names']
                 }
+                if (findPortalsCheckBox.selected) {
+                    args += ['--find-portals']
+                }
+
+                // Build dimensions list from checkboxes
+                def selectedDimensions = []
+                if (overworldCheckBox.selected) selectedDimensions += 'overworld'
+                if (netherCheckBox.selected) selectedDimensions += 'nether'
+                if (endCheckBox.selected) selectedDimensions += 'end'
+                if (selectedDimensions) {
+                    args += ['--search-dimensions', selectedDimensions.join(',')]
+                }
 
                 // Call Main CLI directly (avoid double launch)
                 // Logging will automatically appear in GUI via GuiLogAppender
@@ -418,9 +474,19 @@ class GUI extends Application {
                     def totalElapsed = (System.currentTimeMillis() - extractionStartTime) / 1000
                     def minutes = (totalElapsed / 60) as int
                     def seconds = (totalElapsed % 60) as int
-                    statusLabel.text = String.format("Complete! %d books, %d signs (took %02d:%02d)",
-                        Main.bookHashes.size(), Main.signHashes.size(), minutes, seconds)
-                    showAlert('Success', "Extraction complete!\n\nBooks: ${Main.bookHashes.size()}\nSigns: ${Main.signHashes.size()}\nTime: ${minutes}m ${seconds}s", Alert.AlertType.INFORMATION)
+
+                    // Build summary message
+                    def portalCount = Main.portalResults?.size() ?: 0
+                    def portalStr = portalCount > 0 ? ", ${portalCount} portals" : ""
+                    statusLabel.text = String.format("Complete! %d books, %d signs%s (took %02d:%02d)",
+                        Main.bookHashes.size(), Main.signHashes.size(), portalStr, minutes, seconds)
+
+                    def alertMsg = "Extraction complete!\n\nBooks: ${Main.bookHashes.size()}\nSigns: ${Main.signHashes.size()}"
+                    if (portalCount > 0) {
+                        alertMsg += "\nPortals: ${portalCount}"
+                    }
+                    alertMsg += "\nTime: ${minutes}m ${seconds}s"
+                    showAlert('Success', alertMsg, Alert.AlertType.INFORMATION)
                 }
 
             } catch (Exception e) {

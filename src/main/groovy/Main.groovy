@@ -96,6 +96,22 @@ class Main implements Runnable {
     @Option(names = ['--track-failed-regions'], description = 'Track and suppress errors for repeatedly failing region files (default: false)', defaultValue = 'false')
     static boolean trackFailedRegions = false
 
+    @Option(names = ['--search-blocks'], description = 'Search for specific block types (comma-separated, e.g., "obsidian,nether_portal")', split = ',')
+    static List<String> searchBlocks = []
+
+    @Option(names = ['--find-portals'], description = 'Find all nether portals with intelligent clustering (outputs one entry per portal structure)', defaultValue = 'false')
+    static boolean findPortals = false
+
+    @Option(names = ['--search-dimensions'], description = 'Dimensions to search for blocks/portals (default: all). Options: overworld,nether,end', split = ',', defaultValue = 'overworld,nether,end')
+    static List<String> searchDimensions = ['overworld', 'nether', 'end']
+
+    @Option(names = ['--block-output-format'], description = 'Output format for block search (csv, json, txt)', defaultValue = 'csv')
+    static String blockOutputFormat = 'csv'
+
+    // Block search results storage
+    static List<BlockSearcher.BlockLocation> blockSearchResults = []
+    static List<PortalDetector.Portal> portalResults = []
+
     /**
      * Reset all static state for testing purposes.
      * This method clears all accumulated state from previous extraction runs,
@@ -148,6 +164,14 @@ class Main implements Runnable {
         autoStart = false
         guiMode = false
         trackFailedRegions = false
+
+        // Reset block search options and results
+        searchBlocks = []
+        findPortals = false
+        searchDimensions = ['overworld', 'nether', 'end']
+        blockOutputFormat = 'csv'
+        blockSearchResults = []
+        portalResults = []
     }
 
     static void main(String[] args) {
@@ -408,6 +432,10 @@ class Main implements Runnable {
             writeSignsCSV()
             writeCustomNamesOutput()
 
+            // Block search and portal detection (if enabled)
+            runBlockSearch()
+            writeBlockSearchOutput()
+
             long elapsed = System.currentTimeMillis() - startTime
             printSummaryStatistics(elapsed)
             LOGGER.info("${elapsed / 1000} seconds to complete.")
@@ -568,6 +596,306 @@ class Main implements Runnable {
             .replace('\r', '\\r')
             .replace('\t', '\\t')
         return "\"${escaped}\""
+    }
+
+    // ========== Block Search and Portal Detection ==========
+
+    /**
+     * Run block search and/or portal detection if enabled via CLI flags
+     */
+    static void runBlockSearch() {
+        boolean hasBlockSearch = searchBlocks && !searchBlocks.isEmpty()
+        boolean hasPortalSearch = findPortals
+
+        if (!hasBlockSearch && !hasPortalSearch) {
+            LOGGER.debug("Block search skipped: neither --search-blocks nor --find-portals specified")
+            return
+        }
+
+        LOGGER.info('')
+        LOGGER.info('=' * 80)
+        LOGGER.info('BLOCK SEARCH')
+        LOGGER.info('=' * 80)
+
+        // Run portal detection if requested
+        if (hasPortalSearch) {
+            LOGGER.info("Finding nether portals in dimensions: ${searchDimensions.join(', ')}")
+            portalResults = PortalDetector.findPortalsInWorld(baseDirectory, searchDimensions)
+            LOGGER.info("Found ${portalResults.size()} portal structures")
+        }
+
+        // Run generic block search if requested
+        if (hasBlockSearch) {
+            Set<String> targetBlocks = BlockSearcher.parseBlockIds(searchBlocks.join(','))
+            LOGGER.info("Searching for blocks: ${targetBlocks.join(', ')}")
+            LOGGER.info("Dimensions: ${searchDimensions.join(', ')}")
+            blockSearchResults = BlockSearcher.searchBlocks(baseDirectory, targetBlocks, searchDimensions)
+            LOGGER.info("Found ${blockSearchResults.size()} matching blocks")
+        }
+    }
+
+    /**
+     * Write block search and portal detection results to output files
+     */
+    static void writeBlockSearchOutput() {
+        boolean hasBlockResults = blockSearchResults && !blockSearchResults.isEmpty()
+        boolean hasPortalResults = portalResults && !portalResults.isEmpty()
+
+        if (!hasBlockResults && !hasPortalResults) {
+            LOGGER.debug("No block/portal search results to write")
+            return
+        }
+
+        String outputPath = "${baseDirectory}${File.separator}${outputFolder}"
+
+        // Write portal results
+        if (hasPortalResults) {
+            writePortalOutput(outputPath)
+        }
+
+        // Write block search results
+        if (hasBlockResults) {
+            writeBlockOutput(outputPath)
+        }
+    }
+
+    /**
+     * Write portal detection results to output files
+     */
+    static void writePortalOutput(String outputPath) {
+        LOGGER.info("Writing portal output (${portalResults.size()} portals found)")
+
+        switch (blockOutputFormat.toLowerCase()) {
+            case 'json':
+                writePortalJson(outputPath)
+                break
+            case 'txt':
+                writePortalTxt(outputPath)
+                break
+            case 'csv':
+            default:
+                writePortalCsv(outputPath)
+                break
+        }
+    }
+
+    static void writePortalCsv(String outputPath) {
+        File csvFile = new File(outputPath, 'portals.csv')
+        csvFile.withWriter('UTF-8') { BufferedWriter writer ->
+            writer.writeLine(PortalDetector.getCsvHeader())
+            portalResults.each { PortalDetector.Portal portal ->
+                writer.writeLine(portal.toCsvRow())
+            }
+        }
+        LOGGER.info("Portal CSV written to: portals.csv")
+    }
+
+    static void writePortalTxt(String outputPath) {
+        File txtFile = new File(outputPath, 'portals.txt')
+        txtFile.withWriter('UTF-8') { BufferedWriter writer ->
+            writer.writeLine('Nether Portal Detection Report')
+            writer.writeLine('=' * 80)
+            writer.writeLine("Total portals found: ${portalResults.size()}")
+            writer.writeLine('')
+
+            // Group by dimension
+            Map<String, List<PortalDetector.Portal>> byDimension = portalResults.groupBy { it.dimension }
+
+            byDimension.each { String dimension, List<PortalDetector.Portal> portals ->
+                writer.writeLine("${dimension.toUpperCase()} (${portals.size()} portals):")
+                writer.writeLine('-' * 40)
+                portals.each { PortalDetector.Portal portal ->
+                    writer.writeLine("  Portal #${portal.id}:")
+                    writer.writeLine("    Anchor: (${portal.anchorX}, ${portal.anchorY}, ${portal.anchorZ})")
+                    writer.writeLine("    Size: ${portal.width}x${portal.height} (${portal.blockCount} blocks)")
+                    writer.writeLine("    Axis: ${portal.axis}")
+                    writer.writeLine("    Center: (${portal.centerX}, ${portal.centerY}, ${portal.centerZ})")
+                    writer.writeLine('')
+                }
+            }
+        }
+        LOGGER.info("Portal TXT written to: portals.txt")
+    }
+
+    static void writePortalJson(String outputPath) {
+        File jsonFile = new File(outputPath, 'portals.json')
+        jsonFile.withWriter('UTF-8') { BufferedWriter writer ->
+            writer.writeLine('{')
+            writer.writeLine('  "portals": [')
+            portalResults.eachWithIndex { PortalDetector.Portal portal, int index ->
+                Map<String, Object> map = portal.toMap()
+                String json = mapToJson(map, 4)
+                writer.write("    ${json}")
+                if (index < portalResults.size() - 1) {
+                    writer.writeLine(',')
+                } else {
+                    writer.writeLine('')
+                }
+            }
+            writer.writeLine('  ],')
+            writer.writeLine('  "summary": {')
+            writer.writeLine("    \"total_portals\": ${portalResults.size()},")
+
+            // Count by dimension
+            Map<String, Integer> byDimension = [:]
+            portalResults.each { PortalDetector.Portal p ->
+                byDimension[p.dimension] = (byDimension[p.dimension] ?: 0) + 1
+            }
+            writer.writeLine('    "by_dimension": {')
+            byDimension.eachWithIndex { String dim, Integer count, int idx ->
+                String comma = idx < byDimension.size() - 1 ? ',' : ''
+                writer.writeLine("      \"${dim}\": ${count}${comma}")
+            }
+            writer.writeLine('    }')
+            writer.writeLine('  }')
+            writer.writeLine('}')
+        }
+        LOGGER.info("Portal JSON written to: portals.json")
+    }
+
+    /**
+     * Write block search results to output files
+     */
+    static void writeBlockOutput(String outputPath) {
+        LOGGER.info("Writing block output (${blockSearchResults.size()} blocks found)")
+
+        switch (blockOutputFormat.toLowerCase()) {
+            case 'json':
+                writeBlockJson(outputPath)
+                break
+            case 'txt':
+                writeBlockTxt(outputPath)
+                break
+            case 'csv':
+            default:
+                writeBlockCsv(outputPath)
+                break
+        }
+    }
+
+    static void writeBlockCsv(String outputPath) {
+        File csvFile = new File(outputPath, 'blocks.csv')
+        csvFile.withWriter('UTF-8') { BufferedWriter writer ->
+            writer.writeLine('block_type,dimension,x,y,z,properties,region_file')
+            blockSearchResults.each { BlockSearcher.BlockLocation block ->
+                writer.writeLine(block.toCsvRow())
+            }
+        }
+        LOGGER.info("Block CSV written to: blocks.csv")
+    }
+
+    static void writeBlockTxt(String outputPath) {
+        File txtFile = new File(outputPath, 'blocks.txt')
+        txtFile.withWriter('UTF-8') { BufferedWriter writer ->
+            writer.writeLine('Block Search Report')
+            writer.writeLine('=' * 80)
+            writer.writeLine("Total blocks found: ${blockSearchResults.size()}")
+            writer.writeLine('')
+
+            // Group by block type
+            Map<String, List<BlockSearcher.BlockLocation>> byType = blockSearchResults.groupBy { it.blockType }
+
+            byType.each { String blockType, List<BlockSearcher.BlockLocation> blocks ->
+                writer.writeLine("${blockType} (${blocks.size()} found):")
+                writer.writeLine('-' * 40)
+                blocks.each { BlockSearcher.BlockLocation block ->
+                    String propsStr = block.properties ? " [${block.properties.collect { k, v -> "${k}=${v}" }.join(', ')}]" : ''
+                    writer.writeLine("  ${block.dimension}: (${block.x}, ${block.y}, ${block.z})${propsStr}")
+                }
+                writer.writeLine('')
+            }
+        }
+        LOGGER.info("Block TXT written to: blocks.txt")
+    }
+
+    static void writeBlockJson(String outputPath) {
+        File jsonFile = new File(outputPath, 'blocks.json')
+        jsonFile.withWriter('UTF-8') { BufferedWriter writer ->
+            writer.writeLine('{')
+            writer.writeLine('  "blocks": [')
+            blockSearchResults.eachWithIndex { BlockSearcher.BlockLocation block, int index ->
+                writer.writeLine('    {')
+                writer.writeLine("      \"type\": ${escapeJson(block.blockType)},")
+                writer.writeLine("      \"dimension\": ${escapeJson(block.dimension)},")
+                writer.writeLine('      "coordinates": {')
+                writer.writeLine("        \"x\": ${block.x},")
+                writer.writeLine("        \"y\": ${block.y},")
+                writer.writeLine("        \"z\": ${block.z}")
+                writer.writeLine('      },')
+                writer.write('      "properties": {')
+                if (block.properties && !block.properties.isEmpty()) {
+                    writer.writeLine('')
+                    block.properties.eachWithIndex { String k, String v, int idx ->
+                        String comma = idx < block.properties.size() - 1 ? ',' : ''
+                        writer.writeLine("        \"${k}\": ${escapeJson(v)}${comma}")
+                    }
+                    writer.write('      ')
+                }
+                writer.writeLine('},')
+                writer.writeLine("      \"region\": ${escapeJson(block.regionFile)}")
+                writer.write('    }')
+                if (index < blockSearchResults.size() - 1) {
+                    writer.writeLine(',')
+                } else {
+                    writer.writeLine('')
+                }
+            }
+            writer.writeLine('  ],')
+            writer.writeLine('  "summary": {')
+            writer.writeLine("    \"total_blocks\": ${blockSearchResults.size()},")
+
+            // Count by type
+            Map<String, Integer> byType = [:]
+            blockSearchResults.each { BlockSearcher.BlockLocation b ->
+                byType[b.blockType] = (byType[b.blockType] ?: 0) + 1
+            }
+            writer.writeLine('    "by_type": {')
+            byType.eachWithIndex { String type, Integer count, int idx ->
+                String comma = idx < byType.size() - 1 ? ',' : ''
+                writer.writeLine("      ${escapeJson(type)}: ${count}${comma}")
+            }
+            writer.writeLine('    },')
+
+            // Count by dimension
+            Map<String, Integer> byDimension = [:]
+            blockSearchResults.each { BlockSearcher.BlockLocation b ->
+                byDimension[b.dimension] = (byDimension[b.dimension] ?: 0) + 1
+            }
+            writer.writeLine('    "by_dimension": {')
+            byDimension.eachWithIndex { String dim, Integer count, int idx ->
+                String comma = idx < byDimension.size() - 1 ? ',' : ''
+                writer.writeLine("      \"${dim}\": ${count}${comma}")
+            }
+            writer.writeLine('    }')
+            writer.writeLine('  }')
+            writer.writeLine('}')
+        }
+        LOGGER.info("Block JSON written to: blocks.json")
+    }
+
+    /**
+     * Convert a map to JSON string (simple implementation for nested maps)
+     */
+    static String mapToJson(Map<String, Object> map, int indent = 0) {
+        String indentStr = ' ' * indent
+        StringBuilder sb = new StringBuilder()
+        sb.append('{\n')
+        map.eachWithIndex { String key, Object value, int idx ->
+            sb.append("${indentStr}  \"${key}\": ")
+            if (value instanceof Map) {
+                sb.append(mapToJson(value as Map<String, Object>, indent + 2))
+            } else if (value instanceof Number) {
+                sb.append(value)
+            } else {
+                sb.append(escapeJson(value?.toString()))
+            }
+            if (idx < map.size() - 1) {
+                sb.append(',')
+            }
+            sb.append('\n')
+        }
+        sb.append("${indentStr}}")
+        return sb.toString()
     }
 
     /**

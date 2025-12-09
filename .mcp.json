@@ -3,7 +3,9 @@
     "auggie-mcp": {
       "type": "stdio",
       "command": "auggie",
-      "args": ["--mcp"]
+      "args": [
+        "--mcp"
+      ]
     }
   }
 }

@@ -37,6 +37,8 @@ This tool scans Minecraft world files and extracts:
 * *Books in containers of containers* (e.g., inside bundles in frames, inside shulker boxes in chests)
 * *Books in player inventories* and ender chests
 * *Duplicate tracking:* Saves duplicate books to `.duplicates/` folder instead of skipping them
+* *Nether portal detection:* Find all portals with intelligent clustering (dimensions, center coordinates)
+* *Block search:* Search for any block type across dimensions
 
 == Usage
 
@@ -148,6 +150,29 @@ This will give you all extracted books.
 This will place all signs starting at your current position.
 
 TIP: Choose the datapack version that matches your Minecraft version for best compatibility!
+
+=== Portal & Block Search
+
+Find all nether portals in your world:
+
+[source,bash]
+----
+java -jar ReadSignsAndBooks.jar --world "path/to/world" --find-portals
+----
+
+Search for specific blocks:
+
+[source,bash]
+----
+java -jar ReadSignsAndBooks.jar --world "path/to/world" --search-blocks "diamond_ore,emerald_ore"
+----
+
+Options:
+
+* `--find-portals` - Detect portal structures with center coordinates
+* `--search-blocks "block1,block2"` - Search for specific block types
+* `--search-dimensions "overworld,nether,end"` - Dimensions to search
+* `--block-output-format csv|json|txt` - Output format (default: csv)
 
 == Development
 
