@@ -24,26 +24,21 @@ link:https://github.com/JonasPammer/Vibed-ReadSignsAndBooks.jar/releases/latest/
 2. Double-click `ReadSignsAndBooks.exe` to open the GUI
 3. Or run from command line: `ReadSignsAndBooks.exe --world "C:\path\to\world"`
 
-The Windows version includes a bundled Java runtime - no Java installation needed!
-
 == Features
 
 This tool scans Minecraft world files and extracts:
 
-* *Written books* (with title and author)
-* *Writable books* (book and quill)
+* *Written books* (with title and author), *Writable books* (book and quill), including:
+** *Books in containers:* chests, barrels, shulker boxes, bundles, item frames, minecarts, boats, and more
+** *Books in containers of containers* (e.g., inside bundles in frames, inside shulker boxes in chests)
+** *Books in player inventories* and ender chests
+** *Duplicate tracking:* Saves duplicate books to `.duplicates/` folder instead of skipping them
 * *Signs* with text (all variants: regular, hanging, wall signs)
-* *Books in containers:* chests, barrels, shulker boxes, bundles, item frames, minecarts, boats, and more
-* *Books in containers of containers* (e.g., inside bundles in frames, inside shulker boxes in chests)
-* *Books in player inventories* and ender chests
-* *Duplicate tracking:* Saves duplicate books to `.duplicates/` folder instead of skipping them
-* *Nether portal detection:* Find all portals with intelligent clustering (dimensions, center coordinates)
-* *Block search:* Search for any block type across dimensions
+* *Rare Blocks:* Search for any block type across dimensions
+* *Nether portals:* Find all portals with intelligent clustering (dimensions, center coordinates)
+
 
 == Usage
-
-. link:https://github.com/JonasPammer/Vibed-ReadSignsAndBooks.jar/releases/latest/download/ReadSignsAndBooks.jar[*Download ReadSignsAndBooks.jar*]
-
 === Quick Start (The Easiest Way)
 
 Double Click or run without arguments to open the GUI Wrapper.
@@ -55,7 +50,7 @@ image:.github/GUI-About.png[]
 
 . *Find your Minecraft world folder:*
 +
-* Windows: `%appdata%\.minecraft\saves\YourWorldName`
+* Windows: `%appdata%\.minecraft\saves\YourWorldName` or `%appdata%\ModrinthApp\profiles\FILLMEIN\saves\YourWorldName`
 * Mac: `~/Library/Application Support/minecraft/saves/YourWorldName`
 * Linux: `~/.minecraft/saves/YourWorldName`
 
@@ -65,39 +60,98 @@ image:.github/GUI-About.png[]
 ----
 java -jar ReadSignsAndBooks.jar --world "C:\Users\YourName\AppData\Roaming\.minecraft\saves\YourWorldName"
 ----
-+
-Or simply drag and drop your world folder into the same directory as the JAR and run it.
 
-. *Find your results* in the newly created `ReadBooks/` folder!
+You can also run the ReadSignsAndBooks.jar directly from your world folder and run it - This does not work with double-clicking. 
 
 === What You'll Get
 
 The tool creates output in `ReadBooks/YYYY-MM-DD/`:
 
-* `books/` - directory containing individual Stendhal format files for each unique book
-** Each book is saved as: `Title_(PageCount)_by_Author~location~coords.stendhal`
-** Example: `My_Book_(3)_by_Joe~minecraft_chest~-10_65_20.stendhal`
-** Stendhal format preserves Minecraft formatting codes (§ codes)
-* `books/.duplicates/` - directory containing duplicate books (same content, different locations)
-* `all_signs.txt` - all signs found in the world, one per line
-** Example: `Chunk [31, 31]	(-2 75 -5)		Line 1! ⚠ Line 2! ☀`
-* `all_books.txt` - all books in Stendhal format, separated by `#region` and `#endregion` markers for VSCode folding
+* `books/` - directory containing individual Stendhal format files for each unique book. 
+** `pass:[Title_(PageCount)_by_Author~location~coords.stendhal]`, Example: `pass:[My_Book_(3)_by_Joe~minecraft_chest~-10_65_20.stendhal]`
+** `.duplicates/` - directory containing duplicate books (same content, different locations)
+
+* `all_books.txt` - concatenation of all books in Stendhal format, separated by `#region` and `#endregion` markers for VSCode folding
 * `all_books.csv` - CSV export of all books with metadata
+** Columns: `X`, `Y`, `Z`, `FoundWhere`, `Bookname`, `Author`, `PageCount`, `Generation`, `Pages`
+** Note/TODO: page boundaries lost; use `.stendhal` files for full content for now
+
+* `all_signs.txt` - all signs found in the world, one per line
+** Example Line: `Chunk [31, 31]	(-2 75 -5)		Line 1! ⚠ Line 2! ☀`
+
 * `all_signs.csv` - CSV export of all signs with metadata
-* *Ready-to-use Minecraft Datapacks* (4 versions with version-specific commands):
-** `readbooks_datapack_1_13/` - Minecraft 1.13-1.14.3 (pack_format 4)
-*** Uses `functions/` directory (plural) and 1.13 command syntax
-** `readbooks_datapack_1_14/` - Minecraft 1.14.4 (pack_format 4)
-*** Uses `functions/` directory (plural) and 1.14 command syntax
-** `readbooks_datapack_1_20_5/` - Minecraft 1.20.5-1.20.6 (pack_format 41)
-*** Uses `functions/` directory (plural) and component-based syntax
-** `readbooks_datapack_1_21/` - Minecraft 1.21+ (pack_format 48)
-*** Uses `function/` directory (SINGULAR - changed in 1.21!) and updated syntax
-** Each datapack contains:
-*** `pack.mcmeta` - Datapack metadata with appropriate pack_format number
-*** `data/readbooks/functions/books.mcfunction` OR `data/readbooks/function/books.mcfunction` - Book recreation commands
-*** `data/readbooks/functions/signs.mcfunction` OR `data/readbooks/function/signs.mcfunction` - Sign placement commands
-*** Directory structure varies: Pre-1.21 uses `functions/` (plural), 1.21+ uses `function/` (singular)
+** Columns: `X`, `Y`, `Z`, `FoundWhere`, `SignText`, `Line1`, `Line2`, `Line3`, `Line4`
+** Note/TODO: For 1.20+ signs with front/back text, only front text is included in CSV (back text is preserved in datapack mcfunction files) 
+
+* `readbooks_datapack_[1_13|1_14|1_20_5|1_21]/` - Ready-to-use Minecraft datapacks (4 versions)
+** `pack.mcmeta` - Datapack metadata with version-appropriate pack_format (4, 4, 41, 48)
+** `data/readbooks/[functions|function]/` - `functions/` for pre-1.21, `function/` for 1.21+
+*** `books.mcfunction` - `/give` commands to recreate all books
+*** `signs.mcfunction` - `/setblock` commands with clickable teleport to original coordinates
+
+* `blocks.csv` - CSV export of found blocks (when using `--search-blocks`)
+* `block_index.db` - SQLite database of block coordinates (when using `--search-blocks`)
+** See <<Block Index Database>> for schema and example queries.
+
+* `portals.[csv|txt|json]` - Portal detection output (when using `--find-portals`, format via `--block-output-format`)
+** CSV: `dimension,x,y,z,width,height,axis,block_count,center_x,center_y,center_z`
++
+.Example
+[%collapsible]
+====
+----
+dimension,x,y,z,width,height,axis,block_count,center_x,center_y,center_z
+overworld,128,64,-256,4,5,X,20,129.5,66.0,-256.0
+nether,16,8,-32,2,3,Z,6,16.0,9.0,-31.5
+----
+====
+** TXT: Human-readable report grouped by dimension
++
+.Example
+[%collapsible]
+====
+----
+Nether Portal Detection Report
+================================================================================
+Total portals found: 2
+
+OVERWORLD (1 portals):
+----------------------------------------
+  Portal #1:
+    Anchor: (128, 64, -256)
+    Size: 4x5 (20 blocks)
+    Axis: X
+    Center: (129.5, 66.0, -256.0)
+
+NETHER (1 portals):
+----------------------------------------
+  Portal #2:
+    Anchor: (16, 8, -32)
+    Size: 2x3 (6 blocks)
+    Axis: Z
+    Center: (16.0, 9.0, -31.5)
+----
+====
+** JSON: Structure with `portals` array and `summary` object
++
+.Example
+[%collapsible]
+====
+[source,json]
+----
+{
+  "portals": [
+    {"id":1,"dimension":"overworld","x":128,"y":64,"z":-256,"width":4,"height":5,"axis":"X","block_count":20},
+    {"id":2,"dimension":"nether","x":16,"y":8,"z":-32,"width":2,"height":3,"axis":"Z","block_count":6}
+  ],
+  "summary": {
+    "total_portals": 2,
+    "by_dimension": { "overworld": 1, "nether": 1 }
+  }
+}
+----
+====
+
 * `logs.txt` - program debug logs
 * `summary.txt`
 ** Breakdown by container type (chests, shulker boxes, villagers, etc.)
@@ -107,12 +161,6 @@ The tool creates output in `ReadBooks/YYYY-MM-DD/`:
 === Using the Datapacks in Minecraft
 
 The generated datapacks can be directly copied into your Minecraft world:
-
-. *Locate your world's datapacks folder:*
-+
-* Windows: `%appdata%\.minecraft\saves\YourWorldName\datapacks\`
-* Mac: `~/Library/Application Support/minecraft/saves/YourWorldName/datapacks/`
-* Linux: `~/.minecraft/saves/YourWorldName/datapacks/`
 
 . *Copy the appropriate datapack folder* for your Minecraft version:
 +
@@ -137,21 +185,15 @@ You should see a message confirming the datapack was loaded.
 ----
 /function readbooks:books
 ----
-+
-This will give you all extracted books.
 
-. *Run the function to place all signs:*
+. *Run the function to place all signs at your current position:*
 +
 [source,mcfunction]
 ----
 /function readbooks:signs
 ----
-+
-This will place all signs starting at your current position.
 
-TIP: Choose the datapack version that matches your Minecraft version for best compatibility!
-
-=== Portal & Block Search
+=== Portal Search
 
 Find all nether portals in your world:
 
@@ -160,7 +202,9 @@ Find all nether portals in your world:
 java -jar ReadSignsAndBooks.jar --world "path/to/world" --find-portals
 ----
 
-Search for specific blocks:
+=== Block Search
+
+When you use `--search-blocks`, the tool automatically builds a SQLite database (`block_index.db`) storing all found block coordinates.
 
 [source,bash]
 ----
@@ -169,10 +213,103 @@ java -jar ReadSignsAndBooks.jar --world "path/to/world" --search-blocks "diamond
 
 Options:
 
-* `--find-portals` - Detect portal structures with center coordinates
 * `--search-blocks "block1,block2"` - Search for specific block types
 * `--search-dimensions "overworld,nether,end"` - Dimensions to search
 * `--block-output-format csv|json|txt` - Output format (default: csv)
+* `--index-limit N` - Maximum blocks per type to store (default: 5000)
+
+==== Query Options
+
+The program contains sqlite wrapper functions for querying the block index database, if you don't have sqlite client.
+Invoking these does not re-scan the world, and can also be invoked without the `--world` flag by just using the `--output` flag.
+
+* `--index-query BLOCK_TYPE` - Query existing database for block locations
++
+[source,bash]
+----
+java -jar ReadSignsAndBooks.jar --world "path/to/world" --index-query "nether_portal"
+----
+
+* `--index-list` - Display summary of all indexed block types
++
+[source,bash]
+----
+java -jar ReadSignsAndBooks.jar --output "path/to/world/ReadBooks" --index-list
+----
++
+Example output:
++
+----
+Block Index Summary:
+  minecraft:chest: 156 blocks (limit: 5000)
+  minecraft:nether_portal: 48 blocks (limit: 5000)
+  minecraft:spawner: 12 blocks (limit: 5000)
+Total: 3 block types, 216 blocks indexed
+----
+
+==== Using the Database Directly
+
+The `block_index.db` file is a standard SQLite database that you can open with any SQLite client (DB Browser for SQLite, DBeaver, command-line `sqlite3`, etc.).
+
+.Database Schema
+[%collapsible]
+====
+[source,sql]
+----
+-- Main blocks table with coordinates
+CREATE TABLE blocks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    block_type TEXT NOT NULL,      -- e.g., "minecraft:chest"
+    dimension TEXT NOT NULL,        -- "overworld", "nether", or "end"
+    x INTEGER NOT NULL,
+    y INTEGER NOT NULL,
+    z INTEGER NOT NULL,
+    properties TEXT,                -- JSON block state properties
+    region_file TEXT,               -- Source region file (e.g., "r.0.0.mca")
+    UNIQUE(block_type, dimension, x, y, z)
+);
+
+-- Summary table for fast counts
+CREATE TABLE block_summary (
+    block_type TEXT PRIMARY KEY,
+    total_found INTEGER,            -- Total blocks found (even if limit reached)
+    indexed_count INTEGER,          -- Blocks actually stored in database
+    limit_reached INTEGER           -- 1 if limit was hit, 0 otherwise
+);
+
+-- Metadata (index limit, creation time, etc.)
+CREATE TABLE metadata (
+    key TEXT PRIMARY KEY,
+    value TEXT
+);
+----
+====
+
+**Example Queries:**
+
+[source,sql]
+----
+-- Find all chests in the Nether
+SELECT x, y, z FROM blocks WHERE block_type = 'minecraft:chest' AND dimension = 'nether';
+----
+
+[source,sql]
+----
+-- Count blocks by type
+SELECT block_type, COUNT(*) as count FROM blocks GROUP BY block_type ORDER BY count DESC;
+----
+
+[source,sql]
+----
+-- Find blocks near coordinates (within 100 blocks of spawn)
+SELECT * FROM blocks WHERE x BETWEEN -100 AND 100 AND z BETWEEN -100 AND 100;
+----
+
+[source,sql]
+----
+-- Check which block types hit the limit
+SELECT block_type, total_found, indexed_count FROM block_summary WHERE limit_reached = 1;
+----
 
 == Development
 
