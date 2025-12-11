@@ -93,63 +93,336 @@ class BlockSearcher {
      * @return List of BlockLocation objects for all found blocks
      */
     static List<BlockLocation> searchBlocks(String worldPath, Set<String> targetBlocks, List<String> dimensions) {
+        return searchBlocks(worldPath, targetBlocks, dimensions, null)
+    }
+
+    /**
+     * Search for specific block types across dimensions with optional database indexing.
+     *
+     * @param worldPath Path to Minecraft world save directory
+     * @param targetBlocks Set of block IDs to search for (e.g., "minecraft:nether_portal")
+     * @param dimensions List of dimensions to search (overworld, nether, end)
+     * @param database Optional BlockDatabase to write found blocks to (can be null)
+     * @return List of BlockLocation objects for all found blocks
+     */
+    static List<BlockLocation> searchBlocks(String worldPath, Set<String> targetBlocks, List<String> dimensions,
+                                             BlockDatabase database) {
         LOGGER.info("Starting block search for: ${targetBlocks}")
         LOGGER.info("Dimensions to search: ${dimensions}")
+        if (database) {
+            LOGGER.info("Building block index database...")
+        }
 
         List<BlockLocation> results = []
         Set<Integer> seenHashes = [] as Set  // Deduplication
 
-        dimensions.each { String dimension ->
-            String folderPath = DIMENSION_FOLDERS[dimension.toLowerCase()]
-            if (!folderPath) {
-                LOGGER.warn("Unknown dimension: ${dimension}")
-                return
-            }
+        // Use transaction for batch inserts if database is provided
+        if (database) {
+            database.beginTransaction()
+        }
 
-            File regionFolder = new File(worldPath, folderPath)
-            if (!regionFolder.exists() || !regionFolder.directory) {
-                LOGGER.debug("Dimension folder not found: ${regionFolder.absolutePath}")
-                return
-            }
-
-            List<File> regionFiles = regionFolder.listFiles()?.findAll {
-                it.file && it.name.endsWith('.mca')
-            } ?: []
-
-            if (regionFiles.isEmpty()) {
-                LOGGER.debug("No region files in ${dimension}")
-                return
-            }
-
-            LOGGER.info("Processing ${dimension}: ${regionFiles.size()} region files")
-
-            new ProgressBarBuilder()
-                .setTaskName("${dimension}")
-                .setInitialMax(regionFiles.size())
-                .setStyle(ProgressBarStyle.ASCII)
-                .build().withCloseable { pb ->
-                    regionFiles.each { File file ->
-                        try {
-                            List<BlockLocation> fileResults = processRegionFile(
-                                file, targetBlocks, dimension
-                            )
-
-                            // Deduplicate
-                            fileResults.each { BlockLocation loc ->
-                                if (seenHashes.add(loc.hashCode())) {
-                                    results.add(loc)
-                                }
-                            }
-                        } catch (Exception e) {
-                            LOGGER.warn("Failed to process ${file.name}: ${e.message}")
-                        }
-                        pb.step()
-                    }
+        try {
+            dimensions.each { String dimension ->
+                String folderPath = DIMENSION_FOLDERS[dimension.toLowerCase()]
+                if (!folderPath) {
+                    LOGGER.warn("Unknown dimension: ${dimension}")
+                    return
                 }
+
+                File regionFolder = new File(worldPath, folderPath)
+                if (!regionFolder.exists() || !regionFolder.directory) {
+                    LOGGER.debug("Dimension folder not found: ${regionFolder.absolutePath}")
+                    return
+                }
+
+                List<File> regionFiles = regionFolder.listFiles()?.findAll {
+                    it.file && it.name.endsWith('.mca')
+                } ?: []
+
+                if (regionFiles.isEmpty()) {
+                    LOGGER.debug("No region files in ${dimension}")
+                    return
+                }
+
+                LOGGER.info("Processing ${dimension}: ${regionFiles.size()} region files")
+
+                new ProgressBarBuilder()
+                    .setTaskName("${dimension}")
+                    .setInitialMax(regionFiles.size())
+                    .setStyle(ProgressBarStyle.ASCII)
+                    .build().withCloseable { pb ->
+                        regionFiles.each { File file ->
+                            try {
+                                List<BlockLocation> fileResults = processRegionFile(
+                                    file, targetBlocks, dimension
+                                )
+
+                                // Deduplicate and optionally write to database
+                                fileResults.each { BlockLocation loc ->
+                                    if (seenHashes.add(loc.hashCode())) {
+                                        results.add(loc)
+
+                                        // Write to database if provided
+                                        if (database) {
+                                            database.insertBlock(
+                                                loc.blockType,
+                                                loc.dimension,
+                                                loc.x, loc.y, loc.z,
+                                                loc.properties,
+                                                loc.regionFile
+                                            )
+                                        }
+                                    }
+                                }
+                            } catch (Exception e) {
+                                LOGGER.warn("Failed to process ${file.name}: ${e.message}")
+                            }
+                            pb.step()
+                        }
+                    }
+            }
+
+            // Commit transaction if database provided
+            if (database) {
+                database.commitTransaction()
+            }
+        } catch (Exception e) {
+            // Rollback on error
+            if (database) {
+                database.rollbackTransaction()
+            }
+            throw e
         }
 
         LOGGER.info("Block search complete: found ${results.size()} blocks")
         return results
+    }
+
+    /**
+     * Index ALL blocks in the world to a database (not just specific types).
+     * This is used when --build-block-index is specified without --search-blocks.
+     *
+     * @param worldPath Path to Minecraft world save directory
+     * @param dimensions List of dimensions to search (overworld, nether, end)
+     * @param database BlockDatabase to write found blocks to
+     */
+    static void indexAllBlocks(String worldPath, List<String> dimensions, BlockDatabase database) {
+        LOGGER.info("Building comprehensive block index...")
+        LOGGER.info("Dimensions to index: ${dimensions}")
+
+        // Use transaction for batch inserts
+        database.beginTransaction()
+
+        try {
+            dimensions.each { String dimension ->
+                String folderPath = DIMENSION_FOLDERS[dimension.toLowerCase()]
+                if (!folderPath) {
+                    LOGGER.warn("Unknown dimension: ${dimension}")
+                    return
+                }
+
+                File regionFolder = new File(worldPath, folderPath)
+                if (!regionFolder.exists() || !regionFolder.directory) {
+                    LOGGER.debug("Dimension folder not found: ${regionFolder.absolutePath}")
+                    return
+                }
+
+                List<File> regionFiles = regionFolder.listFiles()?.findAll {
+                    it.file && it.name.endsWith('.mca')
+                } ?: []
+
+                if (regionFiles.isEmpty()) {
+                    LOGGER.debug("No region files in ${dimension}")
+                    return
+                }
+
+                LOGGER.info("Indexing ${dimension}: ${regionFiles.size()} region files")
+
+                new ProgressBarBuilder()
+                    .setTaskName("${dimension}")
+                    .setInitialMax(regionFiles.size())
+                    .setStyle(ProgressBarStyle.ASCII)
+                    .build().withCloseable { pb ->
+                        regionFiles.each { File file ->
+                            try {
+                                indexRegionFile(file, dimension, database)
+                            } catch (Exception e) {
+                                LOGGER.warn("Failed to index ${file.name}: ${e.message}")
+                            }
+                            pb.step()
+                        }
+                    }
+            }
+
+            database.commitTransaction()
+        } catch (Exception e) {
+            database.rollbackTransaction()
+            throw e
+        }
+
+        LOGGER.info("Block indexing complete: ${database.getBlockTypeCount()} block types, ${database.getTotalBlocksIndexed()} blocks indexed")
+    }
+
+    /**
+     * Index all blocks in a region file to the database.
+     */
+    static void indexRegionFile(File regionFile, String dimension, BlockDatabase database) {
+        MCAFile mcaFile = MCAUtil.read(regionFile, LoadFlags.RAW)
+
+        // Parse region coordinates from filename (r.X.Z.mca)
+        String[] parts = regionFile.name.replace('.mca', '').split('\\.')
+        int regionX = parts[1] as int
+        int regionZ = parts[2] as int
+
+        // Iterate all 32x32 chunks in region
+        (0..31).each { int chunkLocalX ->
+            (0..31).each { int chunkLocalZ ->
+                Chunk chunk = mcaFile.getChunk(chunkLocalX, chunkLocalZ)
+                if (!chunk) return
+
+                // Calculate absolute chunk coordinates
+                int chunkAbsX = regionX * 32 + chunkLocalX
+                int chunkAbsZ = regionZ * 32 + chunkLocalZ
+
+                indexChunk(chunk, dimension, regionFile.name, chunkAbsX, chunkAbsZ, database)
+            }
+        }
+    }
+
+    /**
+     * Index all blocks in a chunk to the database.
+     */
+    static void indexChunk(Chunk chunk, String dimension, String regionFileName,
+                           int chunkAbsX, int chunkAbsZ, BlockDatabase database) {
+        CompoundTag chunkData = chunk.handle
+        if (!chunkData) return
+
+        // Handle both pre-1.18 (Level wrapper) and post-1.18 (flat structure)
+        CompoundTag level = chunkData.getCompoundTag('Level')
+        CompoundTag chunkRoot = level ?: chunkData
+
+        // Get sections list
+        ListTag<?> sections = chunkRoot.getListTag('sections') ?: chunkRoot.getListTag('Sections')
+        if (!sections || sections.size() == 0) return
+
+        sections.each { sectionTag ->
+            if (!(sectionTag instanceof CompoundTag)) return
+
+            CompoundTag section = (CompoundTag) sectionTag
+
+            // Get section Y coordinate
+            int sectionY = section.containsKey('Y') ?
+                (section.get('Y') instanceof net.querz.nbt.tag.ByteTag ?
+                    section.getByte('Y') : section.getInt('Y')) : 0
+
+            // Get block_states compound
+            CompoundTag blockStates = section.getCompoundTag('block_states')
+            if (!blockStates) return
+
+            // Get palette
+            ListTag<?> palette = blockStates.getListTag('palette')
+            if (!palette || palette.size() == 0) return
+
+            // Skip sections with only air
+            if (palette.size() == 1) {
+                def entry = palette.get(0)
+                if (entry instanceof CompoundTag) {
+                    String blockName = ((CompoundTag) entry).getString('Name')
+                    if (blockName == 'minecraft:air') return
+                }
+            }
+
+            // Get packed block data
+            long[] data = null
+            if (blockStates.containsKey('data')) {
+                data = blockStates.getLongArray('data')
+            }
+
+            // If only one block type in palette (and it's not air), all blocks are that type
+            if (palette.size() == 1) {
+                CompoundTag blockTag = (CompoundTag) palette.get(0)
+                String blockType = blockTag.getString('Name')
+                Map<String, String> properties = extractBlockProperties(blockTag)
+
+                // Insert all 4096 blocks of this type
+                (0..15).each { int localY ->
+                    (0..15).each { int localZ ->
+                        (0..15).each { int localX ->
+                            int worldX = chunkAbsX * 16 + localX
+                            int worldY = sectionY * 16 + localY
+                            int worldZ = chunkAbsZ * 16 + localZ
+                            database.insertBlock(blockType, dimension, worldX, worldY, worldZ, properties, regionFileName)
+                        }
+                    }
+                }
+                return
+            }
+
+            // Calculate bits per entry
+            int paletteSize = palette.size()
+            int bitsPerEntry = Math.max(4, (int) Math.ceil(Math.log(paletteSize) / Math.log(2)))
+            int entriesPerLong = 64 / bitsPerEntry
+            long mask = (1L << bitsPerEntry) - 1
+
+            if (!data || data.length == 0) return
+
+            // Build palette map
+            Map<Integer, CompoundTag> paletteMap = [:]
+            (0..<paletteSize).each { int i ->
+                def entry = palette.get(i)
+                if (entry instanceof CompoundTag) {
+                    paletteMap[i] = (CompoundTag) entry
+                }
+            }
+
+            // Iterate all 4096 blocks in section (YZX order)
+            (0..15).each { int localY ->
+                (0..15).each { int localZ ->
+                    (0..15).each { int localX ->
+                        int blockIndex = localY * 256 + localZ * 16 + localX
+                        int longIndex = blockIndex / entriesPerLong
+                        int entryIndex = blockIndex % entriesPerLong
+
+                        if (longIndex >= data.length) return
+
+                        int paletteIndex = (int) ((data[longIndex] >> (entryIndex * bitsPerEntry)) & mask)
+
+                        CompoundTag blockTag = paletteMap[paletteIndex]
+                        if (!blockTag) return
+
+                        String blockType = blockTag.getString('Name')
+
+                        // Skip air blocks
+                        if (blockType == 'minecraft:air') return
+
+                        Map<String, String> properties = extractBlockProperties(blockTag)
+
+                        int worldX = chunkAbsX * 16 + localX
+                        int worldY = sectionY * 16 + localY
+                        int worldZ = chunkAbsZ * 16 + localZ
+
+                        database.insertBlock(blockType, dimension, worldX, worldY, worldZ, properties, regionFileName)
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Extract block properties from a palette block tag.
+     */
+    static Map<String, String> extractBlockProperties(CompoundTag blockTag) {
+        Map<String, String> properties = [:]
+        if (blockTag.containsKey('Properties')) {
+            CompoundTag props = blockTag.getCompoundTag('Properties')
+            props.keySet().each { String key ->
+                def value = props.get(key)
+                if (value instanceof StringTag) {
+                    properties[key] = ((StringTag) value).getValue()
+                }
+            }
+        }
+        return properties
     }
 
     /**

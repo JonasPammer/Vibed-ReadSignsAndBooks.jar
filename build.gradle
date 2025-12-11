@@ -50,6 +50,7 @@ dependencies {
     // Groovy - for main application code
     implementation 'org.apache.groovy:groovy:4.0.24'
     implementation 'org.apache.groovy:groovy-json:4.0.24'
+    implementation 'org.apache.groovy:groovy-sql:4.0.24'
 
     // Apache Commons IO - simplifies file operations
     implementation 'commons-io:commons-io:2.18.0'
@@ -77,6 +78,9 @@ dependencies {
 
     // ASCII table library for formatted output
     implementation 'com.github.freva:ascii-table:1.8.0'
+
+    // SQLite JDBC driver for block index database
+    implementation 'org.xerial:sqlite-jdbc:3.45.1.0'
 
     // JavaFX modules handled by javafxplugin above (no GroovyFX needed - using pure JavaFX with Groovy syntax)
 

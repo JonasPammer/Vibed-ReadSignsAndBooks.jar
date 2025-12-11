@@ -71,6 +71,10 @@ ReadSignsAndBooks.jar provides a straightforward CLI tool that:
 - `--output-file` - Output file path (defaults to stdout)
 - `--log-file` - Custom log file location
 - `--extract-custom-names` - Enable custom name extraction from items and entities
+- `--index-limit N` - Maximum blocks per type to store in index (default: 5000, 0 for unlimited)
+- `--index-query BLOCK_TYPE` - Query existing database for block locations (e.g., "nether_portal")
+- `--index-list` - Display summary of all indexed block types from existing database
+- `--index-dimension` - Filter query results by dimension (overworld, nether, end)
 
 ## Success Metrics
 - Extraction accuracy: 100% of accessible books/signs extracted

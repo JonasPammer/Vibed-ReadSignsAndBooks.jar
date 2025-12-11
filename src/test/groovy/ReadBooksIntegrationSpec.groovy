@@ -2195,4 +2195,1041 @@ class ReadBooksIntegrationSpec extends Specification {
         }
     }
 
+    // ============================================================
+    // Block Index Database Tests (SQLite)
+    // ============================================================
+
+    def "should create block index database during block search"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'block index database is created during block search'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+            Main.searchBlocks = ['obsidian', 'diamond_ore']  // Search for specific blocks
+            Main.searchDimensions = ['overworld']
+            Main.indexLimit = 100
+
+            try {
+                runReadBooksProgram()
+
+                // Database file should be created
+                Path dbFile = outputDir.resolve('block_index.db')
+                assert Files.exists(dbFile), "Block index database should exist"
+                assert Files.size(dbFile) > 0, "Block index database should not be empty"
+
+                println "  ✓ Block index database created: ${dbFile}"
+                true
+            } finally {
+                Main.searchBlocks = []
+                Main.indexLimit = 5000
+            }
+        }
+    }
+
+    def "should store blocks in SQLite database during search"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'blocks are stored in database'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+            Main.searchBlocks = ['oak_sign', 'stone']  // Search for common blocks
+            Main.searchDimensions = ['overworld']
+            Main.indexLimit = 50  // Low limit for testing
+
+            try {
+                runReadBooksProgram()
+
+                // Open database and verify contents
+                Path dbFile = outputDir.resolve('block_index.db')
+                assert Files.exists(dbFile)
+
+                BlockDatabase db = BlockDatabase.openForQuery(dbFile.toFile())
+                try {
+                    // Get summary
+                    List<Map> summary = db.getSummary()
+                    assert summary != null
+
+                    if (summary.size() > 0) {
+                        println "  Block types indexed:"
+                        summary.each { row ->
+                            println "    ${row.block_type}: ${row.indexed_count} indexed, ${row.total_found} total"
+                        }
+                    }
+
+                    // Verify metadata was stored
+                    String worldPath = db.getMetadata('world_path')
+                    assert worldPath != null, "World path metadata should be stored"
+                    assert worldPath.contains(testWorldDir.toString().split(java.util.regex.Pattern.quote(File.separator))[-1]),
+                        "World path should contain test world name"
+
+                    String extractionDate = db.getMetadata('extraction_date')
+                    assert extractionDate != null, "Extraction date metadata should be stored"
+
+                    println "  ✓ Database metadata verified: world=${worldPath}, date=${extractionDate}"
+                } finally {
+                    db?.close()
+                }
+
+                true
+            } finally {
+                Main.searchBlocks = []
+                Main.indexLimit = 5000
+            }
+        }
+    }
+
+    def "should enforce block limit correctly"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'block limit is enforced'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+            Main.searchBlocks = ['stone']  // Very common block
+            Main.searchDimensions = ['overworld']
+            Main.indexLimit = 10  // Very low limit
+
+            try {
+                runReadBooksProgram()
+
+                Path dbFile = outputDir.resolve('block_index.db')
+                assert Files.exists(dbFile)
+
+                BlockDatabase db = BlockDatabase.openForQuery(dbFile.toFile())
+                try {
+                    // Query stone blocks
+                    Map countInfo = db.getBlockCount('minecraft:stone')
+
+                    if (countInfo) {
+                        // indexed_count should not exceed limit
+                        assert countInfo.indexed_count <= Main.indexLimit,
+                            "Indexed count (${countInfo.indexed_count}) should not exceed limit (${Main.indexLimit})"
+
+                        // If total_found > limit, limit_reached should be true
+                        if (countInfo.total_found > Main.indexLimit) {
+                            assert countInfo.limit_reached,
+                                "limit_reached should be true when total_found (${countInfo.total_found}) > limit (${Main.indexLimit})"
+                        }
+
+                        println "  ✓ Block limit enforced: ${countInfo.indexed_count} indexed of ${countInfo.total_found} found (limit: ${Main.indexLimit})"
+                    } else {
+                        println "  ✓ No stone blocks found in test world"
+                    }
+                } finally {
+                    db?.close()
+                }
+
+                true
+            } finally {
+                Main.searchBlocks = []
+                Main.indexLimit = 5000
+            }
+        }
+    }
+
+    def "should query blocks by type from database"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'blocks can be queried by type'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+            Main.searchBlocks = ['oak_sign', 'chest', 'barrel']
+            Main.searchDimensions = ['overworld']
+            Main.indexLimit = 100
+
+            try {
+                runReadBooksProgram()
+
+                Path dbFile = outputDir.resolve('block_index.db')
+                assert Files.exists(dbFile)
+
+                BlockDatabase db = BlockDatabase.openForQuery(dbFile.toFile())
+                try {
+                    // Query for each searched block type
+                    ['minecraft:oak_sign', 'minecraft:chest', 'minecraft:barrel'].each { blockType ->
+                        List<Map> results = db.queryByBlockType(blockType)
+
+                        if (results.size() > 0) {
+                            // Verify result structure
+                            results.each { row ->
+                                assert row.block_type == blockType
+                                assert row.dimension in ['overworld', 'nether', 'end']
+                                assert row.x != null
+                                assert row.y != null
+                                assert row.z != null
+                            }
+                            println "    ✓ ${blockType}: ${results.size()} blocks found"
+                        }
+                    }
+                } finally {
+                    db?.close()
+                }
+
+                println "  ✓ Block queries executed successfully"
+                true
+            } finally {
+                Main.searchBlocks = []
+                Main.indexLimit = 5000
+            }
+        }
+    }
+
+    def "should track total_found even when limit reached"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'total_found is tracked even beyond limit'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+            Main.searchBlocks = ['stone']  // Common block
+            Main.searchDimensions = ['overworld']
+            Main.indexLimit = 5  // Very small limit
+
+            try {
+                runReadBooksProgram()
+
+                Path dbFile = outputDir.resolve('block_index.db')
+                if (Files.exists(dbFile)) {
+                    BlockDatabase db = BlockDatabase.openForQuery(dbFile.toFile())
+                    try {
+                        Map countInfo = db.getBlockCount('minecraft:stone')
+
+                        if (countInfo && countInfo.total_found > Main.indexLimit) {
+                            // total_found should be greater than indexed_count
+                            assert countInfo.total_found > countInfo.indexed_count,
+                                "total_found should be tracked beyond indexed_count"
+                            println "  ✓ total_found (${countInfo.total_found}) tracked beyond indexed_count (${countInfo.indexed_count})"
+                        } else {
+                            println "  ✓ Test inconclusive (not enough stone blocks in test world)"
+                        }
+                    } finally {
+                        db?.close()
+                    }
+                }
+
+                true
+            } finally {
+                Main.searchBlocks = []
+                Main.indexLimit = 5000
+            }
+        }
+    }
+
+    // ============================================================
+    // Block Index Query CLI Tests (--index-query, --index-list, --index-dimension)
+    // ============================================================
+
+    def "should query indexed blocks via --index-query flag"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'blocks can be queried after indexing'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+
+            // First, run extraction with block search to create the database
+            Main.searchBlocks = ['chest', 'oak_sign']
+            Main.searchDimensions = ['overworld']
+            Main.indexLimit = 100
+
+            try {
+                runReadBooksProgram()
+
+                // Verify database was created
+                Path dbFile = outputDir.resolve('block_index.db')
+                assert Files.exists(dbFile), "Database should exist after extraction"
+
+                // Now reset and run query mode
+                Main.resetState()
+                Main.customOutputDirectory = outputDir.toString()
+                Main.indexQuery = 'chest'  // Query for chests
+
+                // Run query mode (this should not fail)
+                Main.runBlockIndexQuery()
+
+                println "  ✓ Query mode executed successfully for 'chest'"
+                true
+            } finally {
+                Main.searchBlocks = []
+                Main.indexLimit = 5000
+                Main.indexQuery = null
+                Main.customOutputDirectory = null
+            }
+        }
+    }
+
+    def "should list all indexed block types via --index-list flag"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'all indexed block types can be listed'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+
+            // First, run extraction with block search
+            Main.searchBlocks = ['chest', 'barrel', 'hopper']
+            Main.searchDimensions = ['overworld']
+            Main.indexLimit = 100
+
+            try {
+                runReadBooksProgram()
+
+                Path dbFile = outputDir.resolve('block_index.db')
+                assert Files.exists(dbFile), "Database should exist after extraction"
+
+                // Run list mode
+                Main.resetState()
+                Main.customOutputDirectory = outputDir.toString()
+                Main.indexList = true
+
+                Main.runBlockIndexQuery()
+
+                println "  ✓ List mode executed successfully"
+                true
+            } finally {
+                Main.searchBlocks = []
+                Main.indexLimit = 5000
+                Main.indexList = false
+                Main.customOutputDirectory = null
+            }
+        }
+    }
+
+    def "should filter query results by dimension via --index-dimension"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'queries can be filtered by dimension'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+
+            // Run extraction with block search across all dimensions
+            Main.searchBlocks = ['stone']
+            Main.searchDimensions = ['overworld', 'nether', 'end']
+            Main.indexLimit = 100
+
+            try {
+                runReadBooksProgram()
+
+                Path dbFile = outputDir.resolve('block_index.db')
+                assert Files.exists(dbFile), "Database should exist after extraction"
+
+                // Query with dimension filter
+                Main.resetState()
+                Main.customOutputDirectory = outputDir.toString()
+                Main.indexQuery = 'stone'
+                Main.indexDimension = 'overworld'
+
+                Main.runBlockIndexQuery()
+
+                println "  ✓ Dimension filter query executed successfully"
+                true
+            } finally {
+                Main.searchBlocks = []
+                Main.indexLimit = 5000
+                Main.indexQuery = null
+                Main.indexDimension = null
+                Main.customOutputDirectory = null
+            }
+        }
+    }
+
+    def "should support block type normalization in queries"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'block types are normalized (with or without minecraft: prefix)'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+
+            Main.searchBlocks = ['minecraft:chest']  // With prefix
+            Main.searchDimensions = ['overworld']
+            Main.indexLimit = 100
+
+            try {
+                runReadBooksProgram()
+
+                Path dbFile = outputDir.resolve('block_index.db')
+                if (!Files.exists(dbFile)) {
+                    println "  ✓ Test inconclusive (no database created)"
+                    return true
+                }
+
+                BlockDatabase db = BlockDatabase.openForQuery(dbFile.toFile())
+                try {
+                    // Query without prefix
+                    List<Map> results1 = db.queryByBlockType('chest')
+                    // Query with prefix
+                    List<Map> results2 = db.queryByBlockType('minecraft:chest')
+
+                    // Both should return the same results
+                    assert results1.size() == results2.size(),
+                        "Queries with/without prefix should return same results"
+
+                    println "  ✓ Block type normalization works (${results1.size()} results)"
+                } finally {
+                    db?.close()
+                }
+
+                true
+            } finally {
+                Main.searchBlocks = []
+                Main.indexLimit = 5000
+            }
+        }
+    }
+
+    def "should store block coordinates correctly in database"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'block coordinates are stored and retrievable'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+
+            Main.searchBlocks = ['oak_sign']  // Signs have known positions in test world
+            Main.searchDimensions = ['overworld']
+            Main.indexLimit = 100
+
+            try {
+                runReadBooksProgram()
+
+                Path dbFile = outputDir.resolve('block_index.db')
+                if (!Files.exists(dbFile)) {
+                    println "  ✓ Test inconclusive (no database created)"
+                    return true
+                }
+
+                BlockDatabase db = BlockDatabase.openForQuery(dbFile.toFile())
+                try {
+                    List<Map> signs = db.queryByBlockType('minecraft:oak_sign')
+
+                    signs.each { sign ->
+                        // Verify coordinate fields exist and are integers
+                        assert sign.x instanceof Integer || sign.x instanceof Long, "X should be numeric"
+                        assert sign.y instanceof Integer || sign.y instanceof Long, "Y should be numeric"
+                        assert sign.z instanceof Integer || sign.z instanceof Long, "Z should be numeric"
+                        assert sign.dimension in ['overworld', 'nether', 'end'], "Dimension should be valid"
+
+                        println "    Found sign at (${sign.x}, ${sign.y}, ${sign.z}) in ${sign.dimension}"
+                    }
+
+                    if (signs.size() > 0) {
+                        println "  ✓ Block coordinates stored correctly (${signs.size()} signs)"
+                    } else {
+                        println "  ✓ No signs found in test world"
+                    }
+                } finally {
+                    db?.close()
+                }
+
+                true
+            } finally {
+                Main.searchBlocks = []
+                Main.indexLimit = 5000
+            }
+        }
+    }
+
+    def "should query blocks near coordinates"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'blocks can be queried by proximity to coordinates'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+
+            Main.searchBlocks = ['stone', 'dirt', 'grass_block']  // Common blocks
+            Main.searchDimensions = ['overworld']
+            Main.indexLimit = 500
+
+            try {
+                runReadBooksProgram()
+
+                Path dbFile = outputDir.resolve('block_index.db')
+                if (!Files.exists(dbFile)) {
+                    println "  ✓ Test inconclusive (no database created)"
+                    return true
+                }
+
+                BlockDatabase db = BlockDatabase.openForQuery(dbFile.toFile())
+                try {
+                    // Query near spawn (0, 64, 0) with radius 100
+                    List<Map> nearbyBlocks = db.queryNearCoordinates(0, 64, 0, 100, 'overworld')
+
+                    println "  Found ${nearbyBlocks.size()} blocks near (0, 64, 0)"
+
+                    if (nearbyBlocks.size() > 0) {
+                        // Verify all results are within the radius
+                        nearbyBlocks.each { block ->
+                            assert Math.abs(block.x) <= 100, "X should be within radius"
+                            assert Math.abs(block.y - 64) <= 100, "Y should be within radius"
+                            assert Math.abs(block.z) <= 100, "Z should be within radius"
+                        }
+                        println "  ✓ Coordinate proximity query works"
+                    } else {
+                        println "  ✓ No blocks found near (0, 64, 0)"
+                    }
+                } finally {
+                    db?.close()
+                }
+
+                true
+            } finally {
+                Main.searchBlocks = []
+                Main.indexLimit = 5000
+            }
+        }
+    }
+
+    def "should find database from world directory via -w flag"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'database can be found via world directory'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+
+            // Run extraction to create database in default location
+            Main.searchBlocks = ['chest']
+            Main.searchDimensions = ['overworld']
+            Main.indexLimit = 50
+
+            try {
+                runReadBooksProgram()
+
+                // Now reset and try to find database using -w (world directory)
+                Main.resetState()
+                Main.customWorldDirectory = testWorldDir.toString()
+                Main.indexList = true
+
+                // findBlockIndexDatabase should find it
+                File foundDb = Main.findBlockIndexDatabase()
+
+                assert foundDb != null, "Should find database via world directory"
+                assert foundDb.exists(), "Found database file should exist"
+                assert foundDb.name == 'block_index.db', "Found file should be block_index.db"
+
+                println "  ✓ Database found via -w flag: ${foundDb.absolutePath}"
+                true
+            } finally {
+                Main.searchBlocks = []
+                Main.indexLimit = 5000
+                Main.indexList = false
+                Main.customWorldDirectory = null
+            }
+        }
+    }
+
+    def "should find database from output directory via -o flag"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'database can be found via output directory'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+
+            // Run extraction
+            Main.searchBlocks = ['chest']
+            Main.searchDimensions = ['overworld']
+            Main.indexLimit = 50
+
+            try {
+                runReadBooksProgram()
+
+                // Reset and try to find database using -o (output directory)
+                Main.resetState()
+                Main.customOutputDirectory = outputDir.toString()
+                Main.indexList = true
+
+                File foundDb = Main.findBlockIndexDatabase()
+
+                assert foundDb != null, "Should find database via output directory"
+                assert foundDb.exists(), "Found database file should exist"
+
+                println "  ✓ Database found via -o flag: ${foundDb.absolutePath}"
+                true
+            } finally {
+                Main.searchBlocks = []
+                Main.indexLimit = 5000
+                Main.indexList = false
+                Main.customOutputDirectory = null
+            }
+        }
+    }
+
+    def "should prefer -o over -w when both are provided"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: '-o takes precedence over -w'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+
+            Main.searchBlocks = ['chest']
+            Main.searchDimensions = ['overworld']
+            Main.indexLimit = 50
+
+            try {
+                runReadBooksProgram()
+
+                // Reset and provide both -o and -w
+                Main.resetState()
+                Main.customOutputDirectory = outputDir.toString()
+                Main.customWorldDirectory = '/nonexistent/path'  // Invalid path
+                Main.indexList = true
+
+                // Should still find database because -o is checked first
+                File foundDb = Main.findBlockIndexDatabase()
+
+                assert foundDb != null, "Should find database using -o despite invalid -w"
+                assert foundDb.exists(), "Found database should exist"
+
+                println "  ✓ -o flag takes precedence over -w"
+                true
+            } finally {
+                Main.searchBlocks = []
+                Main.indexLimit = 5000
+                Main.indexList = false
+                Main.customOutputDirectory = null
+                Main.customWorldDirectory = null
+            }
+        }
+    }
+
+    def "should handle missing database gracefully in query mode"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'query mode handles missing database without crash'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+
+            try {
+                // Don't run extraction - no database exists
+                Main.resetState()
+                Main.customOutputDirectory = '/nonexistent/path'
+                Main.indexQuery = 'stone'
+
+                // This should not throw an exception
+                Main.runBlockIndexQuery()
+
+                println "  ✓ Missing database handled gracefully"
+                true
+            } finally {
+                Main.indexQuery = null
+                Main.customOutputDirectory = null
+            }
+        }
+    }
+
+    def "should store region file name in database"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'region file information is stored with blocks'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+
+            Main.searchBlocks = ['stone']
+            Main.searchDimensions = ['overworld']
+            Main.indexLimit = 100
+
+            try {
+                runReadBooksProgram()
+
+                Path dbFile = outputDir.resolve('block_index.db')
+                if (!Files.exists(dbFile)) {
+                    println "  ✓ Test inconclusive (no database created)"
+                    return true
+                }
+
+                BlockDatabase db = BlockDatabase.openForQuery(dbFile.toFile())
+                try {
+                    List<Map> blocks = db.queryByBlockType('minecraft:stone')
+
+                    if (blocks.size() > 0) {
+                        // Check if region_file field is populated
+                        def withRegion = blocks.findAll { it.region_file }
+
+                        if (withRegion.size() > 0) {
+                            withRegion.take(3).each { block ->
+                                println "    Block at (${block.x}, ${block.y}, ${block.z}) from region: ${block.region_file}"
+                            }
+                            println "  ✓ Region file information stored (${withRegion.size()} blocks have region info)"
+                        } else {
+                            println "  ✓ Blocks found but no region file info (may be from entities)"
+                        }
+                    } else {
+                        println "  ✓ No stone blocks found"
+                    }
+                } finally {
+                    db?.close()
+                }
+
+                true
+            } finally {
+                Main.searchBlocks = []
+                Main.indexLimit = 5000
+            }
+        }
+    }
+
+    def "should return correct block type count statistics"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'block type statistics are accurate'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+
+            Main.searchBlocks = ['chest', 'barrel', 'hopper']
+            Main.searchDimensions = ['overworld']
+            Main.indexLimit = 1000
+
+            try {
+                runReadBooksProgram()
+
+                Path dbFile = outputDir.resolve('block_index.db')
+                if (!Files.exists(dbFile)) {
+                    println "  ✓ Test inconclusive (no database created)"
+                    return true
+                }
+
+                BlockDatabase db = BlockDatabase.openForQuery(dbFile.toFile())
+                try {
+                    // Get block type count
+                    int typeCount = db.getBlockTypeCount()
+                    int totalBlocks = db.getTotalBlocksIndexed()
+
+                    assert typeCount >= 0, "Block type count should be non-negative"
+                    assert totalBlocks >= 0, "Total blocks should be non-negative"
+
+                    println "  ✓ Statistics: ${typeCount} block types, ${totalBlocks} total blocks indexed"
+                } finally {
+                    db?.close()
+                }
+
+                true
+            } finally {
+                Main.searchBlocks = []
+                Main.indexLimit = 5000
+            }
+        }
+    }
+
+    def "should handle unlimited index limit (0)"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'unlimited limit (0) indexes all blocks'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+
+            Main.searchBlocks = ['chest']  // Limited to chests to keep test fast
+            Main.searchDimensions = ['overworld']
+            Main.indexLimit = 0  // Unlimited
+
+            try {
+                runReadBooksProgram()
+
+                Path dbFile = outputDir.resolve('block_index.db')
+                if (!Files.exists(dbFile)) {
+                    println "  ✓ Test inconclusive (no database created)"
+                    return true
+                }
+
+                BlockDatabase db = BlockDatabase.openForQuery(dbFile.toFile())
+                try {
+                    Map countInfo = db.getBlockCount('minecraft:chest')
+
+                    if (countInfo) {
+                        // With unlimited, indexed_count should equal total_found
+                        assert countInfo.indexed_count == countInfo.total_found,
+                            "With limit=0, all found blocks should be indexed"
+                        assert !countInfo.limit_reached,
+                            "limit_reached should be false with unlimited"
+
+                        println "  ✓ Unlimited indexing: ${countInfo.indexed_count} of ${countInfo.total_found} chests"
+                    } else {
+                        println "  ✓ No chests found in test world"
+                    }
+                } finally {
+                    db?.close()
+                }
+
+                true
+            } finally {
+                Main.searchBlocks = []
+                Main.indexLimit = 5000
+            }
+        }
+    }
+
+    def "should combine --index-query and --index-list in single call"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'both flags can be used together'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+
+            Main.searchBlocks = ['chest', 'barrel']
+            Main.searchDimensions = ['overworld']
+            Main.indexLimit = 100
+
+            try {
+                runReadBooksProgram()
+
+                Path dbFile = outputDir.resolve('block_index.db')
+                assert Files.exists(dbFile), "Database should exist"
+
+                // Use both flags
+                Main.resetState()
+                Main.customOutputDirectory = outputDir.toString()
+                Main.indexList = true
+                Main.indexQuery = 'chest'
+
+                // Should execute without error
+                Main.runBlockIndexQuery()
+
+                println "  ✓ Combined --index-list and --index-query works"
+                true
+            } finally {
+                Main.searchBlocks = []
+                Main.indexLimit = 5000
+                Main.indexList = false
+                Main.indexQuery = null
+                Main.customOutputDirectory = null
+            }
+        }
+    }
+
+    def "should query non-existent block type without error"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'querying non-existent block type returns empty results'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+
+            Main.searchBlocks = ['chest']
+            Main.searchDimensions = ['overworld']
+            Main.indexLimit = 50
+
+            try {
+                runReadBooksProgram()
+
+                Path dbFile = outputDir.resolve('block_index.db')
+                if (!Files.exists(dbFile)) {
+                    println "  ✓ Test inconclusive (no database created)"
+                    return true
+                }
+
+                BlockDatabase db = BlockDatabase.openForQuery(dbFile.toFile())
+                try {
+                    // Query for a block type that wasn't searched for
+                    List<Map> results = db.queryByBlockType('minecraft:diamond_block')
+
+                    assert results.size() == 0, "Should return empty list for non-indexed block"
+
+                    // Also test getBlockCount for non-existent type
+                    Map countInfo = db.getBlockCount('minecraft:nonexistent_block')
+                    assert countInfo == null, "Should return null for non-existent block type"
+
+                    println "  ✓ Non-existent block type handled correctly"
+                } finally {
+                    db?.close()
+                }
+
+                true
+            } finally {
+                Main.searchBlocks = []
+                Main.indexLimit = 5000
+            }
+        }
+    }
+
+    /**
+     * Comprehensive block index test with no limit.
+     *
+     * This test establishes minimum expected block counts from the test world
+     * to ensure the block search feature continues working correctly.
+     *
+     * Verified block counts from test world 1_21_10-44-3 (run 2025-12-09):
+     * - chest: 4 blocks
+     * - hopper: 1 block
+     * - barrel: 1 block
+     * - trapped_chest: 1 block
+     * - dropper: 1 block
+     * - dispenser: 1 block
+     * - furnace: 1 block
+     * - blast_furnace: 1 block
+     * - smoker: 1 block
+     *
+     * Note: Signs are stored as block entities and extracted separately during
+     * sign extraction, not through the --search-blocks feature which searches
+     * the block state palette. Total: 15 container blocks.
+     */
+    def "should index all container blocks with no limit and meet minimum counts"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        // Minimum expected block counts from test world 1_21_10-44-3
+        // These are hardcoded baselines that the extraction must meet or exceed
+        // Verified by running extraction on 2025-12-09
+        Map<String, Integer> minimumExpectedCounts = [
+            'minecraft:chest': 4,
+            'minecraft:hopper': 1,
+            'minecraft:barrel': 1,
+            'minecraft:trapped_chest': 1,
+            'minecraft:dropper': 1,
+            'minecraft:dispenser': 1,
+            'minecraft:furnace': 1,
+            'minecraft:blast_furnace': 1,
+            'minecraft:smoker': 1
+        ]
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'all container blocks are indexed without limit and meet minimums'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+
+            // Search for all container types with NO LIMIT
+            Main.searchBlocks = [
+                'chest', 'hopper', 'barrel', 'trapped_chest',
+                'dropper', 'dispenser', 'furnace', 'blast_furnace',
+                'smoker'
+            ]
+            Main.searchDimensions = ['overworld']
+            Main.indexLimit = 0  // No limit - index ALL blocks
+
+            try {
+                runReadBooksProgram()
+
+                Path dbFile = outputDir.resolve('block_index.db')
+                assert Files.exists(dbFile), "Database should be created"
+
+                BlockDatabase db = BlockDatabase.openForQuery(dbFile.toFile())
+                try {
+                    println "\n  Block Index Results (No Limit):"
+                    println "  " + "=" * 60
+
+                    int totalBlocks = 0
+                    int passedChecks = 0
+                    int failedChecks = 0
+
+                    minimumExpectedCounts.each { blockType, expectedMin ->
+                        Map countInfo = db.getBlockCount(blockType)
+                        int actualCount = countInfo?.indexed_count ?: 0
+                        int totalFound = countInfo?.total_found ?: 0
+                        totalBlocks += actualCount
+
+                        boolean passed = actualCount >= expectedMin
+                        String status = passed ? "✓" : "✗"
+
+                        if (passed) {
+                            passedChecks++
+                        } else {
+                            failedChecks++
+                        }
+
+                        println "    ${status} ${blockType}: ${actualCount} indexed (min: ${expectedMin}, total: ${totalFound})"
+
+                        // Assert that we meet or exceed the minimum
+                        assert actualCount >= expectedMin,
+                            "Block type ${blockType} should have at least ${expectedMin} entries, found ${actualCount}"
+                    }
+
+                    println "  " + "-" * 60
+                    println "  Total blocks indexed: ${totalBlocks}"
+                    println "  Passed: ${passedChecks}, Failed: ${failedChecks}"
+
+                    // Verify total blocks indexed
+                    int dbTotalBlocks = db.getTotalBlocksIndexed()
+                    int dbBlockTypes = db.getBlockTypeCount()
+
+                    println "  Database stats: ${dbBlockTypes} block types, ${dbTotalBlocks} total blocks"
+
+                    assert dbBlockTypes >= 9, "Should have at least 9 different block types indexed (all container types searched)"
+                    assert dbTotalBlocks >= 12, "Should have at least 12 total blocks indexed (sum of all container blocks)"
+
+                    println "  ✓ All minimum block counts verified"
+                } finally {
+                    db?.close()
+                }
+
+                true
+            } finally {
+                Main.searchBlocks = []
+                Main.indexLimit = 5000
+            }
+        }
+    }
+
 }

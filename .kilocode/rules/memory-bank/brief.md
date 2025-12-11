@@ -45,6 +45,13 @@ Server administrators and archivists need a reliable way to:
 Community-maintained open-source project with focus on reliability and version compatibility.
 
 ## Recent Features & Updates
+- ✅ **Block Index Database**: SQLite-based persistent block coordinate storage
+  - Automatically builds searchable database during `--search-blocks`
+  - Query block locations AFTER extraction without re-scanning: `--index-query nether_portal`
+  - Per-block-type limit (default 5000) prevents database bloat from common blocks
+  - Always tracks total_found even when limit reached
+  - `--index-list` shows summary of all indexed block types
+  - Filter queries by dimension with `--index-dimension`
 - ✅ **GUI Freeze Fix** (GitHub issue #12): Fixed GUI freezing after ~1 second during extraction
   - Root cause: TextArea.appendText() has O(n) performance, causing exponential slowdown with large logs
   - Solution: Rolling buffer limits TextArea to 80KB, trimming oldest 20% when exceeded

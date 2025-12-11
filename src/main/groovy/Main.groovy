@@ -108,9 +108,24 @@ class Main implements Runnable {
     @Option(names = ['--block-output-format'], description = 'Output format for block search (csv, json, txt)', defaultValue = 'csv')
     static String blockOutputFormat = 'csv'
 
+    // Block index database options
+
+    @Option(names = ['--index-limit'], description = 'Max blocks per type to index (default: 5000, 0 for unlimited)', defaultValue = '5000')
+    static int indexLimit = 5000
+
+    @Option(names = ['--index-query'], description = 'Query block coordinates from existing index (e.g., "nether_portal")')
+    static String indexQuery = null
+
+    @Option(names = ['--index-list'], description = 'List all indexed block types from existing database', defaultValue = 'false')
+    static boolean indexList = false
+
+    @Option(names = ['--index-dimension'], description = 'Filter query results by dimension (overworld, nether, end)')
+    static String indexDimension = null
+
     // Block search results storage
     static List<BlockSearcher.BlockLocation> blockSearchResults = []
     static List<PortalDetector.Portal> portalResults = []
+    static BlockDatabase blockDatabase = null  // Database instance for building index
 
     /**
      * Reset all static state for testing purposes.
@@ -172,6 +187,14 @@ class Main implements Runnable {
         blockOutputFormat = 'csv'
         blockSearchResults = []
         portalResults = []
+
+        // Reset block index database options
+        indexLimit = 5000
+        indexQuery = null
+        indexList = false
+        indexDimension = null
+        blockDatabase?.close()
+        blockDatabase = null
     }
 
     static void main(String[] args) {
@@ -207,11 +230,205 @@ class Main implements Runnable {
     @Override
     void run() {
         try {
-            runExtraction()
+            // Check if this is a query-only mode (no extraction needed)
+            if (indexQuery || indexList) {
+                runBlockIndexQuery()
+            } else {
+                runExtraction()
+            }
         } catch (IllegalStateException | IOException e) {
             LOGGER.error("Error during extraction: ${e.message}", e)
             throw new RuntimeException('Extraction failed', e)
         }
+    }
+
+    /**
+     * Run block index query mode - reads from existing database without extraction.
+     * Can use -o (output directory) or -w (world directory) to find the database.
+     */
+    static void runBlockIndexQuery() {
+        // For query mode, check -o first, then -w, then current directory
+        baseDirectory = customOutputDirectory ?: customWorldDirectory ?: System.getProperty('user.dir')
+        dateStamp = new SimpleDateFormat('yyyy-MM-dd', Locale.US).format(new Date())
+
+        // Find the database file
+        File dbFile = findBlockIndexDatabase()
+        if (!dbFile || !dbFile.exists()) {
+            LOGGER.error("Block index database not found. Run extraction with --search-blocks first.")
+            LOGGER.info("Searched in: ${baseDirectory}")
+            LOGGER.info("Use -o to specify the output folder containing block_index.db")
+            return
+        }
+
+        LOGGER.info("Opening block index database: ${dbFile.absolutePath}")
+        BlockDatabase db = BlockDatabase.openForQuery(dbFile)
+
+        try {
+            if (indexList) {
+                printBlockIndexSummary(db)
+            }
+
+            if (indexQuery) {
+                queryAndPrintBlocks(db, indexQuery, indexDimension)
+            }
+        } finally {
+            db?.close()
+        }
+    }
+
+    /**
+     * Find the block index database file.
+     * For query mode: searches in -o directory, -w directory, or current directory.
+     * Supports pointing directly to the db file, to a date folder, or to a world/output folder.
+     */
+    static File findBlockIndexDatabase() {
+        // Helper closure to search a directory for block_index.db
+        def searchDirectory = { String dirPath ->
+            if (!dirPath) return null
+            File dir = new File(dirPath)
+
+            // Check if path points directly to the db file
+            if (dir.name == 'block_index.db' && dir.exists()) return dir
+
+            // Check if path is a folder containing block_index.db directly
+            File dbFile = new File(dir, 'block_index.db')
+            if (dbFile.exists()) return dbFile
+
+            // Check in ReadBooks subfolder
+            File readBooksDir = new File(dir, 'ReadBooks')
+            if (readBooksDir.exists()) {
+                File[] dateFolders = readBooksDir.listFiles()?.findAll {
+                    it.isDirectory() && it.name.matches('\\d{4}-\\d{2}-\\d{2}')
+                }?.sort { -it.lastModified() }
+
+                if (dateFolders) {
+                    for (File folder : dateFolders) {
+                        dbFile = new File(folder, 'block_index.db')
+                        if (dbFile.exists()) return dbFile
+                    }
+                }
+            }
+
+            // Check if path itself contains date folders (e.g., -o points to ReadBooks folder)
+            File[] dateFolders = dir.listFiles()?.findAll {
+                it.isDirectory() && it.name.matches('\\d{4}-\\d{2}-\\d{2}')
+            }?.sort { -it.lastModified() }
+
+            if (dateFolders) {
+                for (File folder : dateFolders) {
+                    dbFile = new File(folder, 'block_index.db')
+                    if (dbFile.exists()) return dbFile
+                }
+            }
+
+            return null
+        }
+
+        // Search in order: -o, -w, current directory
+        File result = searchDirectory(customOutputDirectory)
+        if (result) return result
+
+        result = searchDirectory(customWorldDirectory)
+        if (result) return result
+
+        result = searchDirectory(System.getProperty('user.dir'))
+        if (result) return result
+
+        return null
+    }
+
+    /**
+     * Get expected database path for error messages.
+     */
+    static String getExpectedDatabasePath() {
+        if (customOutputDirectory) {
+            return "${customOutputDirectory}${File.separator}block_index.db"
+        }
+        return "${baseDirectory}${File.separator}ReadBooks${File.separator}YYYY-MM-DD${File.separator}block_index.db"
+    }
+
+    /**
+     * Print block index summary (--index-list).
+     */
+    static void printBlockIndexSummary(BlockDatabase db) {
+        List<Map> summary = db.getSummary()
+
+        if (summary.isEmpty()) {
+            LOGGER.info("No blocks indexed in database.")
+            return
+        }
+
+        LOGGER.info('')
+        LOGGER.info('Block Index Summary')
+        LOGGER.info('=' * 80)
+
+        // Print as ASCII table
+        List<Column> columns = [
+            new Column().header('Block Type').dataAlign(HorizontalAlign.LEFT)
+                .with({ Map row -> row.block_type?.toString() ?: '' } as java.util.function.Function),
+            new Column().header('Total Found').dataAlign(HorizontalAlign.RIGHT)
+                .with({ Map row -> String.format('%,d', row.total_found ?: 0) } as java.util.function.Function),
+            new Column().header('Indexed').dataAlign(HorizontalAlign.RIGHT)
+                .with({ Map row -> String.format('%,d', row.indexed_count ?: 0) } as java.util.function.Function),
+            new Column().header('Limited').dataAlign(HorizontalAlign.CENTER)
+                .with({ Map row -> row.limit_reached ? '✓' : '' } as java.util.function.Function)
+        ]
+
+        String table = AsciiTable.getTable(summary, columns)
+        println table
+
+        // Print metadata
+        String worldPath = db.getMetadata('world_path')
+        String extractionDate = db.getMetadata('extraction_date')
+        String blockLimitMeta = db.getMetadata('block_limit')
+
+        LOGGER.info('')
+        LOGGER.info("Database Info:")
+        if (worldPath) LOGGER.info("  World: ${worldPath}")
+        if (extractionDate) LOGGER.info("  Extracted: ${extractionDate}")
+        if (blockLimitMeta) LOGGER.info("  Block limit: ${blockLimitMeta} per type")
+        LOGGER.info("  Total block types: ${summary.size()}")
+        LOGGER.info("  Total blocks indexed: ${db.getTotalBlocksIndexed()}")
+    }
+
+    /**
+     * Query and print blocks by type (--query-blocks).
+     */
+    static void queryAndPrintBlocks(BlockDatabase db, String blockType, String dimension = null) {
+        // Normalize block type
+        String normalizedType = blockType.contains(':') ? blockType : "minecraft:${blockType}"
+
+        List<Map> blocks = db.queryByBlockType(normalizedType, dimension)
+
+        if (blocks.isEmpty()) {
+            LOGGER.info("No blocks found for type: ${normalizedType}" + (dimension ? " in ${dimension}" : ""))
+            return
+        }
+
+        LOGGER.info('')
+        LOGGER.info("Query Results: ${normalizedType}" + (dimension ? " in ${dimension}" : ""))
+        LOGGER.info('=' * 80)
+
+        // Get summary info
+        Map countInfo = db.getBlockCount(normalizedType)
+        if (countInfo) {
+            LOGGER.info("Total in world: ${String.format('%,d', countInfo.total_found)}")
+            LOGGER.info("Indexed: ${String.format('%,d', countInfo.indexed_count)}" +
+                       (countInfo.limit_reached ? " (limit reached)" : ""))
+        }
+
+        LOGGER.info('')
+
+        // Output as CSV to stdout
+        println 'block_type,dimension,x,y,z,properties,region_file'
+        blocks.each { Map block ->
+            String props = block.properties ?: ''
+            String region = block.region_file ?: ''
+            println "${block.block_type},${block.dimension},${block.x},${block.y},${block.z},${props},${region}"
+        }
+
+        LOGGER.info('')
+        LOGGER.info("Total results: ${blocks.size()}")
     }
 
     // ========== Shulker Box Generation (delegated to ShulkerBoxGenerator) ==========
@@ -617,20 +834,48 @@ class Main implements Runnable {
         LOGGER.info('BLOCK SEARCH')
         LOGGER.info('=' * 80)
 
-        // Run portal detection if requested
-        if (hasPortalSearch) {
-            LOGGER.info("Finding nether portals in dimensions: ${searchDimensions.join(', ')}")
-            portalResults = PortalDetector.findPortalsInWorld(baseDirectory, searchDimensions)
-            LOGGER.info("Found ${portalResults.size()} portal structures")
+        // Always create block index database when searching for blocks
+        if (hasBlockSearch) {
+            String outputPath = "${baseDirectory}${File.separator}${outputFolder}"
+            File dbFile = new File(outputPath, 'block_index.db')
+            LOGGER.info("Creating block index database: ${dbFile.absolutePath}")
+            LOGGER.info("Block limit per type: ${indexLimit == 0 ? 'unlimited' : indexLimit}")
+
+            blockDatabase = new BlockDatabase(dbFile, indexLimit)
+            blockDatabase.setWorldPath(baseDirectory)
+            blockDatabase.setExtractionDate(new SimpleDateFormat('yyyy-MM-dd HH:mm:ss', Locale.US).format(new Date()))
+            blockDatabase.setBlockLimitMetadata()
         }
 
-        // Run generic block search if requested
-        if (hasBlockSearch) {
-            Set<String> targetBlocks = BlockSearcher.parseBlockIds(searchBlocks.join(','))
-            LOGGER.info("Searching for blocks: ${targetBlocks.join(', ')}")
-            LOGGER.info("Dimensions: ${searchDimensions.join(', ')}")
-            blockSearchResults = BlockSearcher.searchBlocks(baseDirectory, targetBlocks, searchDimensions)
-            LOGGER.info("Found ${blockSearchResults.size()} matching blocks")
+        try {
+            // Run portal detection if requested
+            if (hasPortalSearch) {
+                LOGGER.info("Finding nether portals in dimensions: ${searchDimensions.join(', ')}")
+                portalResults = PortalDetector.findPortalsInWorld(baseDirectory, searchDimensions)
+                LOGGER.info("Found ${portalResults.size()} portal structures")
+            }
+
+            // Run block search with database indexing
+            if (hasBlockSearch) {
+                Set<String> targetBlocks = BlockSearcher.parseBlockIds(searchBlocks.join(','))
+                LOGGER.info("Searching for blocks: ${targetBlocks.join(', ')}")
+                LOGGER.info("Dimensions: ${searchDimensions.join(', ')}")
+
+                blockSearchResults = BlockSearcher.searchBlocks(baseDirectory, targetBlocks, searchDimensions, blockDatabase)
+                LOGGER.info("Found ${blockSearchResults.size()} matching blocks")
+            }
+        } finally {
+            // Close database
+            if (blockDatabase) {
+                // Print summary
+                LOGGER.info('')
+                LOGGER.info('Block Index Summary:')
+                LOGGER.info("  Block types indexed: ${blockDatabase.getBlockTypeCount()}")
+                LOGGER.info("  Total blocks indexed: ${blockDatabase.getTotalBlocksIndexed()}")
+
+                blockDatabase.close()
+                blockDatabase = null
+            }
         }
     }
 
