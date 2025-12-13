@@ -64,8 +64,15 @@ COPY --chown=ubuntu:ubuntu .sdkmanrc /home/ubuntu/.sdkmanrc
 RUN bash -c "source $SDKMAN_DIR/bin/sdkman-init.sh && sdk env install"
 
 # Set up environment for Java
-ENV PATH="$SDKMAN_DIR/candidates/java/current/bin:$PATH"
+# Capture current PATH and prepend Java bin directory
+# ENV doesn't reliably expand $PATH from base image, so we use RUN to get the actual value
+RUN export JAVA_BIN="$SDKMAN_DIR/candidates/java/current/bin" && \
+    export CURRENT_PATH=$(printenv PATH || echo "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin") && \
+    echo "export PATH=\"$JAVA_BIN:$CURRENT_PATH\"" >> /home/ubuntu/.bashrc && \
+    echo "export JAVA_HOME=\"$SDKMAN_DIR/candidates/java/current\"" >> /home/ubuntu/.bashrc
 ENV JAVA_HOME="$SDKMAN_DIR/candidates/java/current"
+# Set PATH explicitly with standard Linux paths (ENV doesn't expand $PATH from base image)
+ENV PATH="$SDKMAN_DIR/candidates/java/current/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 # Verify Java installation
 RUN bash -c "source $SDKMAN_DIR/bin/sdkman-init.sh && java -version"
