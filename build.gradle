@@ -5,6 +5,7 @@ plugins {
     id 'org.openjfx.javafxplugin' version '0.1.0'
     id 'com.github.jk1.dependency-license-report' version '3.0.1'
     id 'org.beryx.runtime' version '1.13.1'
+    id 'jacoco'
 }
 
 group = 'com.minecraftdatamining'
@@ -146,6 +147,7 @@ jar {
 // Configure test task
 test {
     useJUnitPlatform()
+    finalizedBy jacocoTestReport // Generate coverage report after tests
 
     testLogging {
         events 'passed', 'skipped', 'failed'
@@ -164,6 +166,29 @@ test {
         '-Dprism.order=sw',    // Software rendering for consistency
         '-Dprism.text=t2k'
     ]
+}
+
+// JaCoCo configuration
+jacoco {
+    toolVersion = "0.8.11"
+}
+
+jacocoTestReport {
+    // Generate report from existing coverage data (does NOT re-run tests)
+    // Coverage data is created during test execution and stored in build/jacoco/test.exec
+    // To generate report: ./gradlew test (creates coverage data) then ./gradlew jacocoTestReport
+    // Or run both: ./gradlew test jacocoTestReport
+    reports {
+        xml.required = true // Required for Codecov
+        html.required = true // Human-readable HTML report
+        csv.required = false
+    }
+}
+
+// Task to generate coverage report (can be run independently)
+tasks.named('jacocoTestReport') {
+    group = 'verification'
+    description = 'Generates code coverage report from test execution'
 }
 
 // License report configuration

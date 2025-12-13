@@ -2,6 +2,8 @@
 
 image:./src/main/resources/icons/icon.svg[ReadSignsAndBooks Icon,150,150,float="right"]
 
+image:https://codecov.io/gh/JonasPammer/Vibed-ReadSignsAndBooks.jar/branch/master/graph/badge.svg[Coverage,link=https://codecov.io/gh/JonasPammer/Vibed-ReadSignsAndBooks.jar]
+
 Full attribution go to the source code shared on 2020 by `Matt (/u/worldseed)` in the `r/MinecraftDataMining` 's Discord server.
 Additional Attributions go to https://github.com/TheWilley/Text2Book and https://github.com/ADP424/MinecraftBookConverter.
 

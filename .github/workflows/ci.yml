@@ -36,6 +36,15 @@ jobs:
 
       - name: Test
         run: ./gradlew test --stacktrace
+        # Coverage report is automatically generated via finalizedBy in build.gradle
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: build/reports/jacoco/test/jacocoTestReport.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
 
       - uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()
@@ -49,6 +58,13 @@ jobs:
         with:
           name: test-reports
           path: build/reports/tests/
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-reports
+          path: build/reports/jacoco/
           retention-days: 14
 
       - uses: actions/upload-artifact@v4
