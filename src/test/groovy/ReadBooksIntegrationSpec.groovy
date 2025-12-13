@@ -1943,15 +1943,18 @@ class ReadBooksIntegrationSpec extends Specification {
 
                     String jsonContent = jsonFile.text
                     def parsed = new groovy.json.JsonSlurper().parseText(jsonContent)
-                    assert parsed instanceof List, "JSON should be an array"
+                    assert parsed instanceof Map, "JSON should be an object with blocks array"
+                    assert parsed.containsKey('blocks'), "JSON should have blocks key"
+                    assert parsed.blocks instanceof List, "blocks should be an array"
 
-                    if (parsed.size() > 0) {
-                        def firstEntry = parsed[0]
-                        assert firstEntry.containsKey('blockType'), "Entry should have blockType"
+                    if (parsed.blocks.size() > 0) {
+                        def firstEntry = parsed.blocks[0]
+                        assert firstEntry.containsKey('type'), "Entry should have type"
                         assert firstEntry.containsKey('dimension'), "Entry should have dimension"
-                        assert firstEntry.containsKey('x'), "Entry should have x coordinate"
-                        assert firstEntry.containsKey('y'), "Entry should have y coordinate"
-                        assert firstEntry.containsKey('z'), "Entry should have z coordinate"
+                        assert firstEntry.containsKey('coordinates'), "Entry should have coordinates"
+                        assert firstEntry.coordinates.containsKey('x'), "Coordinates should have x"
+                        assert firstEntry.coordinates.containsKey('y'), "Coordinates should have y"
+                        assert firstEntry.coordinates.containsKey('z'), "Coordinates should have z"
                     }
 
                     println "  ✓ Block search JSON created with ${blockCount} blocks"
