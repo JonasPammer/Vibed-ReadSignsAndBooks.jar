@@ -70,6 +70,6 @@ ENV JAVA_HOME="$SDKMAN_DIR/candidates/java/current"
 # Verify Java installation
 RUN bash -c "source $SDKMAN_DIR/bin/sdkman-init.sh && java -version"
 
-# Clean up .sdkmanrc (Cursor will mount the real one)
-RUN rm -f /home/ubuntu/.sdkmanrc
+# Keep .sdkmanrc for sdk env command (Cursor will mount the real one at runtime, overriding this)
+# Note: environment.json runs "sdk env" which requires .sdkmanrc to be present
 
