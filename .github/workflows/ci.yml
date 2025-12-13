@@ -108,6 +108,7 @@ jobs:
         run: |
           echo "date=$(date +'%Y-%m-%d_%H-%M-%S')" >> $GITHUB_OUTPUT
           echo "sha8=$(echo ${GITHUB_SHA} | cut -c1-8)" >> $GITHUB_OUTPUT
+          echo "tag_name=release-$(echo ${GITHUB_SHA} | cut -c1-8)" >> $GITHUB_OUTPUT
 
       - name: Get commit message
         id: commit
@@ -132,7 +133,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: "release-${{ steps.release_info.outputs.date }}"
+          tag_name: "${{ steps.release_info.outputs.tag_name }}"
           name: "Automated Release ${{ steps.release_info.outputs.date }}"
           body: |
             Old Releases will continously be deleted, please only link to:
@@ -200,18 +201,9 @@ jobs:
                 console.log(`    ✓ Release deleted`);
               } catch (error) {
                 console.log(`    ✗ Could not delete release: ${error.message}`);
-                continue;
               }
-
-              // Delete associated tag
-              try {
-                await github.rest.git.deleteRef({
-                  owner,
-                  repo,
-                  ref: `tags/${release.tag_name}`
-                });
-                console.log(`    ✓ Tag deleted`);
-              } catch (error) {
-                console.log(`    ✗ Could not delete tag ${release.tag_name}: ${error.message}`);
-              }
+              
+              // Note: We intentionally keep the tags to prevent "would clobber existing tag"
+              // errors when users run `git pull --tags`. Tags are lightweight (just a SHA pointer)
+              // and keeping them doesn't cause any issues.
             }
