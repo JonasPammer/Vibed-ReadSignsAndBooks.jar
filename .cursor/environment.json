@@ -1,0 +1,9 @@
+{
+  "install": "sdk env; ./gradlew build --refresh-dependencies",
+  "start": "",
+  "terminals": [],
+  "build": {
+    "context": "..",
+    "dockerfile": ".cursor/Dockerfile"
+  }
+}
