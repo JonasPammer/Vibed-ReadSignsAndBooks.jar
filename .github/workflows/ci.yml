@@ -77,7 +77,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v5
 
       - name: Build Windows distribution ZIP
-        run: gradlew.bat clean build -x test createWindowsZip --stacktrace
+        run: .\gradlew.bat clean build -x test createWindowsZip --stacktrace
 
       - uses: actions/upload-artifact@v4
         with:
