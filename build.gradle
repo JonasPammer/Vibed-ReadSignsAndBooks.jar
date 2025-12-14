@@ -178,7 +178,7 @@ jacocoTestReport {
     // Coverage data is created during test execution and stored in build/jacoco/test.exec
     // To generate report: ./gradlew test (creates coverage data) then ./gradlew jacocoTestReport
     // Or run both: ./gradlew test jacocoTestReport
-    // Note: dependsOn test is removed to allow generating report from existing data
+    dependsOn test // Ensure tests run before generating report
     
     reports {
         xml.required = true // Required for Codecov
@@ -186,13 +186,22 @@ jacocoTestReport {
         csv.required = false
     }
     
-    // Explicitly include Groovy source files for coverage
+    // Explicitly configure for Groovy source files
     afterEvaluate {
-        classDirectories.setFrom(files(classDirectories.files.collect {
-            fileTree(dir: it, exclude: [
+        // Include Groovy source directories
+        sourceDirectories.setFrom(files([
+            'src/main/groovy'
+        ]))
+        
+        // Include Groovy compiled classes
+        classDirectories.setFrom(files([
+            fileTree(dir: "${buildDir}/classes/groovy/main", exclude: [
                 '**/Main.class',  // Exclude Main class if needed
             ])
-        }))
+        ]))
+        
+        // Ensure execution data is collected from test task
+        executionData.setFrom(fileTree(dir: "${buildDir}/jacoco", include: 'test.exec'))
     }
 }
 
