@@ -213,18 +213,18 @@ class PortalDetector {
         if (axis == 'z') {
             // Portal aligned north-south: varies on Z (width) and Y (height), X is constant
             return [
-                "${x},${y},${z - 1}",  // left (north)
-                "${x},${y},${z + 1}",  // right (south)
-                "${x},${y - 1},${z}",  // down
-                "${x},${y + 1},${z}"   // up
+                "${x},${y},${z - 1}".toString(),  // left (north)
+                "${x},${y},${z + 1}".toString(),  // right (south)
+                "${x},${y - 1},${z}".toString(),  // down
+                "${x},${y + 1},${z}".toString()   // up
             ]
         } else {
             // Portal aligned east-west: varies on X (width) and Y (height), Z is constant
             return [
-                "${x - 1},${y},${z}",  // left (west)
-                "${x + 1},${y},${z}",  // right (east)
-                "${x},${y - 1},${z}",  // down
-                "${x},${y + 1},${z}"   // up
+                "${x - 1},${y},${z}".toString(),  // left (west)
+                "${x + 1},${y},${z}".toString(),  // right (east)
+                "${x},${y - 1},${z}".toString(),  // down
+                "${x},${y + 1},${z}".toString()   // up
             ]
         }
     }

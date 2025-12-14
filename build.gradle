@@ -178,10 +178,21 @@ jacocoTestReport {
     // Coverage data is created during test execution and stored in build/jacoco/test.exec
     // To generate report: ./gradlew test (creates coverage data) then ./gradlew jacocoTestReport
     // Or run both: ./gradlew test jacocoTestReport
+    // Note: dependsOn test is removed to allow generating report from existing data
+    
     reports {
         xml.required = true // Required for Codecov
         html.required = true // Human-readable HTML report
         csv.required = false
+    }
+    
+    // Explicitly include Groovy source files for coverage
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: [
+                '**/Main.class',  // Exclude Main class if needed
+            ])
+        }))
     }
 }
 
@@ -189,6 +200,50 @@ jacocoTestReport {
 tasks.named('jacocoTestReport') {
     group = 'verification'
     description = 'Generates code coverage report from test execution'
+}
+
+// Task to print coverage summary
+task printCoverage {
+    dependsOn jacocoTestReport
+    group = 'verification'
+    description = 'Prints code coverage summary to console'
+    
+    doLast {
+        def reportFile = file("${buildDir}/reports/jacoco/test/jacocoTestReport.xml")
+        if (reportFile.exists()) {
+            def parser = new XmlParser()
+            parser.setFeature("http://apache.org/xml/features/disallow-doctype-decl", false)
+            parser.setFeature("http://xml.org/sax/features/external-general-entities", false)
+            parser.setFeature("http://xml.org/sax/features/external-parameter-entities", false)
+            def report = parser.parse(reportFile)
+            def counter = report.counter.find { it.'@type' == 'INSTRUCTION' }
+            if (counter) {
+                def missed = counter.'@missed' as Integer
+                def covered = counter.'@covered' as Integer
+                def total = missed + covered
+                def percentage = total > 0 ? (covered * 100.0 / total).round(2) : 0
+                
+                println "\n" + "="*60
+                println "CODE COVERAGE SUMMARY"
+                println "="*60
+                println "Instructions: ${covered}/${total} (${percentage}%)"
+                
+                ['BRANCH', 'LINE', 'METHOD', 'CLASS'].each { type ->
+                    def typeCounter = report.counter.find { it.'@type' == type }
+                    if (typeCounter) {
+                        def tMissed = typeCounter.'@missed' as Integer
+                        def tCovered = typeCounter.'@covered' as Integer
+                        def tTotal = tMissed + tCovered
+                        def tPercentage = tTotal > 0 ? (tCovered * 100.0 / tTotal).round(2) : 0
+                        println "${type.padRight(12)}: ${tCovered}/${tTotal} (${tPercentage}%)"
+                    }
+                }
+                println "="*60 + "\n"
+            }
+        } else {
+            println "Coverage report not found. Run 'gradlew test jacocoTestReport' first."
+        }
+    }
 }
 
 // License report configuration

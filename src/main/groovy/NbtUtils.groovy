@@ -258,7 +258,7 @@ class NbtUtils {
                     json.put(key, ((StringTag) value).value)
                     break
                 case NumberTag:
-                    json.put(key, ((NumberTag) value).asNumber())
+                    json.put(key, ((NumberTag) value).asDouble())
                     break
                 case CompoundTag:
                     json.put(key, convertNbtToJson((CompoundTag) value))
@@ -291,7 +291,7 @@ class NbtUtils {
                     array.put(((StringTag) tag).value)
                     break
                 case NumberTag:
-                    array.put(((NumberTag) tag).asNumber())
+                    array.put(((NumberTag) tag).asDouble())
                     break
                 case CompoundTag:
                     array.put(convertNbtToJson((CompoundTag) tag))
