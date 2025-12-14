@@ -98,6 +98,7 @@ class TextUtils {
     /**
      * Extract text content from page text, optionally removing formatting codes.
      * Parses JSON text components and extracts the plain text.
+     * Handles nested extra arrays and null items gracefully.
      *
      * @param pageText The page text (may be JSON or plain text)
      * @param removeFormatting If true, remove Minecraft formatting codes
@@ -115,14 +116,24 @@ class TextUtils {
         try {
             Object pageJSON = JSON_SLURPER.parseText(pageText)
 
-            if (pageJSON.extra) {
-                return pageJSON.extra.collect { Object item ->
-                    if (item instanceof String) {
-                        removeTextFormattingIfEnabled((String) item, removeFormatting)
-                    } else {
-                        removeTextFormattingIfEnabled(item.text ?: '', removeFormatting)
+            // Check if 'extra' key exists (even if empty array)
+            if (pageJSON instanceof Map && pageJSON.containsKey('extra')) {
+                Object extra = pageJSON.get('extra')
+                
+                // Handle extra as a list/array
+                if (extra instanceof List) {
+                    List extraList = extra as List
+                    // Return empty string for empty extra array
+                    if (extraList.isEmpty()) {
+                        return ''
                     }
-                }.join('')
+                    return extraList.collect { Object item ->
+                        extractTextFromItem(item, removeFormatting)
+                    }.join('')
+                } else {
+                    // extra is a single object, recursively extract
+                    return extractTextFromItem(extra, removeFormatting)
+                }
             } else if (pageJSON.text) {
                 return removeTextFormattingIfEnabled(pageJSON.text, removeFormatting)
             }
@@ -134,8 +145,47 @@ class TextUtils {
     }
 
     /**
+     * Helper method to extract text from a single item in a JSON structure.
+     * Handles strings, objects with nested extra arrays, and null values.
+     *
+     * @param item The item to extract text from
+     * @param removeFormatting If true, remove formatting codes
+     * @return The extracted text
+     */
+    private static String extractTextFromItem(Object item, boolean removeFormatting) {
+        if (item == null) {
+            return ''
+        }
+        if (item instanceof String) {
+            return removeTextFormattingIfEnabled((String) item, removeFormatting)
+        }
+        if (item instanceof Map) {
+            Map itemMap = item as Map
+            // Recursively handle nested extra arrays
+            if (itemMap.containsKey('extra')) {
+                Object extra = itemMap.get('extra')
+                if (extra instanceof List) {
+                    List extraList = extra as List
+                    if (extraList.isEmpty()) {
+                        return ''
+                    }
+                    return extraList.collect { Object nestedItem ->
+                        extractTextFromItem(nestedItem, removeFormatting)
+                    }.join('')
+                } else {
+                    return extractTextFromItem(extra, removeFormatting)
+                }
+            } else if (itemMap.containsKey('text')) {
+                return removeTextFormattingIfEnabled(itemMap.get('text') as String ?: '', removeFormatting)
+            }
+        }
+        return ''
+    }
+
+    /**
      * Extract text content from page text while preserving formatting codes.
      * Used for .stendhal files where formatting is retained.
+     * Handles nested extra arrays and null items gracefully.
      *
      * @param pageText The page text (may be JSON or plain text)
      * @return The extracted text with formatting preserved
@@ -152,14 +202,21 @@ class TextUtils {
         try {
             Object pageJSON = JSON_SLURPER.parseText(pageText)
 
-            if (pageJSON.extra) {
-                return pageJSON.extra.collect { Object item ->
-                    if (item instanceof String) {
-                        (String) item
-                    } else {
-                        item.text ?: ''
+            // Check if 'extra' key exists (even if empty array)
+            if (pageJSON instanceof Map && pageJSON.containsKey('extra')) {
+                Object extra = pageJSON.get('extra')
+                
+                if (extra instanceof List) {
+                    List extraList = extra as List
+                    if (extraList.isEmpty()) {
+                        return ''
                     }
-                }.join('')
+                    return extraList.collect { Object item ->
+                        extractTextFromItemPreserveFormatting(item)
+                    }.join('')
+                } else {
+                    return extractTextFromItemPreserveFormatting(extra)
+                }
             } else if (pageJSON.text) {
                 return pageJSON.text
             }
@@ -168,6 +225,43 @@ class TextUtils {
         }
 
         return pageText
+    }
+
+    /**
+     * Helper method to extract text from a single item while preserving formatting.
+     * Handles strings, objects with nested extra arrays, and null values.
+     *
+     * @param item The item to extract text from
+     * @return The extracted text with formatting preserved
+     */
+    private static String extractTextFromItemPreserveFormatting(Object item) {
+        if (item == null) {
+            return ''
+        }
+        if (item instanceof String) {
+            return (String) item
+        }
+        if (item instanceof Map) {
+            Map itemMap = item as Map
+            // Recursively handle nested extra arrays
+            if (itemMap.containsKey('extra')) {
+                Object extra = itemMap.get('extra')
+                if (extra instanceof List) {
+                    List extraList = extra as List
+                    if (extraList.isEmpty()) {
+                        return ''
+                    }
+                    return extraList.collect { Object nestedItem ->
+                        extractTextFromItemPreserveFormatting(nestedItem)
+                    }.join('')
+                } else {
+                    return extractTextFromItemPreserveFormatting(extra)
+                }
+            } else if (itemMap.containsKey('text')) {
+                return itemMap.get('text') as String ?: ''
+            }
+        }
+        return ''
     }
 
     /**
