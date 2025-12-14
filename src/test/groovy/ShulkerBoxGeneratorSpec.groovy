@@ -154,7 +154,7 @@ class ShulkerBoxGeneratorSpec extends Specification {
 
     def "generateShulkerBoxCommand should include box index in display name for overflow boxes"() {
         given:
-        List<Map<String, Object>> books = createTestBooks(1)
+        List<Map<String, Object>> books = createTestBooks(30)  // Need enough books for second box
 
         when:
         String command = ShulkerBoxGenerator.generateShulkerBoxCommand('Author', books, 1, '1_13')
