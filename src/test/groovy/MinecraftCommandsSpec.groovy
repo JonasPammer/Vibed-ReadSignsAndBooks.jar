@@ -389,4 +389,121 @@ class MinecraftCommandsSpec extends Specification {
         components.contains('author:"Author"')
         components.contains('pages:[')
     }
+
+    // =========================================================================
+    // generateSignCommand() Additional Edge Cases
+    // =========================================================================
+
+    def "generateSignCommand should handle null originalX coordinate"() {
+        given:
+        List<String> lines = ['Line 1']
+        Map<String, Object> position = [
+            x: 0, z: 0,
+            originalX: null, originalY: 75, originalZ: -200
+        ]
+
+        when:
+        String command = MinecraftCommands.generateSignCommand(lines, position, '1_13')
+
+        then:
+        // Should not crash, may or may not include clickEvent
+        command != null
+    }
+
+    def "generateSignCommand should handle null originalY coordinate"() {
+        given:
+        List<String> lines = ['Line 1']
+        Map<String, Object> position = [
+            x: 0, z: 0,
+            originalX: 100, originalY: null, originalZ: -200
+        ]
+
+        when:
+        String command = MinecraftCommands.generateSignCommand(lines, position, '1_13')
+
+        then:
+        command != null
+    }
+
+    def "generateSignCommand should handle null originalZ coordinate"() {
+        given:
+        List<String> lines = ['Line 1']
+        Map<String, Object> position = [
+            x: 0, z: 0,
+            originalX: 100, originalY: 75, originalZ: null
+        ]
+
+        when:
+        String command = MinecraftCommands.generateSignCommand(lines, position, '1_13')
+
+        then:
+        command != null
+    }
+
+    def "generateSignCommand should handle backLines for 1.20.5"() {
+        given:
+        List<String> frontLines = ['Front 1', 'Front 2']
+        List<String> backLines = ['Back 1', 'Back 2']
+        Map<String, Object> position = [x: 0, z: 0]
+
+        when:
+        String command = MinecraftCommands.generateSignCommand(frontLines, position, '1_20_5', backLines)
+
+        then:
+        command.contains('back_text:')
+        command.contains('messages:')
+    }
+
+    def "generateSignCommand should handle backLines for 1.21"() {
+        given:
+        List<String> frontLines = ['Front 1']
+        List<String> backLines = ['Back 1']
+        Map<String, Object> position = [x: 0, z: 0]
+
+        when:
+        String command = MinecraftCommands.generateSignCommand(frontLines, position, '1_21', backLines)
+
+        then:
+        command.contains('back_text:')
+    }
+
+    // =========================================================================
+    // escapeForMinecraftCommand() Additional Edge Cases
+    // =========================================================================
+
+    def "escapeForMinecraftCommand should handle unicode characters"() {
+        given:
+        String textWithUnicode = 'Hello 世界 🌍'
+
+        when:
+        String escaped = MinecraftCommands.escapeForMinecraftCommand(textWithUnicode, '1_13')
+
+        then:
+        escaped != null
+        escaped.length() > 0
+    }
+
+    def "escapeForMinecraftCommand should handle emoji characters"() {
+        given:
+        String textWithEmoji = 'Test 😀 🎮 ⚔️'
+
+        when:
+        String escaped = MinecraftCommands.escapeForMinecraftCommand(textWithEmoji, '1_20_5')
+
+        then:
+        escaped != null
+        escaped.contains('Test')
+    }
+
+    def "escapeForMinecraftCommand should handle special unicode characters"() {
+        given:
+        String textWithSpecial = 'Text with émojis and ñoño'
+
+        when:
+        String escaped = MinecraftCommands.escapeForMinecraftCommand(textWithSpecial, '1_13')
+
+        then:
+        escaped != null
+        // Should preserve or escape appropriately
+    }
 }

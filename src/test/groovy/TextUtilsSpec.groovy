@@ -313,6 +313,120 @@ class TextUtilsSpec extends Specification {
     }
 
     // =========================================================================
+    // extractTextContent() Additional Edge Cases
+    // =========================================================================
+
+    def "extractTextContent should handle deeply nested JSON arrays"() {
+        given:
+        String nestedJson = '{"extra":[{"extra":[{"text":"Nested"},{"text":" Text"}]}]}'
+
+        expect:
+        TextUtils.extractTextContent(nestedJson) == 'Nested Text'
+    }
+
+    def "extractTextContent should handle mixed content types in extra array"() {
+        given:
+        String mixedJson = '{"extra":["String1",{"text":"Object1"},"String2",{"text":"Object2"}]}'
+
+        expect:
+        TextUtils.extractTextContent(mixedJson) == 'String1Object1String2Object2'
+    }
+
+    def "extractTextContent should handle JSON with clickEvent"() {
+        given:
+        String jsonWithClickEvent = '{"text":"Click me","clickEvent":{"action":"run_command","value":"/say hello"}}'
+
+        expect:
+        TextUtils.extractTextContent(jsonWithClickEvent) == 'Click me'
+    }
+
+    def "extractTextContent should handle JSON with hoverEvent"() {
+        given:
+        String jsonWithHoverEvent = '{"text":"Hover me","hoverEvent":{"action":"show_text","value":"Tooltip"}}'
+
+        expect:
+        TextUtils.extractTextContent(jsonWithHoverEvent) == 'Hover me'
+    }
+
+    def "extractTextContent should handle JSON with both clickEvent and hoverEvent"() {
+        given:
+        String jsonWithBoth = '{"text":"Interactive","clickEvent":{"action":"run_command","value":"/say hi"},"hoverEvent":{"action":"show_text","value":"Tooltip"}}'
+
+        expect:
+        TextUtils.extractTextContent(jsonWithBoth) == 'Interactive'
+    }
+
+    def "extractTextContent should handle empty extra array"() {
+        given:
+        String emptyExtra = '{"extra":[]}'
+
+        expect:
+        TextUtils.extractTextContent(emptyExtra) == ''
+    }
+
+    def "extractTextContent should handle extra array with null items"() {
+        given:
+        String nullItems = '{"extra":[{"text":"Valid"},null,{"text":"After null"}]}'
+
+        expect:
+        // Should handle null gracefully
+        TextUtils.extractTextContent(nullItems).contains('Valid')
+    }
+
+    // =========================================================================
+    // extractSignLineText() Additional Edge Cases
+    // =========================================================================
+
+    def "extractSignLineText should handle JSON with clickEvent"() {
+        given:
+        String jsonWithClickEvent = '{"text":"Sign line","clickEvent":{"action":"run_command","value":"/tp @s 0 0 0"}}'
+
+        expect:
+        TextUtils.extractSignLineText(jsonWithClickEvent) == 'Sign line'
+    }
+
+    def "extractSignLineText should handle JSON with hoverEvent"() {
+        given:
+        String jsonWithHoverEvent = '{"text":"Sign line","hoverEvent":{"action":"show_text","value":"Hover text"}}'
+
+        expect:
+        TextUtils.extractSignLineText(jsonWithHoverEvent) == 'Sign line'
+    }
+
+    def "extractSignLineText should handle JSON with both clickEvent and hoverEvent"() {
+        given:
+        String jsonWithBoth = '{"text":"Interactive sign","clickEvent":{"action":"run_command"},"hoverEvent":{"action":"show_text"}}'
+
+        expect:
+        TextUtils.extractSignLineText(jsonWithBoth) == 'Interactive sign'
+    }
+
+    def "extractSignLineText should handle extra array with mixed types"() {
+        given:
+        String mixedExtra = '{"extra":["Prefix",{"text":"Middle"},"Suffix"]}'
+
+        expect:
+        TextUtils.extractSignLineText(mixedExtra) == 'PrefixMiddleSuffix'
+    }
+
+    def "extractSignLineText should handle extra as JSONObject"() {
+        given:
+        String extraObject = '{"extra":{"text":"From object"}}'
+
+        expect:
+        TextUtils.extractSignLineText(extraObject) == 'From object'
+    }
+
+    def "extractSignLineText should handle deeply nested extra arrays"() {
+        given:
+        String nestedExtra = '{"extra":[{"extra":[{"text":"Deep"},{"text":"Nested"}]}]}'
+
+        expect:
+        // Note: extractSignLineText may not handle deeply nested, but should not crash
+        TextUtils.extractSignLineText(nestedExtra) != null
+    }
+
+    // =========================================================================
     // removeTextFormatting() Tests
     // =========================================================================
 

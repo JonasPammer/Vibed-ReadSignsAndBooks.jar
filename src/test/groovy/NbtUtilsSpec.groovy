@@ -568,4 +568,119 @@ class NbtUtilsSpec extends Specification {
         array.length() == 1
         array.getJSONArray(0).getString(0) == 'nested'
     }
+
+    // =========================================================================
+    // getDoubleAt() Additional Edge Cases
+    // =========================================================================
+
+    def "getDoubleAt should handle IntTag correctly"() {
+        given:
+        ListTag<IntTag> list = new ListTag<>(IntTag)
+        list.addInt(42)
+
+        expect:
+        NbtUtils.getDoubleAt(list, 0) == 42.0
+    }
+
+    def "getDoubleAt should handle LongTag"() {
+        given:
+        ListTag<net.querz.nbt.tag.LongTag> list = new ListTag<>(net.querz.nbt.tag.LongTag)
+        list.addLong(123456789L)
+
+        expect:
+        NbtUtils.getDoubleAt(list, 0) == 123456789.0
+    }
+
+    def "getDoubleAt should handle FloatTag"() {
+        given:
+        ListTag<net.querz.nbt.tag.FloatTag> list = new ListTag<>(net.querz.nbt.tag.FloatTag)
+        list.addFloat(3.14f)
+
+        expect:
+        NbtUtils.getDoubleAt(list, 0) == 3.14
+    }
+
+    def "getDoubleAt should handle ShortTag"() {
+        given:
+        ListTag<net.querz.nbt.tag.ShortTag> list = new ListTag<>(net.querz.nbt.tag.ShortTag)
+        list.addShort(100 as short)
+
+        expect:
+        NbtUtils.getDoubleAt(list, 0) == 100.0
+    }
+
+    def "getDoubleAt should handle ByteTag"() {
+        given:
+        ListTag<net.querz.nbt.tag.ByteTag> list = new ListTag<>(net.querz.nbt.tag.ByteTag)
+        list.addByte(10 as byte)
+
+        expect:
+        NbtUtils.getDoubleAt(list, 0) == 10.0
+    }
+
+    // =========================================================================
+    // convertNbtToJson() Additional Edge Cases
+    // =========================================================================
+
+    def "convertNbtToJson should handle byte arrays"() {
+        given:
+        CompoundTag tag = new CompoundTag()
+        byte[] byteArray = [1, 2, 3, 4, 5] as byte[]
+        tag.putByteArray('bytes', byteArray)
+
+        when:
+        JSONObject json = NbtUtils.convertNbtToJson(tag)
+
+        then:
+        // Byte arrays are converted to JSON array
+        JSONArray array = json.getJSONArray('bytes')
+        array.length() == 5
+        array.getInt(0) == 1
+        array.getInt(4) == 5
+    }
+
+    def "convertNbtToJson should handle int arrays"() {
+        given:
+        CompoundTag tag = new CompoundTag()
+        int[] intArray = [100, 200, 300]
+        tag.putIntArray('ints', intArray)
+
+        when:
+        JSONObject json = NbtUtils.convertNbtToJson(tag)
+
+        then:
+        JSONArray array = json.getJSONArray('ints')
+        array.length() == 3
+        array.getInt(0) == 100
+        array.getInt(2) == 300
+    }
+
+    def "convertNbtToJson should handle long arrays"() {
+        given:
+        CompoundTag tag = new CompoundTag()
+        long[] longArray = [1000L, 2000L, 3000L]
+        tag.putLongArray('longs', longArray)
+
+        when:
+        JSONObject json = NbtUtils.convertNbtToJson(tag)
+
+        then:
+        JSONArray array = json.getJSONArray('longs')
+        array.length() == 3
+        array.getLong(0) == 1000L
+        array.getLong(2) == 3000L
+    }
+
+    def "convertNbtToJson should handle empty arrays"() {
+        given:
+        CompoundTag tag = new CompoundTag()
+        tag.putByteArray('empty', [] as byte[])
+
+        when:
+        JSONObject json = NbtUtils.convertNbtToJson(tag)
+
+        then:
+        JSONArray array = json.getJSONArray('empty')
+        array.length() == 0
+    }
 }

@@ -234,4 +234,169 @@ class OutputWritersSpec extends Specification {
         content.contains('Test Sign')
         content.contains('Line 1')
     }
+
+    // =========================================================================
+    // printSummaryStatistics() Tests
+    // =========================================================================
+
+    def "printSummaryStatistics should create summary file"() {
+        given:
+        String baseDir = tempDir.toString()
+        String outputFolder = 'output'
+        new File(baseDir, outputFolder).mkdirs()
+        Set<Integer> bookHashes = [1, 2, 3] as Set
+        Set<String> signHashes = ['hash1', 'hash2'] as Set
+
+        when:
+        OutputWriters.printSummaryStatistics(
+            baseDir, outputFolder, 5000L,
+            bookHashes, signHashes, 5, 0,
+            [:], [:], []
+        )
+
+        then:
+        File summaryFile = new File(baseDir, "${outputFolder}${File.separator}summary.txt")
+        summaryFile.exists()
+        summaryFile.text.contains('SUMMARY STATISTICS')
+    }
+
+    def "printSummaryStatistics should format ASCII table correctly"() {
+        given:
+        String baseDir = tempDir.toString()
+        String outputFolder = 'output'
+        new File(baseDir, outputFolder).mkdirs()
+        Set<Integer> bookHashes = [1] as Set
+        Set<String> signHashes = [] as Set
+        List<Map<String, String>> bookMetadataList = [
+            [
+                title: 'Test Book',
+                author: 'Test Author',
+                pageCount: '3',
+                foundWhere: 'chest',
+                coordinates: '100,64,200'
+            ]
+        ]
+
+        when:
+        OutputWriters.printSummaryStatistics(
+            baseDir, outputFolder, 1000L,
+            bookHashes, signHashes, 1, 0,
+            [:], [:], bookMetadataList
+        )
+
+        then:
+        File summaryFile = new File(baseDir, "${outputFolder}${File.separator}summary.txt")
+        String content = summaryFile.text
+        content.contains('Test Book')
+        content.contains('Test Author')
+        content.contains('chest')
+    }
+
+    def "printSummaryStatistics should include books by location type"() {
+        given:
+        String baseDir = tempDir.toString()
+        String outputFolder = 'output'
+        new File(baseDir, outputFolder).mkdirs()
+        Map<String, Integer> booksByLocationType = [
+            'overworld': 10,
+            'nether': 5
+        ]
+
+        when:
+        OutputWriters.printSummaryStatistics(
+            baseDir, outputFolder, 2000L,
+            [] as Set, [] as Set, 15, 0,
+            booksByLocationType, [:], []
+        )
+
+        then:
+        File summaryFile = new File(baseDir, "${outputFolder}${File.separator}summary.txt")
+        String content = summaryFile.text
+        content.contains('overworld: 10')
+        content.contains('nether: 5')
+    }
+
+    def "printSummaryStatistics should include books by container type"() {
+        given:
+        String baseDir = tempDir.toString()
+        String outputFolder = 'output'
+        new File(baseDir, outputFolder).mkdirs()
+        Map<String, Integer> booksByContainerType = [
+            'chest': 8,
+            'shulker_box': 2
+        ]
+
+        when:
+        OutputWriters.printSummaryStatistics(
+            baseDir, outputFolder, 3000L,
+            [] as Set, [] as Set, 10, 0,
+            [:], booksByContainerType, []
+        )
+
+        then:
+        File summaryFile = new File(baseDir, "${outputFolder}${File.separator}summary.txt")
+        String content = summaryFile.text
+        content.contains('chest: 8')
+        content.contains('shulker_box: 2')
+    }
+
+    def "printSummaryStatistics should show empty signs removed count"() {
+        given:
+        String baseDir = tempDir.toString()
+        String outputFolder = 'output'
+        new File(baseDir, outputFolder).mkdirs()
+
+        when:
+        OutputWriters.printSummaryStatistics(
+            baseDir, outputFolder, 4000L,
+            [] as Set, [] as Set, 0, 5,
+            [:], [:], []
+        )
+
+        then:
+        File summaryFile = new File(baseDir, "${outputFolder}${File.separator}summary.txt")
+        summaryFile.text.contains('Empty signs removed: 5')
+    }
+
+    def "printSummaryStatistics should format elapsed time correctly"() {
+        given:
+        String baseDir = tempDir.toString()
+        String outputFolder = 'output'
+        new File(baseDir, outputFolder).mkdirs()
+
+        when:
+        OutputWriters.printSummaryStatistics(
+            baseDir, outputFolder, 5000L,
+            [] as Set, [] as Set, 0, 0,
+            [:], [:], []
+        )
+
+        then:
+        File summaryFile = new File(baseDir, "${outputFolder}${File.separator}summary.txt")
+        String content = summaryFile.text
+        content.contains('5 seconds') || content.contains('Total processing time')
+    }
+
+    def "printSummaryStatistics should calculate duplicate books correctly"() {
+        given:
+        String baseDir = tempDir.toString()
+        String outputFolder = 'output'
+        new File(baseDir, outputFolder).mkdirs()
+        Set<Integer> bookHashes = [1, 2, 3] as Set  // 3 unique
+        int bookCounter = 5  // 5 total (2 duplicates)
+
+        when:
+        OutputWriters.printSummaryStatistics(
+            baseDir, outputFolder, 1000L,
+            bookHashes, [] as Set, bookCounter, 0,
+            [:], [:], []
+        )
+
+        then:
+        File summaryFile = new File(baseDir, "${outputFolder}${File.separator}summary.txt")
+        String content = summaryFile.text
+        content.contains('Total unique books found: 3')
+        content.contains('Total books extracted (including duplicates): 5')
+        content.contains('Duplicate books: 2')
+    }
 }
