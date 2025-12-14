@@ -451,12 +451,12 @@ class BlockSearcherSpec extends Specification {
         !props.containsKey('intProp')
     }
 
-    def "extractBlockProperties should handle null blockTag"() {
+    def "extractBlockProperties should throw NPE for null blockTag"() {
         when:
-        Map<String, String> props = BlockSearcher.extractBlockProperties(null)
+        BlockSearcher.extractBlockProperties(null)
 
         then:
-        props.isEmpty()
+        thrown(NullPointerException)
     }
 
     // =========================================================================

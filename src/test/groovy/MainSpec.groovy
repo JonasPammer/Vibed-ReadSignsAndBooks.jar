@@ -164,9 +164,10 @@ class MainSpec extends Specification {
 
     def "resetState should reset writer references"() {
         given:
-        Main.mcfunctionWriters['1_13'] = new StringWriter()
-        Main.signsMcfunctionWriters['1_13'] = new StringWriter()
-        Main.combinedBooksWriter = new StringWriter()
+        // Use BufferedWriter instead of StringWriter to match actual type
+        Main.mcfunctionWriters['1_13'] = new BufferedWriter(new StringWriter())
+        Main.signsMcfunctionWriters['1_13'] = new BufferedWriter(new StringWriter())
+        Main.combinedBooksWriter = new BufferedWriter(new StringWriter())
 
         when:
         Main.resetState()
