@@ -25,7 +25,12 @@ class GuiLogAppender extends AppenderBase<ILoggingEvent> {
         // Deliver each message individually via Platform.runLater
         // The handler processes the message; GUI.groovy manages rendering efficiency
         String message = event.formattedMessage + '\n'
-        Platform.runLater { logHandler(message) }
+        // IMPORTANT: explicitly call the stored Closure. In Groovy, writing `logHandler(message)` inside a closure
+        // can be resolved as a dynamic method call `GuiLogAppender.logHandler(String)` instead of invoking the
+        // Closure field, causing MissingMethodException in async JavaFX threads.
+        // Using a stable local reference also avoids races if clearLogHandler() is called.
+        final Closure<Void> handler = GuiLogAppender.logHandler
+        Platform.runLater { handler?.call(message) }
     }
 
     static void setLogHandler(Closure<Void> handler) {

@@ -122,10 +122,31 @@ class Main implements Runnable {
     @Option(names = ['--index-dimension'], description = 'Filter query results by dimension (overworld, nether, end)')
     static String indexDimension = null
 
+    // Item index database options
+
+    @Option(names = ['--index-items'], description = 'Build item index database during extraction', defaultValue = 'false')
+    static boolean indexItems = false
+
+    @Option(names = ['--item-limit'], description = 'Max items per type to index (default: 1000, 0 for unlimited)', defaultValue = '1000')
+    static int itemLimit = 1000
+
+    @Option(names = ['--item-query'], description = 'Query items from existing index (e.g., "diamond_sword", "*" for all)')
+    static String itemQuery = null
+
+    @Option(names = ['--item-filter'], description = 'Filter item query results (enchanted, named, or enchantment name)')
+    static String itemFilter = null
+
+    @Option(names = ['--item-list'], description = 'List all indexed item types from existing database', defaultValue = 'false')
+    static boolean itemList = false
+
+    @Option(names = ['--skip-common-items'], description = 'Skip indexing common items like stone, dirt, cobblestone (default: true)', defaultValue = 'true')
+    static boolean skipCommonItems = true
+
     // Block search results storage
     static List<BlockSearcher.BlockLocation> blockSearchResults = []
     static List<PortalDetector.Portal> portalResults = []
     static BlockDatabase blockDatabase = null  // Database instance for building index
+    static ItemDatabase itemDatabase = null  // Database instance for building item index
 
     /**
      * Reset all static state for testing purposes.
@@ -195,6 +216,16 @@ class Main implements Runnable {
         indexDimension = null
         blockDatabase?.close()
         blockDatabase = null
+
+        // Reset item index database options
+        indexItems = false
+        itemLimit = 1000
+        itemQuery = null
+        itemFilter = null
+        itemList = false
+        skipCommonItems = true
+        itemDatabase?.close()
+        itemDatabase = null
     }
 
     static void main(String[] args) {
@@ -233,6 +264,8 @@ class Main implements Runnable {
             // Check if this is a query-only mode (no extraction needed)
             if (indexQuery || indexList) {
                 runBlockIndexQuery()
+            } else if (itemQuery || itemList) {
+                runItemIndexQuery()
             } else {
                 runExtraction()
             }
@@ -431,6 +464,198 @@ class Main implements Runnable {
         LOGGER.info("Total results: ${blocks.size()}")
     }
 
+    // ========== Item Index Query Methods ==========
+
+    /**
+     * Run item index query mode - reads from existing database without extraction.
+     * Can use -o (output directory) or -w (world directory) to find the database.
+     */
+    static void runItemIndexQuery() {
+        // For query mode, check -o first, then -w, then current directory
+        baseDirectory = customOutputDirectory ?: customWorldDirectory ?: System.getProperty('user.dir')
+        dateStamp = new SimpleDateFormat('yyyy-MM-dd', Locale.US).format(new Date())
+
+        // Find the database file
+        File dbFile = findItemIndexDatabase()
+        if (!dbFile || !dbFile.exists()) {
+            LOGGER.error("Item index database not found. Run extraction with --index-items first.")
+            LOGGER.info("Searched in: ${baseDirectory}")
+            LOGGER.info("Use -o to specify the output folder containing item_index.db")
+            return
+        }
+
+        LOGGER.info("Opening item index database: ${dbFile.absolutePath}")
+        ItemDatabase db = ItemDatabase.openForQuery(dbFile)
+
+        try {
+            if (itemList) {
+                printItemIndexSummary(db)
+            }
+
+            if (itemQuery) {
+                queryAndPrintItems(db, itemQuery, itemFilter, indexDimension)
+            }
+        } finally {
+            db?.close()
+        }
+    }
+
+    /**
+     * Find the item index database file.
+     * For query mode: searches in -o directory, -w directory, or current directory.
+     * Supports pointing directly to the db file, to a date folder, or to a world/output folder.
+     */
+    static File findItemIndexDatabase() {
+        // Helper closure to search a directory for item_index.db
+        def searchDirectory = { String dirPath ->
+            if (!dirPath) return null
+            File dir = new File(dirPath)
+
+            // Check if path points directly to the db file
+            if (dir.name == 'item_index.db' && dir.exists()) return dir
+
+            // Check if path is a folder containing item_index.db directly
+            File dbFile = new File(dir, 'item_index.db')
+            if (dbFile.exists()) return dbFile
+
+            // Check in ReadBooks subfolder
+            File readBooksDir = new File(dir, 'ReadBooks')
+            if (readBooksDir.exists()) {
+                File[] dateFolders = readBooksDir.listFiles()?.findAll {
+                    it.isDirectory() && it.name.matches('\\d{4}-\\d{2}-\\d{2}')
+                }?.sort { -it.lastModified() }
+
+                if (dateFolders) {
+                    for (File folder : dateFolders) {
+                        dbFile = new File(folder, 'item_index.db')
+                        if (dbFile.exists()) return dbFile
+                    }
+                }
+            }
+
+            // Check if path itself contains date folders (e.g., -o points to ReadBooks folder)
+            File[] dateFolders = dir.listFiles()?.findAll {
+                it.isDirectory() && it.name.matches('\\d{4}-\\d{2}-\\d{2}')
+            }?.sort { -it.lastModified() }
+
+            if (dateFolders) {
+                for (File folder : dateFolders) {
+                    dbFile = new File(folder, 'item_index.db')
+                    if (dbFile.exists()) return dbFile
+                }
+            }
+
+            return null
+        }
+
+        // Search in order: -o, -w, current directory
+        File result = searchDirectory(customOutputDirectory)
+        if (result) return result
+
+        result = searchDirectory(customWorldDirectory)
+        if (result) return result
+
+        result = searchDirectory(System.getProperty('user.dir'))
+        if (result) return result
+
+        return null
+    }
+
+    /**
+     * Print item index summary (--item-list).
+     */
+    static void printItemIndexSummary(ItemDatabase db) {
+        List<Map> summary = db.getSummary()
+
+        if (summary.isEmpty()) {
+            LOGGER.info("No items indexed in database.")
+            return
+        }
+
+        LOGGER.info('')
+        LOGGER.info('Item Index Summary')
+        LOGGER.info('=' * 80)
+
+        // Print as ASCII table
+        List<Column> columns = [
+            new Column().header('Item Type').dataAlign(HorizontalAlign.LEFT)
+                .with({ Map row -> row.item_id?.toString()?.replace('minecraft:', '') ?: '' } as java.util.function.Function),
+            new Column().header('Total').dataAlign(HorizontalAlign.RIGHT)
+                .with({ Map row -> String.format('%,d', row.total_count ?: 0) } as java.util.function.Function),
+            new Column().header('Indexed').dataAlign(HorizontalAlign.RIGHT)
+                .with({ Map row -> String.format('%,d', row.unique_locations ?: 0) } as java.util.function.Function),
+            new Column().header('Enchanted').dataAlign(HorizontalAlign.RIGHT)
+                .with({ Map row -> String.format('%,d', row.with_enchantments ?: 0) } as java.util.function.Function),
+            new Column().header('Named').dataAlign(HorizontalAlign.RIGHT)
+                .with({ Map row -> String.format('%,d', row.with_custom_name ?: 0) } as java.util.function.Function),
+            new Column().header('Limited').dataAlign(HorizontalAlign.CENTER)
+                .with({ Map row -> row.limit_reached ? '✓' : '' } as java.util.function.Function)
+        ]
+
+        String table = AsciiTable.getTable(summary, columns)
+        println table
+
+        // Print totals
+        LOGGER.info('')
+        LOGGER.info("Total item types: ${summary.size()}")
+        LOGGER.info("Total items: ${String.format('%,d', db.getTotalItemCount())}")
+        LOGGER.info("Indexed items: ${String.format('%,d', db.getTotalItemsIndexed())}")
+    }
+
+    /**
+     * Query and print items (--item-query).
+     *
+     * @param db The item database
+     * @param query Item type to query ("*" for all, or specific item ID)
+     * @param filter Optional filter (enchanted, named, or enchantment name)
+     * @param dimension Optional dimension filter
+     */
+    static void queryAndPrintItems(ItemDatabase db, String query, String filter = null, String dimension = null) {
+        List<Map> items
+
+        // Determine query type based on query and filter
+        if (filter?.toLowerCase() == 'enchanted') {
+            items = db.queryEnchantedItems(null, dimension)
+        } else if (filter?.toLowerCase() == 'named') {
+            items = db.queryNamedItems(null, dimension)
+        } else if (filter && filter != 'enchanted' && filter != 'named') {
+            // Filter is an enchantment name
+            items = db.queryEnchantedItems(filter, dimension)
+        } else if (query == '*') {
+            // Query all items - get summary instead
+            LOGGER.info("Use --item-list to see all item types. Showing items with enchantments or custom names...")
+            items = db.queryEnchantedItems(null, dimension) + db.queryNamedItems(null, dimension)
+            items = items.unique { "${it.item_id}|${it.x}|${it.y}|${it.z}" }
+        } else {
+            // Query specific item type
+            items = db.queryByItemType(query, dimension)
+        }
+
+        if (items.isEmpty()) {
+            LOGGER.info("No items found" + (dimension ? " in ${dimension}" : ""))
+            return
+        }
+
+        LOGGER.info('')
+        String queryDesc = query == '*' ? 'All Special Items' : query.replace('minecraft:', '')
+        LOGGER.info("Query Results: ${queryDesc}" + (filter ? " (filter: ${filter})" : "") + (dimension ? " in ${dimension}" : ""))
+        LOGGER.info('=' * 80)
+        LOGGER.info('')
+
+        // Output as CSV to stdout
+        println 'item_id,count,dimension,x,y,z,container_type,custom_name,enchantments,stored_enchantments,region_file'
+        items.each { Map item ->
+            String enchants = item.enchantments ?: ''
+            String storedEnchants = item.stored_enchantments ?: ''
+            String customName = item.custom_name ? "\"${item.custom_name}\"" : ''
+            String region = item.region_file ?: ''
+            println "${item.item_id},${item.count ?: 1},${item.dimension ?: ''},${item.x ?: ''},${item.y ?: ''},${item.z ?: ''},${item.container_type ?: ''},${customName},${enchants},${storedEnchants},${region}"
+        }
+
+        LOGGER.info('')
+        LOGGER.info("Total results: ${items.size()}")
+    }
+
     // ========== Shulker Box Generation (delegated to ShulkerBoxGenerator) ==========
     static String getShulkerColorForAuthor(String author) {
         return ShulkerBoxGenerator.getShulkerColorForAuthor(author)
@@ -536,6 +761,30 @@ class Main implements Runnable {
         return DatapackGenerator.getVersionDescription(version)
     }
 
+    /**
+     * Resolve the output base directory as a File.
+     *
+     * - Default: outputFolder is relative ("ReadBooks/YYYY-MM-DD") → baseDirectory/outputFolder
+     * - Custom -o/--output: outputFolder is absolute → outputFolder
+     *
+     * IMPORTANT: do not build paths via string concatenation with baseDirectory, because on Windows an absolute
+     * path like "C:\\out" concatenated becomes an invalid path like "<world>\\C:\\out".
+     */
+    static File resolveOutputBaseDir() {
+        File out = new File(outputFolder)
+        return out.isAbsolute() ? out : new File(baseDirectory, outputFolder)
+    }
+
+    /**
+     * Resolve a path that may be absolute or relative to the world base directory.
+     * This is used for derived folders like booksFolder/duplicatesFolder which may become absolute
+     * when outputFolder is absolute (-o/--output).
+     */
+    static File resolveMaybeRelativeToWorld(String path) {
+        File f = new File(path)
+        return f.isAbsolute() ? f : new File(baseDirectory, path)
+    }
+
     static void runExtraction() {
         // Reset collections but preserve @Option fields that were intentionally set
         // (e.g., customWorldDirectory set by tests or CLI arguments)
@@ -564,12 +813,18 @@ class Main implements Runnable {
         booksFolder = "${outputFolder}${File.separator}books"
         duplicatesFolder = "${booksFolder}${File.separator}.duplicates"
 
+        File outputBaseDir = resolveOutputBaseDir()
+
         // Configure logging - dynamically add file appender
-        addFileAppender(new File(baseDirectory, "${outputFolder}${File.separator}logs.txt").absolutePath)
+        addFileAppender(new File(outputBaseDir, 'logs.txt').absolutePath)
 
         // Create directories
         [outputFolder, booksFolder, duplicatesFolder].each { String folder ->
-            new File(baseDirectory, folder).mkdirs()
+            File f = new File(folder)
+            if (!f.isAbsolute()) {
+                f = new File(baseDirectory, folder)
+            }
+            f.mkdirs()
         }
 
         LOGGER.info('=' * 80)
@@ -599,7 +854,7 @@ class Main implements Runnable {
         long startTime = System.currentTimeMillis()
 
         try {
-            combinedBooksWriter = new File(baseDirectory, "${outputFolder}${File.separator}all_books.txt").newWriter()
+            combinedBooksWriter = new File(outputBaseDir, 'all_books.txt').newWriter()
 
             // Create datapack structures and initialize mcfunction writers for each Minecraft version
             LOGGER.info("Creating Minecraft datapacks...")
@@ -623,6 +878,20 @@ class Main implements Runnable {
                 LOGGER.info("  ✓ Created datapack for ${getVersionDescription(version)} (pack_format ${packFormat})")
             }
             LOGGER.info("Datapacks created successfully!")
+
+            // Initialize item index database if enabled
+            if (indexItems) {
+                File dbFile = new File(outputBaseDir, 'item_index.db')
+                LOGGER.info("Creating item index database: ${dbFile.absolutePath}")
+                LOGGER.info("Item limit per type: ${itemLimit == 0 ? 'unlimited' : itemLimit}")
+                LOGGER.info("Skip common items: ${skipCommonItems}")
+
+                itemDatabase = new ItemDatabase(dbFile, itemLimit)
+                itemDatabase.setWorldPath(baseDirectory)
+                itemDatabase.setExtractionDate(new SimpleDateFormat('yyyy-MM-dd HH:mm:ss', Locale.US).format(new Date()))
+                itemDatabase.setItemLimitMetadata()
+                itemDatabase.beginTransaction()  // Use transaction for batch inserts
+            }
 
             readPlayerData()
             readSignsAndBooks()
@@ -649,6 +918,18 @@ class Main implements Runnable {
             writeSignsCSV()
             writeCustomNamesOutput()
 
+            // Commit and close item index database if enabled
+            if (itemDatabase) {
+                itemDatabase.commitTransaction()
+                LOGGER.info('')
+                LOGGER.info('Item Index Summary:')
+                LOGGER.info("  Item types indexed: ${itemDatabase.getItemTypeCount()}")
+                LOGGER.info("  Unique items indexed: ${itemDatabase.getTotalItemsIndexed()}")
+                LOGGER.info("  Total items found: ${itemDatabase.getTotalItemCount()}")
+                itemDatabase.close()
+                itemDatabase = null
+            }
+
             // Block search and portal detection (if enabled)
             runBlockSearch()
             writeBlockSearchOutput()
@@ -665,6 +946,14 @@ class Main implements Runnable {
             LOGGER.error("Fatal error: ${e.message}", e)
             combinedBooksWriter?.close()
             mcfunctionWriters.values().each { it?.close() }
+            // Rollback and close item database on error
+            if (itemDatabase) {
+                try {
+                    itemDatabase.rollbackTransaction()
+                } catch (Exception ignored) {}
+                itemDatabase.close()
+                itemDatabase = null
+            }
             // Still save state file even if extraction had errors (only if tracking enabled)
             if (trackFailedRegions) {
                 saveFailedRegionsState()
@@ -730,8 +1019,10 @@ class Main implements Runnable {
 
         LOGGER.info("Writing custom names output (${customNameData.size()} unique custom names found)")
 
+        File outputBaseDir = resolveOutputBaseDir()
+
         // Write CSV file
-        File csvFile = new File(baseDirectory, "${outputFolder}${File.separator}all_custom_names.csv")
+        File csvFile = new File(outputBaseDir, 'all_custom_names.csv')
         csvFile.withWriter('UTF-8') { BufferedWriter writer ->
             writer.writeLine('CustomName,Type,ItemOrEntityID,X,Y,Z,Location')
             customNameData.each { Map<String, Object> data ->
@@ -748,7 +1039,7 @@ class Main implements Runnable {
         }
 
         // Write TXT file with grouped report
-        File txtFile = new File(baseDirectory, "${outputFolder}${File.separator}all_custom_names.txt")
+        File txtFile = new File(outputBaseDir, 'all_custom_names.txt')
         txtFile.withWriter('UTF-8') { BufferedWriter writer ->
             writer.writeLine('Custom Names Extraction Report')
             writer.writeLine('=' * 80)
@@ -774,7 +1065,7 @@ class Main implements Runnable {
         }
 
         // Write JSON file
-        File jsonFile = new File(baseDirectory, "${outputFolder}${File.separator}all_custom_names.json")
+        File jsonFile = new File(outputBaseDir, 'all_custom_names.json')
         jsonFile.withWriter('UTF-8') { BufferedWriter writer ->
             writer.write('[')
             customNameData.eachWithIndex { Map<String, Object> data, int index ->
@@ -836,8 +1127,7 @@ class Main implements Runnable {
 
         // Always create block index database when searching for blocks
         if (hasBlockSearch) {
-            String outputPath = "${baseDirectory}${File.separator}${outputFolder}"
-            File dbFile = new File(outputPath, 'block_index.db')
+            File dbFile = new File(resolveOutputBaseDir(), 'block_index.db')
             LOGGER.info("Creating block index database: ${dbFile.absolutePath}")
             LOGGER.info("Block limit per type: ${indexLimit == 0 ? 'unlimited' : indexLimit}")
 
@@ -891,7 +1181,7 @@ class Main implements Runnable {
             return
         }
 
-        String outputPath = "${baseDirectory}${File.separator}${outputFolder}"
+        String outputPath = resolveOutputBaseDir().absolutePath
 
         // Write portal results
         if (hasPortalResults) {
@@ -1230,6 +1520,335 @@ class Main implements Runnable {
         LOGGER.debug("Recorded custom name: '${customName}' (${type}: ${itemOrEntityId})")
     }
 
+    /**
+     * Extract item metadata from NBT for database indexing.
+     * Handles both pre-1.20.5 (tag) and 1.20.5+ (components) formats.
+     *
+     * Research notes (added during Issue #17 review):
+     * - 1.20.5+ item stacks store most metadata in `components` (data components system).
+     * - Pre-1.20.5 item stacks store metadata in `tag` (classic NBT item format).
+     *
+     * References:
+     * - Item structure overview: https://minecraft.wiki/w/Player.dat_format#Item_structure
+     * - Data components: https://minecraft.wiki/w/Data_component_format
+     *
+     * Related feature request: https://github.com/JonasPammer/Vibed-ReadSignsAndBooks.jar/issues/17
+     *
+     * @param item The CompoundTag representing the item
+     * @param bookInfo Location context string (e.g., "Chunk [x, z] Inside minecraft:chest at (X Y Z)")
+     * @param x X coordinate
+     * @param y Y coordinate
+     * @param z Z coordinate
+     * @return ItemMetadata object or null if item should be skipped
+     */
+    static ItemDatabase.ItemMetadata extractItemMetadata(CompoundTag item, String bookInfo, int x, int y, int z, Integer slotOverride = null) {
+        String itemId = item.getString('id')
+        if (!itemId) return null
+        // Normalize item ids: some formats/commands omit the namespace (e.g. "diamond_sword").
+        // The feature request explicitly calls out both forms; normalize early so:
+        // - skipCommonItems matches
+        // - DB rows are queryable consistently
+        // Ref: https://github.com/JonasPammer/Vibed-ReadSignsAndBooks.jar/issues/17
+        if (!itemId.contains(':')) {
+            itemId = "minecraft:${itemId}"
+        }
+
+        // Check if we should skip common items
+        if (skipCommonItems && ItemDatabase.DEFAULT_SKIP_ITEMS.contains(itemId)) {
+            return null
+        }
+
+        ItemDatabase.ItemMetadata metadata = new ItemDatabase.ItemMetadata(itemId)
+        metadata.x = x
+        metadata.y = y
+        metadata.z = z
+
+        // Extract count
+        if (item.containsKey('Count') || item.containsKey('count')) {
+            def countTag = item.get('Count') ?: item.get('count')
+            if (countTag instanceof NumberTag) {
+                metadata.count = ((NumberTag) countTag).asInt()
+            }
+        }
+
+        // Parse bookInfo to extract container type, dimension, and player UUID if available
+        metadata.containerType = parseContainerType(bookInfo)
+        metadata.dimension = parseDimension(bookInfo)
+        metadata.playerUuid = parsePlayerUuid(bookInfo)
+        metadata.regionFile = parseRegionFile(bookInfo)
+
+        // Extract slot if present (classic NBT uses Slot on the item stack).
+        // For 1.20.5+ component containers (minecraft:container), the slot may live on the container entry instead;
+        // callers can supply slotOverride to preserve uniqueness in the item index.
+        if (item.containsKey('Slot') || item.containsKey('slot')) {
+            def slotTag = item.get('Slot') ?: item.get('slot')
+            if (slotTag instanceof NumberTag) {
+                metadata.slot = ((NumberTag) slotTag).asInt()
+            }
+        } else if (slotOverride != null) {
+            metadata.slot = slotOverride
+        }
+
+        // Try new format first (1.20.5+ with components)
+        if (hasKey(item, 'components')) {
+            extractMetadataFromComponents(item.getCompoundTag('components'), metadata)
+        } else if (hasKey(item, 'tag')) {
+            // Old format (pre-1.20.5)
+            extractMetadataFromTag(item.getCompoundTag('tag'), metadata)
+        }
+
+        return metadata
+    }
+
+    /**
+     * Extract metadata from 1.20.5+ components format.
+     */
+    private static void extractMetadataFromComponents(CompoundTag components, ItemDatabase.ItemMetadata metadata) {
+        // 1.20.5+ data components:
+        // - enchantments/stored_enchantments are stored as compounds with `levels` maps
+        // - damage is `minecraft:damage`
+        // - custom_name is `minecraft:custom_name` (JSON text component)
+        // Ref: https://minecraft.wiki/w/Data_component_format
+
+        // Custom name
+        if (hasKey(components, 'minecraft:custom_name')) {
+            net.querz.nbt.tag.Tag<?> nameTag = components.get('minecraft:custom_name')
+            if (nameTag instanceof StringTag) {
+                metadata.customName = TextUtils.extractTextContent(((StringTag) nameTag).value, false)?.trim()
+            }
+        }
+
+        // Damage
+        if (hasKey(components, 'minecraft:damage')) {
+            def damageTag = components.get('minecraft:damage')
+            if (damageTag instanceof NumberTag) {
+                metadata.damage = ((NumberTag) damageTag).asInt()
+            }
+        }
+
+        // Enchantments (1.20.5+ format: minecraft:enchantments = {levels: {sharpness: 5}})
+        if (hasKey(components, 'minecraft:enchantments')) {
+            CompoundTag enchants = getCompoundTag(components, 'minecraft:enchantments')
+            if (hasKey(enchants, 'levels')) {
+                CompoundTag levels = getCompoundTag(enchants, 'levels')
+                levels.keySet().each { String enchantName ->
+                    def levelTag = levels.get(enchantName)
+                    if (levelTag instanceof NumberTag) {
+                        String shortName = enchantName.replace('minecraft:', '')
+                        metadata.enchantments[shortName] = ((NumberTag) levelTag).asInt()
+                    }
+                }
+            }
+        }
+
+        // Stored enchantments (for enchanted books)
+        if (hasKey(components, 'minecraft:stored_enchantments')) {
+            CompoundTag storedEnchants = getCompoundTag(components, 'minecraft:stored_enchantments')
+            if (hasKey(storedEnchants, 'levels')) {
+                CompoundTag levels = getCompoundTag(storedEnchants, 'levels')
+                levels.keySet().each { String enchantName ->
+                    def levelTag = levels.get(enchantName)
+                    if (levelTag instanceof NumberTag) {
+                        String shortName = enchantName.replace('minecraft:', '')
+                        metadata.storedEnchantments[shortName] = ((NumberTag) levelTag).asInt()
+                    }
+                }
+            }
+        }
+
+        // Lore
+        if (hasKey(components, 'minecraft:lore')) {
+            ListTag<?> loreList = getListTag(components, 'minecraft:lore')
+            if (loreList) {
+                loreList.each { loreTag ->
+                    if (loreTag instanceof StringTag) {
+                        String loreText = TextUtils.extractTextContent(((StringTag) loreTag).value, false)?.trim()
+                        if (loreText) metadata.lore.add(loreText)
+                    }
+                }
+            }
+        }
+
+        // Unbreakable
+        if (hasKey(components, 'minecraft:unbreakable')) {
+            metadata.unbreakable = true
+        }
+    }
+
+    /**
+     * Extract metadata from pre-1.20.5 tag format.
+     */
+    private static void extractMetadataFromTag(CompoundTag tag, ItemDatabase.ItemMetadata metadata) {
+        // Pre-1.20.5 classic item NBT:
+        // - display.Name / display.Lore for naming/lore
+        // - Enchantments / StoredEnchantments lists with entries {id, lvl}
+        // Ref: https://minecraft.wiki/w/Player.dat_format#Item_structure
+
+        // Custom name (tag.display.Name)
+        if (hasKey(tag, 'display')) {
+            CompoundTag display = getCompoundTag(tag, 'display')
+            if (hasKey(display, 'Name')) {
+                String rawName = display.getString('Name')
+                metadata.customName = TextUtils.extractTextContent(rawName, false)?.trim()
+            }
+            // Lore (tag.display.Lore)
+            if (hasKey(display, 'Lore')) {
+                ListTag<?> loreList = getListTag(display, 'Lore')
+                if (loreList) {
+                    loreList.each { loreTag ->
+                        if (loreTag instanceof StringTag) {
+                            String loreText = TextUtils.extractTextContent(((StringTag) loreTag).value, false)?.trim()
+                            if (loreText) metadata.lore.add(loreText)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Damage
+        if (hasKey(tag, 'Damage')) {
+            def damageTag = tag.get('Damage')
+            if (damageTag instanceof NumberTag) {
+                metadata.damage = ((NumberTag) damageTag).asInt()
+            }
+        }
+
+        // Enchantments (pre-1.20.5 format: Enchantments = [{id: "minecraft:sharpness", lvl: 5s}])
+        if (hasKey(tag, 'Enchantments')) {
+            ListTag<?> enchantsList = getListTag(tag, 'Enchantments')
+            if (enchantsList) {
+                enchantsList.each { enchantTag ->
+                    if (enchantTag instanceof CompoundTag) {
+                        CompoundTag enchant = (CompoundTag) enchantTag
+                        String enchantId = enchant.getString('id')?.replace('minecraft:', '')
+                        def lvlTag = enchant.get('lvl')
+                        if (enchantId && lvlTag instanceof NumberTag) {
+                            metadata.enchantments[enchantId] = ((NumberTag) lvlTag).asInt()
+                        }
+                    }
+                }
+            }
+        }
+
+        // Stored enchantments (for enchanted books in old format)
+        if (hasKey(tag, 'StoredEnchantments')) {
+            ListTag<?> storedList = getListTag(tag, 'StoredEnchantments')
+            if (storedList) {
+                storedList.each { enchantTag ->
+                    if (enchantTag instanceof CompoundTag) {
+                        CompoundTag enchant = (CompoundTag) enchantTag
+                        String enchantId = enchant.getString('id')?.replace('minecraft:', '')
+                        def lvlTag = enchant.get('lvl')
+                        if (enchantId && lvlTag instanceof NumberTag) {
+                            metadata.storedEnchantments[enchantId] = ((NumberTag) lvlTag).asInt()
+                        }
+                    }
+                }
+            }
+        }
+
+        // Unbreakable
+        if (hasKey(tag, 'Unbreakable')) {
+            def unbTag = tag.get('Unbreakable')
+            if (unbTag instanceof NumberTag) {
+                metadata.unbreakable = ((NumberTag) unbTag).asInt() != 0
+            }
+        }
+    }
+
+    /**
+     * Parse container type from bookInfo string.
+     * Examples:
+     * - "Chunk [x, z] Inside minecraft:chest at (X Y Z)" -> "chest"
+     * - "Inventory of player UUID.dat" -> "player_inventory"
+     * - "EnderItems of player UUID.dat" -> "ender_chest"
+     */
+    static String parseContainerType(String bookInfo) {
+        if (!bookInfo) return 'unknown'
+
+        // Playerdata can include multiple snapshots (e.g. "<uuid>.dat" and "<uuid>.dat_old").
+        // Treat these as distinct sources for item-index uniqueness, otherwise items at the same (x,y,z,slot)
+        // will be de-duplicated across snapshots and the item index won't match the extractor's counts.
+        boolean isDatOld = bookInfo.contains('.dat_old')
+
+        if (bookInfo.contains('Inventory of player')) return isDatOld ? 'player_inventory_old' : 'player_inventory'
+        // Historical strings used across the codebase/tests:
+        // - "EnderItems of player <uuid>.dat" (older)
+        // - "Ender Chest of player <uuid>.dat" (newer, more readable)
+        if (bookInfo.contains('EnderItems of player') || bookInfo.contains('Ender Chest of player')) {
+            return isDatOld ? 'ender_chest_old' : 'ender_chest'
+        }
+        if (bookInfo.contains('In minecraft:item_frame')) return 'item_frame'
+        if (bookInfo.contains('In minecraft:glow_item_frame')) return 'glow_item_frame'
+
+        // Try to extract container type from "Inside minecraft:X at" pattern
+        def matcher = bookInfo =~ /Inside (minecraft:)?(\w+) at/
+        if (matcher.find()) {
+            return matcher.group(2)
+        }
+
+        // Try "In minecraft:X at" pattern (for entities)
+        matcher = bookInfo =~ /In (minecraft:)?(\w+) at/
+        if (matcher.find()) {
+            return matcher.group(2)
+        }
+
+        // Check for nested containers
+        if (bookInfo.contains('> shulker_box')) return 'shulker_box'
+        if (bookInfo.contains('> bundle')) return 'bundle'
+        if (bookInfo.contains('> copper_chest')) return 'copper_chest'
+
+        return 'unknown'
+    }
+
+    /**
+     * Parse dimension from bookInfo string.
+     * Returns: overworld, nether, end, or null if unknown
+     */
+    static String parseDimension(String bookInfo) {
+        if (!bookInfo) return null
+
+        // Check for player data (dimension unknown)
+        if (bookInfo.contains('of player')) return null
+
+        // Check for dimension folders in path
+        if (bookInfo.contains('DIM-1') || bookInfo.contains('nether')) return 'nether'
+        if (bookInfo.contains('DIM1') || bookInfo.contains('the_end')) return 'end'
+
+        // Default to overworld for region files without dimension markers
+        if (bookInfo.contains('region/') || bookInfo.contains('Chunk [')) return 'overworld'
+
+        return null
+    }
+
+    /**
+     * Parse player UUID from bookInfo string.
+     * Example: "Inventory of player 12345678-1234-1234-1234-123456789abc.dat" -> "12345678-1234-1234-1234-123456789abc"
+     */
+    static String parsePlayerUuid(String bookInfo) {
+        if (!bookInfo) return null
+
+        def matcher = bookInfo =~ /of player ([0-9a-fA-F-]+)\.dat/
+        if (matcher.find()) {
+            return matcher.group(1)
+        }
+        return null
+    }
+
+    /**
+     * Parse region file from bookInfo string.
+     * Example: "Chunk [1, 2] (r.0.0.mca)" -> "r.0.0.mca"
+     */
+    static String parseRegionFile(String bookInfo) {
+        if (!bookInfo) return null
+
+        def matcher = bookInfo =~ /\((r\.-?\d+\.-?\d+\.mca)\)/
+        if (matcher.find()) {
+            return matcher.group(1)
+        }
+        return null
+    }
+
     // ========== Minecraft Command Generation (delegated to MinecraftCommands & ShulkerBoxGenerator) ==========
     static String escapeForMinecraftCommand(String text, String version) {
         return MinecraftCommands.escapeForMinecraftCommand(text, version)
@@ -1548,7 +2167,7 @@ class Main implements Runnable {
 
         LOGGER.debug("Found ${files.length} region files to process")
 
-        File signOutput = new File(baseDirectory, "${outputFolder}${File.separator}all_signs.txt")
+        File signOutput = new File(resolveOutputBaseDir(), 'all_signs.txt')
         signOutput.withWriter { BufferedWriter signWriter ->
             new ProgressBarBuilder()
                     .setTaskName('Region files')
@@ -1867,14 +2486,25 @@ class Main implements Runnable {
      * - Flower Pot (can only hold flowers/plants)
      * - Jukebox (can only hold music discs)
      */
-    public static void parseItem(CompoundTag item, String bookInfo, int x = 0, int y = 0, int z = 0) {
+    public static void parseItem(CompoundTag item, String bookInfo, int x = 0, int y = 0, int z = 0, Integer slotOverride = null) {
         String itemId = item.getString('id')
+        if (itemId && !itemId.contains(':')) {
+            itemId = "minecraft:${itemId}"
+        }
 
         // Extract custom name if enabled
         if (extractCustomNames) {
             String customName = extractCustomNameFromItem(item)
             if (customName) {
                 recordCustomName(customName, itemId, 'item', bookInfo, x, y, z)
+            }
+        }
+
+        // Index item to database if enabled
+        if (indexItems && itemDatabase != null) {
+            ItemDatabase.ItemMetadata metadata = extractItemMetadata(item, bookInfo, x, y, z, slotOverride)
+            if (metadata != null) {
+                itemDatabase.insertItem(metadata)
             }
         }
 
@@ -1893,6 +2523,17 @@ class Main implements Runnable {
         if (itemId.contains('shulker_box')) {
             LOGGER.debug('Found shulker box, scanning contents...')
 
+            // Preserve nested-container uniqueness:
+            // Use the shulker's *own* slot (in its parent container) as a prefix for the inner-slot,
+            // so two shulkers at the same (x,y,z) don't collide in the SQLite UNIQUE constraint.
+            Integer parentSlot = slotOverride
+            if (parentSlot == null && (item.containsKey('Slot') || item.containsKey('slot'))) {
+                def parentSlotTag = item.get('Slot') ?: item.get('slot')
+                if (parentSlotTag instanceof NumberTag) {
+                    parentSlot = ((NumberTag) parentSlotTag).asInt()
+                }
+            }
+
             // Try new format first (1.20.5+ with components)
             // Note: minecraft:container stores items as a list of slot records: {slot: int, item: ItemStack}
             if (hasKey(item, 'components')) {
@@ -1900,7 +2541,18 @@ class Main implements Runnable {
                 if (hasKey(components, 'minecraft:container')) {
                     getCompoundTagList(components, 'minecraft:container').each { CompoundTag containerEntry ->
                         CompoundTag shelkerItem = getCompoundTag(containerEntry, 'item')
-                        parseItem(shelkerItem, "${bookInfo} > shulker_box", x, y, z)
+                        Integer slot = null
+                        if (containerEntry.containsKey('slot')) {
+                            def slotTag = containerEntry.get('slot')
+                            if (slotTag instanceof NumberTag) {
+                                slot = ((NumberTag) slotTag).asInt()
+                            }
+                        }
+                        Integer compositeSlot = slot
+                        if (parentSlot != null && compositeSlot != null) {
+                            compositeSlot = (parentSlot * 1000) + compositeSlot
+                        }
+                        parseItem(shelkerItem, "${bookInfo} > shulker_box", x, y, z, compositeSlot)
                     }
                 }
             } else if (hasKey(item, 'tag')) {
@@ -1908,7 +2560,20 @@ class Main implements Runnable {
                 CompoundTag shelkerCompound = getCompoundTag(item, 'tag')
                 CompoundTag shelkerCompound2 = getCompoundTag(shelkerCompound, 'BlockEntityTag')
                 getCompoundTagList(shelkerCompound2, 'Items').each { CompoundTag shelkerItem ->
-                    parseItem(shelkerItem, "${bookInfo} > shulker_box", x, y, z)
+                    // Old format already stores per-item Slot; still prefix with parentSlot (if known) to avoid collisions
+                    // when multiple shulkers exist at the same coordinates.
+                    Integer innerSlot = null
+                    if (shelkerItem.containsKey('Slot') || shelkerItem.containsKey('slot')) {
+                        def innerSlotTag = shelkerItem.get('Slot') ?: shelkerItem.get('slot')
+                        if (innerSlotTag instanceof NumberTag) {
+                            innerSlot = ((NumberTag) innerSlotTag).asInt()
+                        }
+                    }
+                    Integer compositeSlot = innerSlot
+                    if (parentSlot != null && compositeSlot != null) {
+                        compositeSlot = (parentSlot * 1000) + compositeSlot
+                    }
+                    parseItem(shelkerItem, "${bookInfo} > shulker_box", x, y, z, compositeSlot)
                 }
             }
         }
@@ -1922,8 +2587,23 @@ class Main implements Runnable {
             if (hasKey(item, 'components')) {
                 CompoundTag components = getCompoundTag(item, 'components')
                 if (hasKey(components, 'minecraft:bundle_contents')) {
+                    // Same uniqueness trick as shulkers: prefix list index with parent slot.
+                    Integer parentSlot = slotOverride
+                    if (parentSlot == null && (item.containsKey('Slot') || item.containsKey('slot'))) {
+                        def parentSlotTag = item.get('Slot') ?: item.get('slot')
+                        if (parentSlotTag instanceof NumberTag) {
+                            parentSlot = ((NumberTag) parentSlotTag).asInt()
+                        }
+                    }
+
+                    int idx = 0
                     getCompoundTagList(components, 'minecraft:bundle_contents').each { CompoundTag bundleItem ->
-                        parseItem(bundleItem, "${bookInfo} > bundle", x, y, z)
+                        Integer compositeSlot = idx
+                        if (parentSlot != null) {
+                            compositeSlot = (parentSlot * 1000) + idx
+                        }
+                        parseItem(bundleItem, "${bookInfo} > bundle", x, y, z, compositeSlot)
+                        idx++
                     }
                 }
             }
@@ -1939,9 +2619,28 @@ class Main implements Runnable {
             if (hasKey(item, 'components')) {
                 CompoundTag components = getCompoundTag(item, 'components')
                 if (hasKey(components, 'minecraft:container')) {
+                    Integer parentSlot = slotOverride
+                    if (parentSlot == null && (item.containsKey('Slot') || item.containsKey('slot'))) {
+                        def parentSlotTag = item.get('Slot') ?: item.get('slot')
+                        if (parentSlotTag instanceof NumberTag) {
+                            parentSlot = ((NumberTag) parentSlotTag).asInt()
+                        }
+                    }
+
                     getCompoundTagList(components, 'minecraft:container').each { CompoundTag containerEntry ->
                         CompoundTag chestItem = getCompoundTag(containerEntry, 'item')
-                        parseItem(chestItem, "${bookInfo} > copper_chest", x, y, z)
+                        Integer slot = null
+                        if (containerEntry.containsKey('slot')) {
+                            def slotTag = containerEntry.get('slot')
+                            if (slotTag instanceof NumberTag) {
+                                slot = ((NumberTag) slotTag).asInt()
+                            }
+                        }
+                        Integer compositeSlot = slot
+                        if (parentSlot != null && compositeSlot != null) {
+                            compositeSlot = (parentSlot * 1000) + compositeSlot
+                        }
+                        parseItem(chestItem, "${bookInfo} > copper_chest", x, y, z, compositeSlot)
                     }
                 }
             } else if (hasKey(item, 'tag')) {
@@ -1949,7 +2648,27 @@ class Main implements Runnable {
                 CompoundTag chestCompound = getCompoundTag(item, 'tag')
                 CompoundTag chestCompound2 = getCompoundTag(chestCompound, 'BlockEntityTag')
                 getCompoundTagList(chestCompound2, 'Items').each { CompoundTag chestItem ->
-                    parseItem(chestItem, "${bookInfo} > copper_chest", x, y, z)
+                    // Old format: items have Slot; still prefix with parent slot (if known) for uniqueness.
+                    Integer parentSlot = slotOverride
+                    if (parentSlot == null && (item.containsKey('Slot') || item.containsKey('slot'))) {
+                        def parentSlotTag = item.get('Slot') ?: item.get('slot')
+                        if (parentSlotTag instanceof NumberTag) {
+                            parentSlot = ((NumberTag) parentSlotTag).asInt()
+                        }
+                    }
+
+                    Integer innerSlot = null
+                    if (chestItem.containsKey('Slot') || chestItem.containsKey('slot')) {
+                        def innerSlotTag = chestItem.get('Slot') ?: chestItem.get('slot')
+                        if (innerSlotTag instanceof NumberTag) {
+                            innerSlot = ((NumberTag) innerSlotTag).asInt()
+                        }
+                    }
+                    Integer compositeSlot = innerSlot
+                    if (parentSlot != null && compositeSlot != null) {
+                        compositeSlot = (parentSlot * 1000) + compositeSlot
+                    }
+                    parseItem(chestItem, "${bookInfo} > copper_chest", x, y, z, compositeSlot)
                 }
             }
         }
@@ -2123,12 +2842,12 @@ class Main implements Runnable {
             String existingFilePath = existingBookInfo.filePath as String
             File existingFile = new File(existingFilePath)
             if (existingFile.exists()) {
-                File newDuplicateLocation = new File(baseDirectory, "${duplicatesFolder}${File.separator}${existingFile.name}")
+                File newDuplicateLocation = new File(resolveMaybeRelativeToWorld(duplicatesFolder), existingFile.name)
                 // Ensure unique filename in duplicates folder
                 int dupCounter = 2
                 while (newDuplicateLocation.exists()) {
                     String nameWithoutExt = existingFile.name.replace('.stendhal', '')
-                    newDuplicateLocation = new File(baseDirectory, "${duplicatesFolder}${File.separator}${nameWithoutExt}_${dupCounter}.stendhal")
+                    newDuplicateLocation = new File(resolveMaybeRelativeToWorld(duplicatesFolder), "${nameWithoutExt}_${dupCounter}.stendhal")
                     dupCounter++
                 }
                 existingFile.renameTo(newDuplicateLocation)
@@ -2146,11 +2865,11 @@ class Main implements Runnable {
 
         // Ensure filename uniqueness by appending counter if file exists
         String filename = "${baseFilename}.stendhal"
-        File bookFile = new File(baseDirectory, "${targetFolder}${File.separator}${filename}")
+        File bookFile = new File(resolveMaybeRelativeToWorld(targetFolder), filename)
         int counter = 2
         while (bookFile.exists()) {
             filename = "${baseFilename}_${counter}.stendhal"
-            bookFile = new File(baseDirectory, "${targetFolder}${File.separator}${filename}")
+            bookFile = new File(resolveMaybeRelativeToWorld(targetFolder), filename)
             counter++
         }
 
@@ -2310,11 +3029,11 @@ class Main implements Runnable {
         // Ensure filename uniqueness by appending counter if file exists
         String targetFolder = isDuplicate ? duplicatesFolder : booksFolder
         String filename = "${baseFilename}.stendhal"
-        File bookFile = new File(baseDirectory, "${targetFolder}${File.separator}${filename}")
+        File bookFile = new File(resolveMaybeRelativeToWorld(targetFolder), filename)
         int counter = 2
         while (bookFile.exists()) {
             filename = "${baseFilename}_${counter}.stendhal"
-            bookFile = new File(baseDirectory, "${targetFolder}${File.separator}${filename}")
+            bookFile = new File(resolveMaybeRelativeToWorld(targetFolder), filename)
             counter++
         }
 

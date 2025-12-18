@@ -28,7 +28,11 @@ class OutputWriters {
      * @param bookCsvData List of book data maps
      */
     static void writeBooksCSV(String baseDirectory, String outputFolder, List<Map<String, Object>> bookCsvData) {
-        File csvFile = new File(baseDirectory, "${outputFolder}${File.separator}all_books.csv")
+        File outputBaseDir = new File(outputFolder)
+        if (!outputBaseDir.isAbsolute()) {
+            outputBaseDir = new File(baseDirectory, outputFolder)
+        }
+        File csvFile = new File(outputBaseDir, 'all_books.csv')
         LOGGER.info("Writing books CSV to: ${csvFile.absolutePath}")
 
         csvFile.withWriter('UTF-8') { BufferedWriter writer ->
@@ -63,7 +67,11 @@ class OutputWriters {
      * @param signCsvData List of sign data maps
      */
     static void writeSignsCSV(String baseDirectory, String outputFolder, List<Map<String, Object>> signCsvData) {
-        File csvFile = new File(baseDirectory, "${outputFolder}${File.separator}all_signs.csv")
+        File outputBaseDir = new File(outputFolder)
+        if (!outputBaseDir.isAbsolute()) {
+            outputBaseDir = new File(baseDirectory, outputFolder)
+        }
+        File csvFile = new File(outputBaseDir, 'all_signs.csv')
         LOGGER.info("Writing signs CSV to: ${csvFile.absolutePath}")
 
         csvFile.withWriter('UTF-8') { BufferedWriter writer ->
@@ -139,7 +147,11 @@ class OutputWriters {
             Map<String, Integer> booksByContainerType,
             List<Map<String, String>> bookMetadataList
     ) {
-        File summaryFile = new File(baseDirectory, "${outputFolder}${File.separator}summary.txt")
+        File outputBaseDir = new File(outputFolder)
+        if (!outputBaseDir.isAbsolute()) {
+            outputBaseDir = new File(baseDirectory, outputFolder)
+        }
+        File summaryFile = new File(outputBaseDir, 'summary.txt')
         summaryFile.withWriter { BufferedWriter w ->
             w.writeLine('=' * 80)
             w.writeLine('SUMMARY STATISTICS')

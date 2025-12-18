@@ -31,6 +31,9 @@ class ReadBooksIntegrationSpec extends Specification {
     Path tempDir
     Path testWorldDir
     Path outputDir
+    // By default we force outputs into a unique directory per run to avoid Windows file locking issues.
+    // Some tests explicitly validate default-output discovery behavior and will temporarily disable this.
+    boolean forceCustomOutputDirectory = true
     String dateStamp
     String currentTestWorldName
     int currentExpectedBookCount
@@ -931,25 +934,12 @@ class ReadBooksIntegrationSpec extends Specification {
         testWorldDir = tempDir.resolve(worldInfo.name)
         Files.createDirectories(testWorldDir)
 
-        outputDir = testWorldDir.resolve('ReadBooks').resolve(dateStamp)
-
-        // Clean up ReadBooks folder from previous test runs
-        // This is CRITICAL: must delete entire ReadBooks directory to prevent
-        // .stendhal file accumulation across test iterations
-        File readBooksDir = testWorldDir.resolve('ReadBooks').toFile()
-        if (readBooksDir.exists()) {
-            // Force garbage collection to release file handles
-            System.gc()
-            Thread.sleep(200)
-            
-            // Use deleteRecursively for thorough cleanup with retry logic
-            deleteRecursively(readBooksDir)
-            
-            // Force another GC and wait MUCH LONGER for Windows to release file handles
-            // Windows file handles can take significant time to release after extraction
-            System.gc()
-            Thread.sleep(1000)  // Increased from 500ms to 1000ms (1 second)
-        }
+        // IMPORTANT (Windows stability): use a unique output directory per run to avoid file locking issues
+        // and output accumulation across test methods/iterations.
+        outputDir = tempDir
+            .resolve('test-output')
+            .resolve(worldInfo.name)
+            .resolve(UUID.randomUUID().toString())
 
         copyTestWorldData(worldInfo.resourcePath)
     }
@@ -1733,10 +1723,13 @@ class ReadBooksIntegrationSpec extends Specification {
         // This is more reliable than System.setProperty('user.dir', ...) which
         // doesn't actually change the JVM's working directory
         String originalWorldDir = Main.customWorldDirectory
+        String originalOutputDir = Main.customOutputDirectory
 
         try {
             // Set the custom world directory to our test world
             Main.customWorldDirectory = testWorldDir.toString()
+            // Ensure output goes to our unique directory (outside the world folder), unless a test needs the default path.
+            Main.customOutputDirectory = forceCustomOutputDirectory ? outputDir.toString() : null
 
             // Run the extraction directly (avoid System.exit() in main())
             Main.runExtraction()
@@ -1744,6 +1737,7 @@ class ReadBooksIntegrationSpec extends Specification {
         } finally {
             // Restore original directory
             Main.customWorldDirectory = originalWorldDir
+            Main.customOutputDirectory = originalOutputDir
         }
     }
 
@@ -2437,6 +2431,153 @@ class ReadBooksIntegrationSpec extends Specification {
     }
 
     // ============================================================
+    // Item Index Database Tests (SQLite) - Issue #17
+    // ============================================================
+
+    def "should create item index database during extraction when --index-items enabled"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'item index database is created and contains expected book items'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+            Main.indexItems = true
+            Main.itemLimit = 1000
+            Main.skipCommonItems = true
+
+            try {
+                runReadBooksProgram()
+
+                Path dbFile = outputDir.resolve('item_index.db')
+                assert Files.exists(dbFile), "Item index database should exist"
+                assert Files.size(dbFile) > 0, "Item index database should not be empty"
+
+                ItemDatabase db = ItemDatabase.openForQuery(dbFile.toFile())
+                try {
+                    assert db != null
+                    assert db.getItemTypeCount() > 0, "Should index at least one item type"
+
+                    // IMPORTANT: `worldInfo.bookCount` (e.g. 44) is the number of *book stacks/locations* in the test world,
+                    // not the sum of item stack sizes. The item index tracks both:
+                    // - total_count: sum of stack sizes (Count/count)
+                    // - unique_locations: number of distinct rows (stacks/slots/locations)
+                    Map writtenInfo = db.getItemCount('minecraft:written_book') ?: [total_count: 0, unique_locations: 0]
+                    Map writableInfo = db.getItemCount('minecraft:writable_book') ?: [total_count: 0, unique_locations: 0]
+                    long bookStacks = (writtenInfo.unique_locations ?: 0) + (writableInfo.unique_locations ?: 0)
+                    long bookTotalCount = (writtenInfo.total_count ?: 0) + (writableInfo.total_count ?: 0)
+
+                    println "  ✓ Item index created: bookStacks=${bookStacks}, bookTotalCount=${bookTotalCount}"
+
+                    // Debug aid (kept lightweight): if this assertion fails, print where the stacks were indexed.
+                    // This helps catch cases where slot info is missing for certain container types, causing collisions.
+                    if (bookStacks != worldInfo.bookCount) {
+                        List<Map> writtenRows = db.queryByItemType('minecraft:written_book')
+                        Map<String, Integer> byContainer = writtenRows
+                            .groupBy { (it.container_type ?: 'unknown') as String }
+                            .collectEntries { k, v -> [(k): v.size()] }
+                            .sort { a, b -> b.value <=> a.value }
+
+                        int slotMissing = writtenRows.count { (it.slot as Integer) == -1 }
+                        println "  DEBUG written_book rows: total=${writtenRows.size()}, slotMissing=${slotMissing}"
+                        println "  DEBUG written_book by container_type: ${byContainer}"
+                    }
+                    assert bookStacks == worldInfo.bookCount, "Item index should find all book stacks in the test world"
+                    assert bookTotalCount >= bookStacks, "Total count should be >= number of stacks"
+                } finally {
+                    db?.close()
+                }
+
+                true
+            } finally {
+                Main.indexItems = false
+                Main.itemLimit = 1000
+                Main.skipCommonItems = true
+            }
+        }
+    }
+
+    def "should enforce --item-limit while still tracking total_count"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'limit is enforced for the dominant book item type'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+            Main.indexItems = true
+            Main.itemLimit = 1
+            Main.skipCommonItems = true
+
+            try {
+                runReadBooksProgram()
+
+                Path dbFile = outputDir.resolve('item_index.db')
+                assert Files.exists(dbFile), "Item index database should exist"
+
+                ItemDatabase db = ItemDatabase.openForQuery(dbFile.toFile())
+                try {
+                    Map written = db.getItemCount('minecraft:written_book') ?: [total_count: 0, unique_locations: 0, limit_reached: 0]
+                    Map writable = db.getItemCount('minecraft:writable_book') ?: [total_count: 0, unique_locations: 0, limit_reached: 0]
+
+                    Map dominant = (written.total_count >= writable.total_count) ? written : writable
+                    assert dominant.total_count > 1, "Expected multiple books of at least one type in the test world"
+
+                    assert dominant.unique_locations == 1, "With --item-limit=1 only one location should be stored"
+                    assert dominant.limit_reached == 1, "limit_reached should be set when limit is hit"
+                    println "  ✓ Limit enforced: total_count=${dominant.total_count}, unique_locations=${dominant.unique_locations}"
+                } finally {
+                    db?.close()
+                }
+
+                true
+            } finally {
+                Main.indexItems = false
+                Main.itemLimit = 1000
+                Main.skipCommonItems = true
+            }
+        }
+    }
+
+    def "should support --item-query against existing database (no extraction)"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'query mode runs without exceptions'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+            Main.indexItems = true
+
+            try {
+                runReadBooksProgram()
+
+                // Now run query-only mode against the created DB
+                Main.resetState()
+                Main.customOutputDirectory = outputDir.toString()
+                Main.itemQuery = 'written_book'
+                Main.itemFilter = null
+
+                Main.runItemIndexQuery()
+
+                println "  ✓ Item query mode executed successfully"
+                true
+            } finally {
+                Main.indexItems = false
+                Main.customOutputDirectory = null
+                Main.itemQuery = null
+                Main.itemFilter = null
+            }
+        }
+    }
+
+    // ============================================================
     // Block Index Query CLI Tests (--index-query, --index-list, --index-dimension)
     // ============================================================
 
@@ -2738,6 +2879,10 @@ class ReadBooksIntegrationSpec extends Specification {
             Main.indexLimit = 50
 
             try {
+                // For this test, we intentionally write to the default output location under the world folder
+                // so that database discovery via -w can find it.
+                forceCustomOutputDirectory = false
+                outputDir = testWorldDir.resolve('ReadBooks').resolve(dateStamp)
                 runReadBooksProgram()
 
                 // Now reset and try to find database using -w (world directory)
@@ -2759,6 +2904,7 @@ class ReadBooksIntegrationSpec extends Specification {
                 Main.indexLimit = 5000
                 Main.indexList = false
                 Main.customWorldDirectory = null
+                forceCustomOutputDirectory = true
             }
         }
     }

@@ -53,7 +53,15 @@ class DatapackGenerator {
      */
     static File createDatapackStructure(String baseDirectory, String outputFolder, String version) {
         String datapackName = "readbooks_datapack_${version}"
-        File datapackRoot = new File(baseDirectory, "${outputFolder}${File.separator}${datapackName}")
+        // outputFolder may be an absolute path when the user provides -o/--output (or in tests).
+        // Avoid string concatenation with baseDirectory which breaks on Windows paths like:
+        //   <world>\\C:\\absolute\\output\\...
+        File outputBaseDir = new File(outputFolder)
+        if (!outputBaseDir.isAbsolute()) {
+            outputBaseDir = new File(baseDirectory, outputFolder)
+        }
+
+        File datapackRoot = new File(outputBaseDir, datapackName)
         File dataFolder = new File(datapackRoot, "data")
         File namespaceFolder = new File(dataFolder, "readbooks")
 
@@ -80,7 +88,12 @@ class DatapackGenerator {
      */
     static void createPackMcmeta(String baseDirectory, String outputFolder, String version, int packFormat, String description) {
         String datapackName = "readbooks_datapack_${version}"
-        File datapackRoot = new File(baseDirectory, "${outputFolder}${File.separator}${datapackName}")
+        File outputBaseDir = new File(outputFolder)
+        if (!outputBaseDir.isAbsolute()) {
+            outputBaseDir = new File(baseDirectory, outputFolder)
+        }
+
+        File datapackRoot = new File(outputBaseDir, datapackName)
         File packMcmetaFile = new File(datapackRoot, "pack.mcmeta")
 
         // Create pack.mcmeta JSON content
