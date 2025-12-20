@@ -42,6 +42,7 @@ class BlockSearcher {
      * Data class representing a found block location
      */
     static class BlockLocation {
+
         String blockType
         String dimension
         int x, y, z
@@ -57,11 +58,13 @@ class BlockSearcher {
             this.z = z
             this.properties = properties ?: [:]
             this.regionFile = regionFile
-        }
+                      }
 
         @Override
         boolean equals(Object obj) {
-            if (!(obj instanceof BlockLocation)) return false
+            if (!(obj instanceof BlockLocation)) {
+                return false
+            }
             BlockLocation other = (BlockLocation) obj
             return blockType == other.blockType &&
                    dimension == other.dimension &&
@@ -82,6 +85,7 @@ class BlockSearcher {
         String toString() {
             return "BlockLocation{${blockType} at ${dimension}:(${x}, ${y}, ${z})}"
         }
+
     }
 
     /**
@@ -110,7 +114,7 @@ class BlockSearcher {
         LOGGER.info("Starting block search for: ${targetBlocks}")
         LOGGER.info("Dimensions to search: ${dimensions}")
         if (database) {
-            LOGGER.info("Building block index database...")
+            LOGGER.info('Building block index database...')
         }
 
         List<BlockLocation> results = []
@@ -135,11 +139,11 @@ class BlockSearcher {
                     return
                 }
 
-                List<File> regionFiles = regionFolder.listFiles()?.findAll {
-                    it.file && it.name.endsWith('.mca')
+                List<File> regionFiles = regionFolder.listFiles()?.findAll { file ->
+                    file.file && file.name.endsWith('.mca')
                 } ?: []
 
-                if (regionFiles.isEmpty()) {
+                if (regionFiles.empty) {
                     LOGGER.debug("No region files in ${dimension}")
                     return
                 }
@@ -151,7 +155,7 @@ class BlockSearcher {
                     .setInitialMax(regionFiles.size())
                     .setStyle(ProgressBarStyle.ASCII)
                     .build().withCloseable { pb ->
-                        regionFiles.each { File file ->
+                                regionFiles.each { File file ->
                             try {
                                 List<BlockLocation> fileResults = processRegionFile(
                                     file, targetBlocks, dimension
@@ -174,11 +178,12 @@ class BlockSearcher {
                                         }
                                     }
                                 }
-                            } catch (Exception e) {
+                            } catch (IOException e) {
+                                // IO errors expected for corrupted region files
                                 LOGGER.warn("Failed to process ${file.name}: ${e.message}")
                             }
                             pb.step()
-                        }
+                                }
                     }
             }
 
@@ -186,8 +191,8 @@ class BlockSearcher {
             if (database) {
                 database.commitTransaction()
             }
-        } catch (Exception e) {
-            // Rollback on error
+        } catch (IOException e) {
+            // IO errors from region files - rollback and rethrow
             if (database) {
                 database.rollbackTransaction()
             }
@@ -196,7 +201,7 @@ class BlockSearcher {
 
         LOGGER.info("Block search complete: found ${results.size()} blocks")
         return results
-    }
+                                             }
 
     /**
      * Block types to always skip during index-all mode.
@@ -221,7 +226,7 @@ class BlockSearcher {
      * @param database BlockDatabase to write found blocks to
      */
     static void indexAllBlocks(String worldPath, List<String> dimensions, BlockDatabase database) {
-        LOGGER.info("Building comprehensive block index (rarity-filtered)...")
+        LOGGER.info('Building comprehensive block index (rarity-filtered)...')
         LOGGER.info("Dimensions to index: ${dimensions}")
 
         // Track block types that have reached their limit (avoid further insertBlock calls)
@@ -244,11 +249,11 @@ class BlockSearcher {
                     return
                 }
 
-                List<File> regionFiles = regionFolder.listFiles()?.findAll {
-                    it.file && it.name.endsWith('.mca')
+                List<File> regionFiles = regionFolder.listFiles()?.findAll { file ->
+                    file.file && file.name.endsWith('.mca')
                 } ?: []
 
-                if (regionFiles.isEmpty()) {
+                if (regionFiles.empty) {
                     LOGGER.debug("No region files in ${dimension}")
                     return
                 }
@@ -260,25 +265,27 @@ class BlockSearcher {
                     .setInitialMax(regionFiles.size())
                     .setStyle(ProgressBarStyle.ASCII)
                     .build().withCloseable { pb ->
-                        regionFiles.each { File file ->
+                                regionFiles.each { File file ->
                             try {
                                 indexRegionFile(file, dimension, database, saturatedTypes)
-                            } catch (Exception e) {
+                            } catch (IOException e) {
+                                // IO errors expected for corrupted region files
                                 LOGGER.warn("Failed to index ${file.name}: ${e.message}")
                             }
                             pb.step()
-                        }
+                                }
                     }
             }
 
             database.commitTransaction()
-        } catch (Exception e) {
+        } catch (IOException e) {
+            // IO errors from region files - rollback and rethrow
             database.rollbackTransaction()
             throw e
         }
 
-        LOGGER.info("Block indexing complete: ${database.getBlockTypeCount()} block types, ${database.getTotalBlocksIndexed()} blocks indexed")
-        if (!saturatedTypes.isEmpty()) {
+        LOGGER.info("Block indexing complete: ${database.blockTypeCount} block types, ${database.totalBlocksIndexed} blocks indexed")
+        if (!saturatedTypes.empty) {
             LOGGER.info("Saturated types (reached limit): ${saturatedTypes.size()}")
         }
     }
@@ -303,7 +310,9 @@ class BlockSearcher {
         (0..31).each { int chunkLocalX ->
             (0..31).each { int chunkLocalZ ->
                 Chunk chunk = mcaFile.getChunk(chunkLocalX, chunkLocalZ)
-                if (!chunk) return
+                if (!chunk) {
+                    return
+                }
 
                 // Calculate absolute chunk coordinates
                 int chunkAbsX = regionX * 32 + chunkLocalX
@@ -334,7 +343,9 @@ class BlockSearcher {
     static void indexChunk(Chunk chunk, String dimension, String regionFileName,
                            int chunkAbsX, int chunkAbsZ, BlockDatabase database, Set<String> saturatedTypes) {
         CompoundTag chunkData = chunk.handle
-        if (!chunkData) return
+        if (!chunkData) {
+            return
+        }
 
         // Handle both pre-1.18 (Level wrapper) and post-1.18 (flat structure)
         CompoundTag level = chunkData.getCompoundTag('Level')
@@ -342,10 +353,14 @@ class BlockSearcher {
 
         // Get sections list
         ListTag<?> sections = chunkRoot.getListTag('sections') ?: chunkRoot.getListTag('Sections')
-        if (!sections || sections.size() == 0) return
+        if (!sections || sections.size() == 0) {
+            return
+        }
 
         sections.each { sectionTag ->
-            if (!(sectionTag instanceof CompoundTag)) return
+            if (!(sectionTag instanceof CompoundTag)) {
+                return
+            }
 
             CompoundTag section = (CompoundTag) sectionTag
 
@@ -356,17 +371,21 @@ class BlockSearcher {
 
             // Get block_states compound
             CompoundTag blockStates = section.getCompoundTag('block_states')
-            if (!blockStates) return
+            if (!blockStates) {
+                return
+            }
 
             // Get palette
             ListTag<?> palette = blockStates.getListTag('palette')
-            if (!palette || palette.size() == 0) return
+            if (!palette || palette.size() == 0) {
+                return
+            }
 
             // Extract all block types from palette and check if section should be skipped
             List<String> paletteTypes = []
             boolean hasUsefulBlocks = false
             (0..<palette.size()).each { int i ->
-                def entry = palette.get(i)
+                CompoundTag entry = palette.get(i) as CompoundTag
                 if (entry instanceof CompoundTag) {
                     String blockType = ((CompoundTag) entry).getString('Name')
                     paletteTypes.add(blockType)
@@ -378,7 +397,9 @@ class BlockSearcher {
             }
 
             // Palette-level skip: if all blocks are excluded or saturated, skip entire section
-            if (!hasUsefulBlocks) return
+            if (!hasUsefulBlocks) {
+                return
+            }
 
             // Get packed block data
             long[] data = null
@@ -392,19 +413,29 @@ class BlockSearcher {
                 String blockType = blockTag.getString('Name')
 
                 // Skip excluded blocks
-                if (EXCLUDED_BLOCK_TYPES.contains(blockType)) return
+                if (EXCLUDED_BLOCK_TYPES.contains(blockType)) {
+                    return
+                }
                 // Skip already saturated
-                if (saturatedTypes.contains(blockType)) return
+                if (saturatedTypes.contains(blockType)) {
+                    return
+                }
 
                 Map<String, String> properties = extractBlockProperties(blockTag)
 
                 // Insert blocks until type becomes saturated
                 (0..15).each { int localY ->
-                    if (saturatedTypes.contains(blockType)) return  // Early exit if saturated
+                    if (saturatedTypes.contains(blockType)) {
+                        return  // Early exit if saturated
+                    }
                     (0..15).each { int localZ ->
-                        if (saturatedTypes.contains(blockType)) return
+                        if (saturatedTypes.contains(blockType)) {
+                            return
+                        }
                         (0..15).each { int localX ->
-                            if (saturatedTypes.contains(blockType)) return
+                            if (saturatedTypes.contains(blockType)) {
+                                return
+                            }
                             int worldX = chunkAbsX * 16 + localX
                             int worldY = sectionY * 16 + localY
                             int worldZ = chunkAbsZ * 16 + localZ
@@ -425,7 +456,9 @@ class BlockSearcher {
             int entriesPerLong = 64 / bitsPerEntry
             long mask = (1L << bitsPerEntry) - 1
 
-            if (!data || data.length == 0) return
+            if (!data || data.length == 0) {
+                return
+            }
 
             // Build palette map
             Map<Integer, CompoundTag> paletteMap = [:]
@@ -444,20 +477,28 @@ class BlockSearcher {
                         int longIndex = blockIndex / entriesPerLong
                         int entryIndex = blockIndex % entriesPerLong
 
-                        if (longIndex >= data.length) return
+                        if (longIndex >= data.length) {
+                            return
+                        }
 
                         int paletteIndex = (int) ((data[longIndex] >> (entryIndex * bitsPerEntry)) & mask)
 
                         CompoundTag blockTag = paletteMap[paletteIndex]
-                        if (!blockTag) return
+                        if (!blockTag) {
+                            return
+                        }
 
                         String blockType = blockTag.getString('Name')
 
                         // Skip excluded blocks
-                        if (EXCLUDED_BLOCK_TYPES.contains(blockType)) return
+                        if (EXCLUDED_BLOCK_TYPES.contains(blockType)) {
+                            return
+                        }
 
                         // Skip already saturated blocks
-                        if (saturatedTypes.contains(blockType)) return
+                        if (saturatedTypes.contains(blockType)) {
+                            return
+                        }
 
                         Map<String, String> properties = extractBlockProperties(blockTag)
 
@@ -474,7 +515,7 @@ class BlockSearcher {
                 }
             }
         }
-    }
+                           }
 
     /**
      * Extract block properties from a palette block tag.
@@ -486,7 +527,7 @@ class BlockSearcher {
             props.keySet().each { String key ->
                 def value = props.get(key)
                 if (value instanceof StringTag) {
-                    properties[key] = ((StringTag) value).getValue()
+                    properties[key] = ((StringTag) value).value
                 }
             }
         }
@@ -517,7 +558,9 @@ class BlockSearcher {
         (0..31).each { int chunkLocalX ->
             (0..31).each { int chunkLocalZ ->
                 Chunk chunk = mcaFile.getChunk(chunkLocalX, chunkLocalZ)
-                if (!chunk) return
+                if (!chunk) {
+                    return
+                }
 
                 // Calculate absolute chunk coordinates
                 int chunkAbsX = regionX * 32 + chunkLocalX
@@ -555,7 +598,9 @@ class BlockSearcher {
         List<BlockLocation> results = []
 
         CompoundTag chunkData = chunk.handle
-        if (!chunkData) return results
+        if (!chunkData) {
+            return results
+        }
 
         // Handle both pre-1.18 (Level wrapper) and post-1.18 (flat structure)
         CompoundTag level = chunkData.getCompoundTag('Level')
@@ -563,10 +608,14 @@ class BlockSearcher {
 
         // Get sections list
         ListTag<?> sections = chunkRoot.getListTag('sections') ?: chunkRoot.getListTag('Sections')
-        if (!sections || sections.size() == 0) return results
+        if (!sections || sections.size() == 0) {
+            return results
+        }
 
         sections.each { sectionTag ->
-            if (!(sectionTag instanceof CompoundTag)) return
+            if (!(sectionTag instanceof CompoundTag)) {
+                return
+            }
 
             CompoundTag section = (CompoundTag) sectionTag
 
@@ -577,11 +626,15 @@ class BlockSearcher {
 
             // Get block_states compound
             CompoundTag blockStates = section.getCompoundTag('block_states')
-            if (!blockStates) return
+            if (!blockStates) {
+                return
+            }
 
             // PALETTE-FIRST OPTIMIZATION: Check palette before iterating blocks
             ListTag<?> palette = blockStates.getListTag('palette')
-            if (!palette || palette.size() == 0) return
+            if (!palette || palette.size() == 0) {
+                return
+            }
 
             // Extract block names from palette
             Set<String> paletteBlocks = extractPaletteBlockNames(palette)
@@ -592,13 +645,17 @@ class BlockSearcher {
                     blockMatchesTarget(paletteBlock, target)
                 }
             }
-            if (!hasTargetBlocks) return
+            if (!hasTargetBlocks) {
+                return
+            }
 
             LOGGER.debug("Section Y=${sectionY} contains target blocks, scanning...")
 
             // Build palette index map for efficient lookup
-            Map<Integer, CompoundTag> paletteMap = buildPaletteMap(palette, targetBlocks)
-            if (paletteMap.isEmpty()) return
+            Map<Integer, CompoundTag> paletteMap = assemblePaletteMap(palette, targetBlocks)
+            if (paletteMap.empty) {
+                return
+            }
 
             // Get packed block data
             long[] data = null
@@ -617,7 +674,7 @@ class BlockSearcher {
                             int worldY = sectionY * 16 + localY
                             int worldZ = chunkAbsZ * 16 + localZ
 
-                            results.add(createBlockLocation(
+                            results.add(makeBlockLocation(
                                 blockTag, dimension, worldX, worldY, worldZ, regionFileName
                             ))
                         }
@@ -632,7 +689,9 @@ class BlockSearcher {
             int entriesPerLong = 64 / bitsPerEntry
             long mask = (1L << bitsPerEntry) - 1
 
-            if (!data || data.length == 0) return
+            if (!data || data.length == 0) {
+                return
+            }
 
             // Iterate all 4096 blocks in section (YZX order)
             (0..15).each { int localY ->
@@ -642,7 +701,9 @@ class BlockSearcher {
                         int longIndex = blockIndex / entriesPerLong
                         int entryIndex = blockIndex % entriesPerLong
 
-                        if (longIndex >= data.length) return
+                        if (longIndex >= data.length) {
+                            return
+                        }
 
                         int paletteIndex = (int) ((data[longIndex] >> (entryIndex * bitsPerEntry)) & mask)
 
@@ -652,7 +713,7 @@ class BlockSearcher {
                             int worldY = sectionY * 16 + localY
                             int worldZ = chunkAbsZ * 16 + localZ
 
-                            results.add(createBlockLocation(
+                            results.add(makeBlockLocation(
                                 blockTag, dimension, worldX, worldY, worldZ, regionFileName
                             ))
                         }
@@ -662,7 +723,7 @@ class BlockSearcher {
         }
 
         return results
-    }
+                                             }
 
     /**
      * Extract block names from a palette ListTag
@@ -684,7 +745,7 @@ class BlockSearcher {
     /**
      * Build a map of palette indices to block CompoundTags for target blocks only
      */
-    static Map<Integer, CompoundTag> buildPaletteMap(ListTag<?> palette, Set<String> targetBlocks) {
+    static Map<Integer, CompoundTag> assemblePaletteMap(ListTag<?> palette, Set<String> targetBlocks) {
         Map<Integer, CompoundTag> map = [:]
         (0..<palette.size()).each { int i ->
             def entry = palette.get(i)
@@ -694,12 +755,12 @@ class BlockSearcher {
                     String blockName = tag.getString('Name')
                     if (targetBlocks.any { target -> blockMatchesTarget(blockName, target) }) {
                         map[i] = tag
-                    }
                 }
             }
         }
-        return map
     }
+        return map
+}
 
     /**
      * Check if a block name matches a target (with minecraft: prefix handling)
@@ -714,8 +775,8 @@ class BlockSearcher {
     /**
      * Create a BlockLocation from a palette block tag
      */
-    static BlockLocation createBlockLocation(CompoundTag blockTag, String dimension,
-                                              int x, int y, int z, String regionFile) {
+    static BlockLocation makeBlockLocation(CompoundTag blockTag, String dimension,
+                                            int x, int y, int z, String regionFile) {
         String blockType = blockTag.getString('Name')
 
         Map<String, String> properties = [:]
@@ -724,19 +785,21 @@ class BlockSearcher {
             props.keySet().each { String key ->
                 def value = props.get(key)
                 if (value instanceof StringTag) {
-                    properties[key] = ((StringTag) value).getValue()
+                    properties[key] = ((StringTag) value).value
                 }
             }
         }
 
         return new BlockLocation(blockType, dimension, x, y, z, properties, regionFile)
-    }
+                                            }
 
     /**
      * Normalize block ID (add minecraft: prefix if missing)
      */
     static String normalizeBlockId(String blockId) {
-        if (!blockId) return 'minecraft:air'
+        if (!blockId) {
+            return 'minecraft:air'
+        }
         return blockId.contains(':') ? blockId : "minecraft:${blockId}"
     }
 
@@ -744,13 +807,13 @@ class BlockSearcher {
      * Parse block IDs from comma-separated input
      */
     static Set<String> parseBlockIds(String input) {
-        if (!input || input.trim().isEmpty()) {
+        if (!input || input.trim().empty) {
             return [] as Set
         }
-        return input.split(',')
-            .collect { it.trim() }
-            .findAll { !it.isEmpty() }
-            .collect { normalizeBlockId(it) }
+        return input.split(',')*.trim()
+            .findAll { id -> !id.empty }
+            .collect { id -> normalizeBlockId(id) }
             .toSet()
     }
+
 }

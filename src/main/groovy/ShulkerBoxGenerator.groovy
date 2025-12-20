@@ -13,12 +13,8 @@
  * This class is stateless - all methods are static utilities.
  */
 import net.querz.nbt.tag.ListTag
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
 
 class ShulkerBoxGenerator {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(ShulkerBoxGenerator)
 
     /**
      * 16 Minecraft shulker box colors for deterministic author-to-color mapping.
@@ -38,10 +34,8 @@ class ShulkerBoxGenerator {
      * @return A Minecraft color name
      */
     static String getShulkerColorForAuthor(String author) {
-        if (!author || author.trim().isEmpty()) {
-            author = 'Unknown'
-        }
-        int colorIndex = Math.abs(author.hashCode() % SHULKER_COLORS.size())
+        String effectiveAuthor = (!author || author.trim().empty) ? 'Unknown' : author
+        int colorIndex = Math.abs(effectiveAuthor.hashCode() % SHULKER_COLORS.size())
         return SHULKER_COLORS[colorIndex]
     }
 
@@ -61,7 +55,7 @@ class ShulkerBoxGenerator {
         // Cap at 27 books per shulker (slots 0-26)
         List<Map<String, Object>> booksForBox = books.drop(boxIndex * 27).take(27)
 
-        if (booksForBox.isEmpty()) {
+        if (booksForBox.empty) {
             return ''
         }
 
@@ -69,14 +63,14 @@ class ShulkerBoxGenerator {
 
         switch (version) {
             case '1_13':
-                return generateShulkerBox_1_13(boxColor, authorName, displayName, booksForBox)
+                return generateShulkerBox_1_13(boxColor, displayName, booksForBox)
             case '1_14':
             case '1_20':
-                return generateShulkerBox_1_14(boxColor, authorName, displayName, booksForBox)
+                return generateShulkerBox_1_14(boxColor, displayName, booksForBox)
             case '1_20_5':
-                return generateShulkerBox_1_20_5(boxColor, authorName, displayName, booksForBox)
+                return generateShulkerBox_1_20_5(boxColor, displayName, booksForBox)
             case '1_21':
-                return generateShulkerBox_1_21(boxColor, authorName, displayName, booksForBox)
+                return generateShulkerBox_1_21(boxColor, displayName, booksForBox)
             default:
                 return ''
         }
@@ -86,11 +80,13 @@ class ShulkerBoxGenerator {
      * Generate shulker box command for Minecraft 1.13.
      * Format: /give @a color_shulker_box{BlockEntityTag:{Items:[...]},display:{Name:'{"text":"..."}'}}
      */
-    static String generateShulkerBox_1_13(String color, String author, String displayName, List<Map<String, Object>> books) {
+    static String generateShulkerBox_1_13(String color, String displayName, List<Map<String, Object>> books) {
         StringBuilder itemsStr = new StringBuilder()
 
         books.eachWithIndex { Map<String, Object> book, int index ->
-            if (index > 0) itemsStr.append(',')
+            if (index > 0) {
+                itemsStr.append(',')
+            }
             int gen = (book.generation as Integer) ?: 0
             String bookNBT = MinecraftCommands.generateBookNBT(book.title as String, book.author as String, book.pages as ListTag<?>, '1_13', gen)
             itemsStr.append("{Slot:${index},id:written_book,Count:1,tag:${bookNBT}}")
@@ -107,11 +103,13 @@ class ShulkerBoxGenerator {
      * Generate shulker box command for Minecraft 1.14.
      * Format: /give @a color_shulker_box{BlockEntityTag:{Items:[...]},display:{Name:'["",{"text":"..."}]'}}
      */
-    static String generateShulkerBox_1_14(String color, String author, String displayName, List<Map<String, Object>> books) {
+    static String generateShulkerBox_1_14(String color, String displayName, List<Map<String, Object>> books) {
         StringBuilder itemsStr = new StringBuilder()
 
         books.eachWithIndex { Map<String, Object> book, int index ->
-            if (index > 0) itemsStr.append(',')
+            if (index > 0) {
+                itemsStr.append(',')
+            }
             int gen = (book.generation as Integer) ?: 0
             String bookNBT = MinecraftCommands.generateBookNBT(book.title as String, book.author as String, book.pages as ListTag<?>, '1_14', gen)
             itemsStr.append("{Slot:${index},id:written_book,Count:1,tag:${bookNBT}}")
@@ -128,11 +126,13 @@ class ShulkerBoxGenerator {
      * Generate shulker box command for Minecraft 1.20.5+.
      * Format: /give @a minecraft:color_shulker_box[minecraft:container=[...],item_name='...']
      */
-    static String generateShulkerBox_1_20_5(String color, String author, String displayName, List<Map<String, Object>> books) {
+    static String generateShulkerBox_1_20_5(String color, String displayName, List<Map<String, Object>> books) {
         StringBuilder containerStr = new StringBuilder()
 
         books.eachWithIndex { Map<String, Object> book, int index ->
-            if (index > 0) containerStr.append(',')
+            if (index > 0) {
+                containerStr.append(',')
+            }
             int gen = (book.generation as Integer) ?: 0
             String bookComponents = MinecraftCommands.generateBookComponents(book.title as String, book.author as String, book.pages as ListTag<?>, '1_20_5', gen)
             containerStr.append("{slot:${index},item:{id:written_book,count:1,components:${bookComponents}}}")
@@ -149,11 +149,13 @@ class ShulkerBoxGenerator {
      * Generate shulker box command for Minecraft 1.21+.
      * Same as 1.20.5 but without minecraft: prefix for shulker_box.
      */
-    static String generateShulkerBox_1_21(String color, String author, String displayName, List<Map<String, Object>> books) {
+    static String generateShulkerBox_1_21(String color, String displayName, List<Map<String, Object>> books) {
         StringBuilder containerStr = new StringBuilder()
 
         books.eachWithIndex { Map<String, Object> book, int index ->
-            if (index > 0) containerStr.append(',')
+            if (index > 0) {
+                containerStr.append(',')
+            }
             int gen = (book.generation as Integer) ?: 0
             String bookComponents = MinecraftCommands.generateBookComponents(book.title as String, book.author as String, book.pages as ListTag<?>, '1_21', gen)
             containerStr.append("{slot:${index},item:{id:written_book,count:1,components:${bookComponents}}}")

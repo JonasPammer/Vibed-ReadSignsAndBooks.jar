@@ -16,16 +16,16 @@ class DatapackGeneratorSpec extends Specification {
     Path tempDir
 
     // =========================================================================
-    // createDatapackStructure() Tests
+    // setupDatapackStructure() Tests
     // =========================================================================
 
-    def "createDatapackStructure should create functions directory for pre-1.21"() {
+    def "setupDatapackStructure should create functions directory for pre-1.21"() {
         given:
         String baseDir = tempDir.toString()
         String outputFolder = 'output'
 
         when:
-        File functionDir = DatapackGenerator.createDatapackStructure(baseDir, outputFolder, '1_13')
+        File functionDir = DatapackGenerator.setupDatapackStructure(baseDir, outputFolder, '1_13')
 
         then:
         functionDir.exists()
@@ -35,13 +35,13 @@ class DatapackGeneratorSpec extends Specification {
         functionDir.parentFile.parentFile.name == 'data'
     }
 
-    def "createDatapackStructure should create function directory for 1.21"() {
+    def "setupDatapackStructure should create function directory for 1.21"() {
         given:
         String baseDir = tempDir.toString()
         String outputFolder = 'output'
 
         when:
-        File functionDir = DatapackGenerator.createDatapackStructure(baseDir, outputFolder, '1_21')
+        File functionDir = DatapackGenerator.setupDatapackStructure(baseDir, outputFolder, '1_21')
 
         then:
         functionDir.exists()
@@ -50,30 +50,30 @@ class DatapackGeneratorSpec extends Specification {
         functionDir.parentFile.name == 'readbooks'
     }
 
-    def "createDatapackStructure should create correct datapack name"() {
+    def "setupDatapackStructure should create correct datapack name"() {
         given:
         String baseDir = tempDir.toString()
         String outputFolder = 'output'
 
         when:
-        File functionDir = DatapackGenerator.createDatapackStructure(baseDir, outputFolder, '1_20_5')
+        File functionDir = DatapackGenerator.setupDatapackStructure(baseDir, outputFolder, '1_20_5')
 
         then:
         functionDir.absolutePath.contains('readbooks_datapack_1_20_5')
     }
 
     // =========================================================================
-    // createPackMcmeta() Tests
+    // writePackMcmeta() Tests
     // =========================================================================
 
-    def "createPackMcmeta should create pack.mcmeta file"() {
+    def "writePackMcmeta should create pack.mcmeta file"() {
         given:
         String baseDir = tempDir.toString()
         String outputFolder = 'output'
-        DatapackGenerator.createDatapackStructure(baseDir, outputFolder, '1_13')
+        DatapackGenerator.setupDatapackStructure(baseDir, outputFolder, '1_13')
 
         when:
-        DatapackGenerator.createPackMcmeta(baseDir, outputFolder, '1_13', 4, 'Test description')
+        DatapackGenerator.writePackMcmeta(baseDir, outputFolder, '1_13', 4, 'Test description')
 
         then:
         File packMcmeta = new File(tempDir.toFile(), "output${File.separator}readbooks_datapack_1_13${File.separator}pack.mcmeta")
@@ -83,14 +83,14 @@ class DatapackGeneratorSpec extends Specification {
         packMcmeta.text.contains('"description": "Test description"') || packMcmeta.text.contains('"description":"Test description"')
     }
 
-    def "createPackMcmeta should create valid JSON"() {
+    def "writePackMcmeta should create valid JSON"() {
         given:
         String baseDir = tempDir.toString()
         String outputFolder = 'output'
-        DatapackGenerator.createDatapackStructure(baseDir, outputFolder, '1_21')
+        DatapackGenerator.setupDatapackStructure(baseDir, outputFolder, '1_21')
 
         when:
-        DatapackGenerator.createPackMcmeta(baseDir, outputFolder, '1_21', 48, 'Test')
+        DatapackGenerator.writePackMcmeta(baseDir, outputFolder, '1_21', 48, 'Test')
 
         then:
         File packMcmeta = new File(tempDir.toFile(), "output${File.separator}readbooks_datapack_1_21${File.separator}pack.mcmeta")

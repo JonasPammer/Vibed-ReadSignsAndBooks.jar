@@ -20,7 +20,9 @@ class GuiLogAppender extends AppenderBase<ILoggingEvent> {
 
     @Override
     protected void append(ILoggingEvent event) {
-        if (logHandler == null) return
+        if (logHandler == null) {
+            return
+        }
 
         // Deliver each message individually via Platform.runLater
         // The handler processes the message; GUI.groovy manages rendering efficiency
@@ -40,4 +42,5 @@ class GuiLogAppender extends AppenderBase<ILoggingEvent> {
     static void clearLogHandler() {
         logHandler = null
     }
+
 }

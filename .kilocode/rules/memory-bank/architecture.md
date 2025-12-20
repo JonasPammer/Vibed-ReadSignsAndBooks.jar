@@ -92,8 +92,8 @@ Shulker box command generation organized by author.
 Minecraft datapack structure creation with version-specific directories.
 
 **Key Methods:**
-- `createDatapackStructure(String, String, String)` - Create directory structure
-- `createPackMcmeta(String, String, String, int, String)` - Generate pack.mcmeta
+- `setupDatapackStructure(String, String, String)` - Set up directory structure
+- `writePackMcmeta(String, String, String, int, String)` - Write pack.mcmeta file
 - `getPackFormat(String)` - Map version to pack_format number
 - `getVersionDescription(String)` - Human-readable version descriptions
 
@@ -242,8 +242,8 @@ Fallback logic: New format attempted first, old format on failure
 - **Decision**: Generate complete, ready-to-use Minecraft datapacks instead of standalone mcfunction files
 - **Rationale**: Users can directly copy datapack folders into their Minecraft world without manual file organization
 - **Implementation**:
-  - `createDatapackStructure(version)` creates proper directory structure with version-specific function directory naming
-  - `createPackMcmeta(version, packFormat, description)` generates valid pack.mcmeta JSON with version-appropriate pack_format
+  - `setupDatapackStructure(version)` sets up proper directory structure with version-specific function directory naming
+  - `writePackMcmeta(version, packFormat, description)` writes valid pack.mcmeta JSON with version-appropriate pack_format
   - `getPackFormat(version)` maps version identifiers to official Minecraft pack_format numbers (4, 41, 48)
   - `getVersionDescription(version)` provides human-readable version ranges for pack.mcmeta descriptions
 - **CRITICAL: Directory Naming Change in 1.21**:

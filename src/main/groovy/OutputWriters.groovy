@@ -29,7 +29,7 @@ class OutputWriters {
      */
     static void writeBooksCSV(String baseDirectory, String outputFolder, List<Map<String, Object>> bookCsvData) {
         File outputBaseDir = new File(outputFolder)
-        if (!outputBaseDir.isAbsolute()) {
+        if (!outputBaseDir.absolute) {
             outputBaseDir = new File(baseDirectory, outputFolder)
         }
         File csvFile = new File(outputBaseDir, 'all_books.csv')
@@ -68,7 +68,7 @@ class OutputWriters {
      */
     static void writeSignsCSV(String baseDirectory, String outputFolder, List<Map<String, Object>> signCsvData) {
         File outputBaseDir = new File(outputFolder)
-        if (!outputBaseDir.isAbsolute()) {
+        if (!outputBaseDir.absolute) {
             outputBaseDir = new File(baseDirectory, outputFolder)
         }
         File csvFile = new File(outputBaseDir, 'all_signs.csv')
@@ -148,7 +148,7 @@ class OutputWriters {
             List<Map<String, String>> bookMetadataList
     ) {
         File outputBaseDir = new File(outputFolder)
-        if (!outputBaseDir.isAbsolute()) {
+        if (!outputBaseDir.absolute) {
             outputBaseDir = new File(baseDirectory, outputFolder)
         }
         File summaryFile = new File(outputBaseDir, 'summary.txt')
@@ -166,15 +166,15 @@ class OutputWriters {
                 w.writeLine('\n  Books by location type:')
                 booksByLocationType.sort { Map.Entry<String, Integer> entry -> -entry.value }.each { String k, Integer v ->
                     w.writeLine("    ${k}: ${v}")
-                }
             }
+        }
 
             if (booksByContainerType) {
                 w.writeLine('\n  Books by container type:')
                 booksByContainerType.sort { Map.Entry<String, Integer> entry -> -entry.value }.each { String k, Integer v ->
                     w.writeLine("    ${k}: ${v}")
-                }
             }
+    }
 
             w.writeLine('\nSigns:')
             w.writeLine("  Total signs found: ${signHashes.size()}")
@@ -202,7 +202,7 @@ class OutputWriters {
             w.writeLine("\n${'=' * 80}")
             w.writeLine('Completed successfully!')
             w.writeLine('=' * 80)
-        }
+}
 
         // Also log to console
         LOGGER.info("\n${'=' * 80}")
@@ -217,14 +217,14 @@ class OutputWriters {
             LOGGER.info('\n  Books by location type:')
             booksByLocationType.sort { Map.Entry<String, Integer> entry -> -entry.value }.each { String k, Integer v ->
                 LOGGER.info("    ${k}: ${v}")
-            }
+        }
         }
 
         if (booksByContainerType) {
             LOGGER.info('\n  Books by container type:')
             booksByContainerType.sort { Map.Entry<String, Integer> entry -> -entry.value }.each { String k, Integer v ->
                 LOGGER.info("    ${k}: ${v}")
-            }
+        }
         }
 
         LOGGER.info('\nSigns:')

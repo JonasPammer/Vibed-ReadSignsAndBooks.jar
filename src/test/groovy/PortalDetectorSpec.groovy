@@ -225,15 +225,15 @@ class PortalDetectorSpec extends Specification {
     }
 
     // =========================================================================
-    // createPortalFromCluster() Tests
+    // portalFromCluster() Tests
     // =========================================================================
 
-    def "createPortalFromCluster should return null for empty cluster"() {
+    def "portalFromCluster should return null for empty cluster"() {
         expect:
-        PortalDetector.createPortalFromCluster([] as Set, 'overworld', 'z') == null
+        PortalDetector.portalFromCluster([] as Set, 'overworld', 'z') == null
     }
 
-    def "createPortalFromCluster should calculate dimensions for axis z portal"() {
+    def "portalFromCluster should calculate dimensions for axis z portal"() {
         given:
         // 3x4 portal aligned north-south (axis=z)
         Set<BlockSearcher.BlockLocation> cluster = [
@@ -246,7 +246,7 @@ class PortalDetectorSpec extends Specification {
         ] as Set
 
         when:
-        PortalDetector.Portal portal = PortalDetector.createPortalFromCluster(cluster, 'overworld', 'z')
+        PortalDetector.Portal portal = PortalDetector.portalFromCluster(cluster, 'overworld', 'z')
 
         then:
         portal != null
@@ -263,7 +263,7 @@ class PortalDetectorSpec extends Specification {
         portal.centerZ == 201.0   // minZ + (width-1)/2 = 200 + 1.0
     }
 
-    def "createPortalFromCluster should calculate dimensions for axis x portal"() {
+    def "portalFromCluster should calculate dimensions for axis x portal"() {
         given:
         // 2x3 portal aligned east-west (axis=x)
         Set<BlockSearcher.BlockLocation> cluster = [
@@ -274,7 +274,7 @@ class PortalDetectorSpec extends Specification {
         ] as Set
 
         when:
-        PortalDetector.Portal portal = PortalDetector.createPortalFromCluster(cluster, 'nether', 'x')
+        PortalDetector.Portal portal = PortalDetector.portalFromCluster(cluster, 'nether', 'x')
 
         then:
         portal != null
@@ -285,14 +285,14 @@ class PortalDetectorSpec extends Specification {
         portal.centerZ == 200.0   // Z is constant
     }
 
-    def "createPortalFromCluster should handle single block portal"() {
+    def "portalFromCluster should handle single block portal"() {
         given:
         Set<BlockSearcher.BlockLocation> cluster = [
             createBlockLocation('overworld', 'z', 100, 64, 200)
         ] as Set
 
         when:
-        PortalDetector.Portal portal = PortalDetector.createPortalFromCluster(cluster, 'overworld', 'z')
+        PortalDetector.Portal portal = PortalDetector.portalFromCluster(cluster, 'overworld', 'z')
 
         then:
         portal != null
@@ -351,12 +351,12 @@ class PortalDetectorSpec extends Specification {
     }
 
     // =========================================================================
-    // getCsvHeader() Tests
+    // CSV_HEADER Tests
     // =========================================================================
 
-    def "getCsvHeader should return correct CSV header"() {
+    def "CSV_HEADER should return correct CSV header"() {
         expect:
-        PortalDetector.getCsvHeader() == 'dimension,x,y,z,width,height,axis,block_count,center_x,center_y,center_z'
+        PortalDetector.CSV_HEADER == 'dimension,x,y,z,width,height,axis,block_count,center_x,center_y,center_z'
     }
 
     // =========================================================================

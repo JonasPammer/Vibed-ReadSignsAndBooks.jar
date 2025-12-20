@@ -26,6 +26,7 @@ class PortalDetector {
      * Data class representing a detected portal structure
      */
     static class Portal {
+
         String dimension
         int anchorX, anchorY, anchorZ  // Bottom-left corner
         int width, height
@@ -47,7 +48,7 @@ class PortalDetector {
             this.centerX = centerX
             this.centerY = centerY
             this.centerZ = centerZ
-        }
+               }
 
         String toCsvRow() {
             return "${dimension},${anchorX},${anchorY},${anchorZ}," +
@@ -71,6 +72,7 @@ class PortalDetector {
             return "Portal at ${dimension}:(${anchorX}, ${anchorY}, ${anchorZ}) " +
                    "${width}x${height} axis=${axis} blocks=${blockCount}"
         }
+
     }
 
     /**
@@ -80,8 +82,8 @@ class PortalDetector {
      * @return List of Portal structures
      */
     static List<Portal> detectPortals(List<BlockSearcher.BlockLocation> portalBlocks) {
-        if (!portalBlocks || portalBlocks.isEmpty()) {
-            LOGGER.info("No portal blocks provided for clustering")
+        if (!portalBlocks || portalBlocks.empty) {
+            LOGGER.info('No portal blocks provided for clustering')
             return []
         }
 
@@ -100,7 +102,7 @@ class PortalDetector {
                 List<Set<BlockSearcher.BlockLocation>> clusters = clusterAdjacentBlocks(blocks, axis)
 
                 clusters.each { Set<BlockSearcher.BlockLocation> cluster ->
-                    Portal portal = createPortalFromCluster(cluster, dimension, axis)
+                    Portal portal = portalFromCluster(cluster, dimension, axis)
                     portals.add(portal)
                     LOGGER.debug("Created portal: ${portal}")
                 }
@@ -133,7 +135,7 @@ class PortalDetector {
         }
 
         return result
-    }
+            }
 
     /**
      * Cluster adjacent blocks using flood-fill algorithm
@@ -149,7 +151,7 @@ class PortalDetector {
     static List<Set<BlockSearcher.BlockLocation>> clusterAdjacentBlocks(
             List<BlockSearcher.BlockLocation> blocks, String axis) {
 
-        if (!blocks || blocks.isEmpty()) {
+        if (!blocks || blocks.empty) {
             return []
         }
 
@@ -164,16 +166,20 @@ class PortalDetector {
         List<Set<BlockSearcher.BlockLocation>> clusters = []
 
         blocks.each { BlockSearcher.BlockLocation block ->
-            if (visited.contains(block)) return
+            if (visited.contains(block)) {
+                return
+            }
 
             // Flood-fill from this block
             Set<BlockSearcher.BlockLocation> cluster = [] as Set
-            Queue<BlockSearcher.BlockLocation> queue = new LinkedList<>()
+            Queue<BlockSearcher.BlockLocation> queue = [] as Queue
             queue.add(block)
 
-            while (!queue.isEmpty()) {
+            while (!queue.empty) {
                 BlockSearcher.BlockLocation current = queue.poll()
-                if (visited.contains(current)) continue
+                if (visited.contains(current)) {
+                    continue
+                }
 
                 visited.add(current)
                 cluster.add(current)
@@ -188,13 +194,13 @@ class PortalDetector {
                 }
             }
 
-            if (!cluster.isEmpty()) {
+            if (!cluster.empty) {
                 clusters.add(cluster)
             }
         }
 
         return clusters
-    }
+            }
 
     /**
      * Get adjacent coordinate strings based on portal axis
@@ -218,15 +224,14 @@ class PortalDetector {
                 "${x},${y - 1},${z}".toString(),  // down
                 "${x},${y + 1},${z}".toString()   // up
             ]
-        } else {
-            // Portal aligned east-west: varies on X (width) and Y (height), Z is constant
-            return [
-                "${x - 1},${y},${z}".toString(),  // left (west)
-                "${x + 1},${y},${z}".toString(),  // right (east)
-                "${x},${y - 1},${z}".toString(),  // down
-                "${x},${y + 1},${z}".toString()   // up
-            ]
         }
+        // Portal aligned east-west: varies on X (width) and Y (height), Z is constant
+        return [
+            "${x - 1},${y},${z}".toString(),  // left (west)
+            "${x + 1},${y},${z}".toString(),  // right (east)
+            "${x},${y - 1},${z}".toString(),  // down
+            "${x},${y + 1},${z}".toString()   // up
+        ]
     }
 
     /**
@@ -237,9 +242,9 @@ class PortalDetector {
      * - Width and height
      * - Center coordinates
      */
-    static Portal createPortalFromCluster(Set<BlockSearcher.BlockLocation> cluster,
-                                           String dimension, String axis) {
-        if (cluster.isEmpty()) {
+    static Portal portalFromCluster(Set<BlockSearcher.BlockLocation> cluster,
+                                     String dimension, String axis) {
+        if (cluster.empty) {
             return null
         }
 
@@ -295,7 +300,7 @@ class PortalDetector {
             cluster.size(),
             centerX, centerY, centerZ
         )
-    }
+                                           }
 
     /**
      * Find all portals in a world (convenience method)
@@ -315,9 +320,8 @@ class PortalDetector {
     }
 
     /**
-     * Generate CSV header for portal output
+     * CSV header for portal output
      */
-    static String getCsvHeader() {
-        return "dimension,x,y,z,width,height,axis,block_count,center_x,center_y,center_z"
-    }
+    static final String CSV_HEADER = 'dimension,x,y,z,width,height,axis,block_count,center_x,center_y,center_z'
+
 }

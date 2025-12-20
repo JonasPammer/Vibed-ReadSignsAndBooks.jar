@@ -7,14 +7,11 @@ import me.tongfei.progressbar.ProgressBarBuilder
 import me.tongfei.progressbar.ProgressBarStyle
 import net.querz.mca.LoadFlags
 import net.querz.mca.MCAUtil
-import net.querz.nbt.io.NBTUtil
 import net.querz.nbt.tag.CompoundTag
 import net.querz.nbt.tag.ListTag
 import net.querz.nbt.tag.NumberTag
 import net.querz.nbt.tag.StringTag
-import org.apache.commons.lang3.time.DurationFormatUtils
 import org.json.JSONArray
-import org.json.JSONException
 import org.json.JSONObject
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -54,7 +51,7 @@ class Main implements Runnable {
 
     // Human-readable generation names
     private static final List<String> GENERATION_NAMES = ['Original', 'Copy of Original', 'Copy of Copy', 'Tattered']
-    
+
     // State file management for tracking failed region files
     static Map<String, Set<String>> failedRegionsByWorld = [:]  // worldFolderName -> Set of failed region filenames
     static Set<String> recoveredRegions = [] as Set  // Regions that recovered in this run
@@ -164,18 +161,18 @@ class Main implements Runnable {
         bookHashes = [] as Set
         signHashes = [] as Set
         customNameHashes = [] as Set
-        
+
         // Reset data collections
         customNameData = []
         bookGenerationByHash = [:]
         failedRegionsByWorld = [:]
         recoveredRegions = [] as Set
-        
+
         // Reset counters
         bookCounter = 0
         emptySignsRemoved = 0
         signXCoordinate = 1
-        
+
         // Reset maps and lists
         booksByContainerType = [:]
         booksByLocationType = [:]
@@ -184,12 +181,12 @@ class Main implements Runnable {
         signCsvData = []
         signsByHash = [:]
         booksByAuthor = [:]
-        
+
         // Reset writers (they should be closed, but clear the references)
         mcfunctionWriters = [:]
         signsMcfunctionWriters = [:]
         combinedBooksWriter = null
-        
+
         // Reset output paths (will be recomputed on next run)
         outputFolder = null
         booksFolder = null
@@ -197,7 +194,7 @@ class Main implements Runnable {
         dateStamp = null
         outputFolderParent = null
         baseDirectory = System.getProperty('user.dir')
-        
+
         // Reset command-line option fields to prevent test pollution
         customWorldDirectory = null
         customOutputDirectory = null
@@ -239,7 +236,7 @@ class Main implements Runnable {
     static void main(String[] args) {
         // Smart detection: GUI mode if no args (double-clicked JAR) or --gui flag
         if (shouldUseGui(args)) {
-            println "Starting GUI mode..."
+            println 'Starting GUI mode...'
             Application.launch(GUI, args)
         } else {
             // CLI mode with picocli
@@ -269,10 +266,7 @@ class Main implements Runnable {
     @Override
     void run() {
         // Detect if --search-blocks was explicitly specified (even without arguments)
-        if (commandSpec != null) {
-            CommandLine.ParseResult parseResult = commandSpec.commandLine().getParseResult()
-            searchBlocksSpecified = parseResult.hasMatchedOption('--search-blocks')
-        }
+        detectSearchBlocksSpecified()
 
         try {
             // Check if this is a query-only mode (no extraction needed)
@@ -290,6 +284,17 @@ class Main implements Runnable {
     }
 
     /**
+     * Detect if --search-blocks was explicitly specified.
+     * Static method to avoid instance method assigning to static field.
+     */
+    private static void detectSearchBlocksSpecified() {
+        // Check if --search-blocks option was parsed by picocli
+        if (commandSpec != null) {
+            searchBlocksSpecified = commandSpec.commandLine().parseResult?.hasMatchedOption('--search-blocks') ?: false
+        }
+    }
+
+    /**
      * Run block index query mode - reads from existing database without extraction.
      * Can use -o (output directory) or -w (world directory) to find the database.
      */
@@ -301,9 +306,9 @@ class Main implements Runnable {
         // Find the database file
         File dbFile = findBlockIndexDatabase()
         if (!dbFile || !dbFile.exists()) {
-            LOGGER.error("Block index database not found. Run extraction with --search-blocks first.")
+            LOGGER.error('Block index database not found. Run extraction with --search-blocks first.')
             LOGGER.info("Searched in: ${baseDirectory}")
-            LOGGER.info("Use -o to specify the output folder containing block_index.db")
+            LOGGER.info('Use -o to specify the output folder containing block_index.db')
             return
         }
 
@@ -331,15 +336,21 @@ class Main implements Runnable {
     static File findBlockIndexDatabase() {
         // Helper closure to search a directory for block_index.db
         def searchDirectory = { String dirPath ->
-            if (!dirPath) return null
+            if (!dirPath) {
+                return null
+            }
             File dir = new File(dirPath)
 
             // Check if path points directly to the db file
-            if (dir.name == 'block_index.db' && dir.exists()) return dir
+            if (dir.name == 'block_index.db' && dir.exists()) {
+                return dir
+            }
 
             // Check if path is a folder containing block_index.db directly
             File dbFile = new File(dir, 'block_index.db')
-            if (dbFile.exists()) return dbFile
+            if (dbFile.exists()) {
+                return dbFile
+            }
 
             // Check in ReadBooks subfolder
             File readBooksDir = new File(dir, 'ReadBooks')
@@ -351,7 +362,9 @@ class Main implements Runnable {
                 if (dateFolders) {
                     for (File folder : dateFolders) {
                         dbFile = new File(folder, 'block_index.db')
-                        if (dbFile.exists()) return dbFile
+                        if (dbFile.exists()) {
+                            return dbFile
+                        }
                     }
                 }
             }
@@ -364,7 +377,9 @@ class Main implements Runnable {
             if (dateFolders) {
                 for (File folder : dateFolders) {
                     dbFile = new File(folder, 'block_index.db')
-                    if (dbFile.exists()) return dbFile
+                    if (dbFile.exists()) {
+                        return dbFile
+                    }
                 }
             }
 
@@ -373,13 +388,19 @@ class Main implements Runnable {
 
         // Search in order: -o, -w, current directory
         File result = searchDirectory(customOutputDirectory)
-        if (result) return result
+        if (result) {
+            return result
+        }
 
         result = searchDirectory(customWorldDirectory)
-        if (result) return result
+        if (result) {
+            return result
+        }
 
         result = searchDirectory(System.getProperty('user.dir'))
-        if (result) return result
+        if (result) {
+            return result
+        }
 
         return null
     }
@@ -401,7 +422,7 @@ class Main implements Runnable {
         List<Map> summary = db.getSummary()
 
         if (summary.isEmpty()) {
-            LOGGER.info("No blocks indexed in database.")
+            LOGGER.info('No blocks indexed in database.')
             return
         }
 
@@ -430,10 +451,16 @@ class Main implements Runnable {
         String blockLimitMeta = db.getMetadata('block_limit')
 
         LOGGER.info('')
-        LOGGER.info("Database Info:")
-        if (worldPath) LOGGER.info("  World: ${worldPath}")
-        if (extractionDate) LOGGER.info("  Extracted: ${extractionDate}")
-        if (blockLimitMeta) LOGGER.info("  Block limit: ${blockLimitMeta} per type")
+        LOGGER.info('Database Info:')
+        if (worldPath) {
+            LOGGER.info("  World: ${worldPath}")
+        }
+        if (extractionDate) {
+            LOGGER.info("  Extracted: ${extractionDate}")
+        }
+        if (blockLimitMeta) {
+            LOGGER.info("  Block limit: ${blockLimitMeta} per type")
+        }
         LOGGER.info("  Total block types: ${summary.size()}")
         LOGGER.info("  Total blocks indexed: ${db.getTotalBlocksIndexed()}")
     }
@@ -448,12 +475,12 @@ class Main implements Runnable {
         List<Map> blocks = db.queryByBlockType(normalizedType, dimension)
 
         if (blocks.isEmpty()) {
-            LOGGER.info("No blocks found for type: ${normalizedType}" + (dimension ? " in ${dimension}" : ""))
+            LOGGER.info("No blocks found for type: ${normalizedType}" + (dimension ? " in ${dimension}" : ''))
             return
         }
 
         LOGGER.info('')
-        LOGGER.info("Query Results: ${normalizedType}" + (dimension ? " in ${dimension}" : ""))
+        LOGGER.info("Query Results: ${normalizedType}" + (dimension ? " in ${dimension}" : ''))
         LOGGER.info('=' * 80)
 
         // Get summary info
@@ -461,7 +488,7 @@ class Main implements Runnable {
         if (countInfo) {
             LOGGER.info("Total in world: ${String.format('%,d', countInfo.total_found)}")
             LOGGER.info("Indexed: ${String.format('%,d', countInfo.indexed_count)}" +
-                       (countInfo.limit_reached ? " (limit reached)" : ""))
+                       (countInfo.limit_reached ? ' (limit reached)' : ''))
         }
 
         LOGGER.info('')
@@ -492,9 +519,9 @@ class Main implements Runnable {
         // Find the database file
         File dbFile = findItemIndexDatabase()
         if (!dbFile || !dbFile.exists()) {
-            LOGGER.error("Item index database not found. Run extraction with --index-items first.")
+            LOGGER.error('Item index database not found. Run extraction with --index-items first.')
             LOGGER.info("Searched in: ${baseDirectory}")
-            LOGGER.info("Use -o to specify the output folder containing item_index.db")
+            LOGGER.info('Use -o to specify the output folder containing item_index.db')
             return
         }
 
@@ -522,15 +549,21 @@ class Main implements Runnable {
     static File findItemIndexDatabase() {
         // Helper closure to search a directory for item_index.db
         def searchDirectory = { String dirPath ->
-            if (!dirPath) return null
+            if (!dirPath) {
+                return null
+            }
             File dir = new File(dirPath)
 
             // Check if path points directly to the db file
-            if (dir.name == 'item_index.db' && dir.exists()) return dir
+            if (dir.name == 'item_index.db' && dir.exists()) {
+                return dir
+            }
 
             // Check if path is a folder containing item_index.db directly
             File dbFile = new File(dir, 'item_index.db')
-            if (dbFile.exists()) return dbFile
+            if (dbFile.exists()) {
+                return dbFile
+            }
 
             // Check in ReadBooks subfolder
             File readBooksDir = new File(dir, 'ReadBooks')
@@ -542,7 +575,9 @@ class Main implements Runnable {
                 if (dateFolders) {
                     for (File folder : dateFolders) {
                         dbFile = new File(folder, 'item_index.db')
-                        if (dbFile.exists()) return dbFile
+                        if (dbFile.exists()) {
+                            return dbFile
+                        }
                     }
                 }
             }
@@ -555,7 +590,9 @@ class Main implements Runnable {
             if (dateFolders) {
                 for (File folder : dateFolders) {
                     dbFile = new File(folder, 'item_index.db')
-                    if (dbFile.exists()) return dbFile
+                    if (dbFile.exists()) {
+                        return dbFile
+                    }
                 }
             }
 
@@ -564,13 +601,19 @@ class Main implements Runnable {
 
         // Search in order: -o, -w, current directory
         File result = searchDirectory(customOutputDirectory)
-        if (result) return result
+        if (result) {
+            return result
+        }
 
         result = searchDirectory(customWorldDirectory)
-        if (result) return result
+        if (result) {
+            return result
+        }
 
         result = searchDirectory(System.getProperty('user.dir'))
-        if (result) return result
+        if (result) {
+            return result
+        }
 
         return null
     }
@@ -582,7 +625,7 @@ class Main implements Runnable {
         List<Map> summary = db.getSummary()
 
         if (summary.isEmpty()) {
-            LOGGER.info("No items indexed in database.")
+            LOGGER.info('No items indexed in database.')
             return
         }
 
@@ -637,7 +680,7 @@ class Main implements Runnable {
             items = db.queryEnchantedItems(filter, dimension)
         } else if (query == '*') {
             // Query all items - get summary instead
-            LOGGER.info("Use --item-list to see all item types. Showing items with enchantments or custom names...")
+            LOGGER.info('Use --item-list to see all item types. Showing items with enchantments or custom names...')
             items = db.queryEnchantedItems(null, dimension) + db.queryNamedItems(null, dimension)
             items = items.unique { "${it.item_id}|${it.x}|${it.y}|${it.z}" }
         } else {
@@ -646,13 +689,13 @@ class Main implements Runnable {
         }
 
         if (items.isEmpty()) {
-            LOGGER.info("No items found" + (dimension ? " in ${dimension}" : ""))
+            LOGGER.info('No items found' + (dimension ? " in ${dimension}" : ''))
             return
         }
 
         LOGGER.info('')
         String queryDesc = query == '*' ? 'All Special Items' : query.replace('minecraft:', '')
-        LOGGER.info("Query Results: ${queryDesc}" + (filter ? " (filter: ${filter})" : "") + (dimension ? " in ${dimension}" : ""))
+        LOGGER.info("Query Results: ${queryDesc}" + (filter ? " (filter: ${filter})" : '') + (dimension ? " in ${dimension}" : ''))
         LOGGER.info('=' * 80)
         LOGGER.info('')
 
@@ -683,25 +726,26 @@ class Main implements Runnable {
     static void loadFailedRegionsState() {
         String worldFolderName = new File(baseDirectory).name
         File stateFile = new File(baseDirectory, "${outputFolderParent}${File.separator}.failed_regions_state.json")
-        
+
         failedRegionsByWorld.clear()
         recoveredRegions.clear()
-        
+
         if (!stateFile.exists()) {
             LOGGER.debug("No existing state file found at: ${stateFile.absolutePath}")
             return
         }
-        
+
         try {
             String content = stateFile.text
             Map<String, Object> stateData = new JsonSlurper().parseText(content) as Map<String, Object>
-            
+
             if (stateData.containsKey(worldFolderName)) {
                 List<String> failedRegions = stateData[worldFolderName] as List<String>
                 failedRegionsByWorld[worldFolderName] = failedRegions.toSet()
                 LOGGER.debug("Loaded ${failedRegions.size()} previously failed regions for world: ${worldFolderName}")
             }
-        } catch (Exception e) {
+        } catch (IOException | groovy.json.JsonException e) {
+            // Catch all exceptions: JSON parsing, file I/O, type casting all possible
             LOGGER.warn("Failed to load state file ${stateFile.absolutePath}: ${e.message}")
         }
     }
@@ -714,8 +758,8 @@ class Main implements Runnable {
         String worldFolderName = new File(baseDirectory).name
         File stateFileDir = new File(baseDirectory, outputFolderParent)
         stateFileDir.mkdirs()
-        File stateFile = new File(stateFileDir, ".failed_regions_state.json")
-        
+        File stateFile = new File(stateFileDir, '.failed_regions_state.json')
+
         try {
             // Load existing state
             Map<String, Object> stateData = [:]
@@ -723,17 +767,18 @@ class Main implements Runnable {
                 try {
                     String content = stateFile.text
                     stateData = new JsonSlurper().parseText(content) as Map<String, Object>
-                } catch (Exception e) {
+                } catch (IOException | groovy.json.JsonException e) {
+                    // Catch all exceptions: JSON parsing, file I/O, type casting all possible
                     LOGGER.warn("Could not parse existing state file, starting fresh: ${e.message}")
                     stateData = [:]
                 }
             }
-            
+
             // Update state for current world: add failed regions, remove recovered ones
             if (failedRegionsByWorld.containsKey(worldFolderName)) {
                 Set<String> failedRegions = failedRegionsByWorld[worldFolderName]
                 failedRegions.removeAll(recoveredRegions)  // Remove regions that recovered
-                
+
                 if (failedRegions.isEmpty()) {
                     stateData.remove(worldFolderName)
                     LOGGER.info("All previously failed regions recovered! Removing state for world: ${worldFolderName}")
@@ -742,7 +787,7 @@ class Main implements Runnable {
                     LOGGER.debug("Saved ${failedRegions.size()} failed regions for world: ${worldFolderName}")
                 }
             }
-            
+
             // Write state file as JSON
             if (stateData.isEmpty()) {
                 if (stateFile.exists()) {
@@ -753,18 +798,19 @@ class Main implements Runnable {
                     writer.write(new groovy.json.JsonOutput().toJson(stateData))
                 }
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
+            // Catch all exceptions: file I/O, JSON serialization all possible
             LOGGER.warn("Failed to save state file: ${e.message}", e)
         }
     }
 
     // ========== Datapack Generation (delegated to DatapackGenerator) ==========
-    static File createDatapackStructure(String version) {
-        return DatapackGenerator.createDatapackStructure(baseDirectory, outputFolder, version)
+    static File setupDatapackStructure(String version) {
+        return DatapackGenerator.setupDatapackStructure(baseDirectory, outputFolder, version)
     }
 
-    static void createPackMcmeta(String version, int packFormat, String description) {
-        DatapackGenerator.createPackMcmeta(baseDirectory, outputFolder, version, packFormat, description)
+    static void writePackMcmeta(String version, int packFormat, String description) {
+        DatapackGenerator.writePackMcmeta(baseDirectory, outputFolder, version, packFormat, description)
     }
 
     static int getPackFormat(String version) {
@@ -821,7 +867,7 @@ class Main implements Runnable {
             outputFolderParent = customFile.parentFile?.absolutePath ?: customOutputDirectory
         } else {
             // Default is ReadBooks
-            outputFolderParent = "ReadBooks"
+            outputFolderParent = 'ReadBooks'
         }
 
         booksFolder = "${outputFolder}${File.separator}books"
@@ -847,7 +893,7 @@ class Main implements Runnable {
         LOGGER.info("World directory: ${baseDirectory}")
         LOGGER.info("Output folder: ${outputFolder}")
         LOGGER.info('=' * 80)
-        
+
         // Load state file with previously failed regions (only if tracking enabled)
         if (trackFailedRegions) {
             loadFailedRegionsState()
@@ -856,12 +902,12 @@ class Main implements Runnable {
             String worldFolderName = new File(baseDirectory).name
             if (failedRegionsByWorld.containsKey(worldFolderName)) {
                 Set<String> failedRegions = failedRegionsByWorld[worldFolderName]
-                LOGGER.info("")
+                LOGGER.info('')
                 LOGGER.info("⚠️  NOTICE: ${failedRegions.size()} region file(s) have previously failed to read. Error messages for these known problematic regions will be suppressed in this run's output:")
                 failedRegions.toList().sort().each { String regionFile ->
                     LOGGER.info("  - ${regionFile}")
                 }
-                LOGGER.info("")
+                LOGGER.info('')
             }
         }
 
@@ -871,15 +917,15 @@ class Main implements Runnable {
             combinedBooksWriter = new File(outputBaseDir, 'all_books.txt').newWriter()
 
             // Create datapack structures and initialize mcfunction writers for each Minecraft version
-            LOGGER.info("Creating Minecraft datapacks...")
+            LOGGER.info('Creating Minecraft datapacks...')
             ['1_13', '1_14', '1_20_5', '1_21'].each { String version ->
                 // Create datapack directory structure
-                File functionFolder = createDatapackStructure(version)
+                File functionFolder = setupDatapackStructure(version)
 
                 // Create pack.mcmeta with appropriate pack_format
                 int packFormat = getPackFormat(version)
                 String description = "ReadSignsAndBooks extracted content for ${getVersionDescription(version)}"
-                createPackMcmeta(version, packFormat, description)
+                writePackMcmeta(version, packFormat, description)
 
                 // Initialize book mcfunction writer in datapack/data/readbooks/function/books.mcfunction
                 File booksFile = new File(functionFolder, 'books.mcfunction')
@@ -891,7 +937,7 @@ class Main implements Runnable {
 
                 LOGGER.info("  ✓ Created datapack for ${getVersionDescription(version)} (pack_format ${packFormat})")
             }
-            LOGGER.info("Datapacks created successfully!")
+            LOGGER.info('Datapacks created successfully!')
 
             // Initialize item index database if enabled
             if (indexItems) {
@@ -926,7 +972,6 @@ class Main implements Runnable {
                 it?.close()
             }
 
-
             // Write CSV exports
             writeBooksCSV()
             writeSignsCSV()
@@ -951,7 +996,7 @@ class Main implements Runnable {
             long elapsed = System.currentTimeMillis() - startTime
             printSummaryStatistics(elapsed)
             LOGGER.info("${elapsed / 1000} seconds to complete.")
-            
+
             // Save state file with any new failures discovered (only if tracking enabled)
             if (trackFailedRegions) {
                 saveFailedRegionsState()
@@ -964,7 +1009,9 @@ class Main implements Runnable {
             if (itemDatabase) {
                 try {
                     itemDatabase.rollbackTransaction()
-                } catch (Exception ignored) {}
+                } catch (java.sql.SQLException ignored) {
+                    // Ignore rollback errors - database may already be closed or in invalid state
+                }
                 itemDatabase.close()
                 itemDatabase = null
             }
@@ -973,8 +1020,8 @@ class Main implements Runnable {
                 saveFailedRegionsState()
             }
             throw e
+            }
         }
-    }
 
     /**
      * Dynamically add a file appender to Logback at runtime
@@ -1022,12 +1069,12 @@ class Main implements Runnable {
         LOGGER.debug("writeCustomNamesOutput() called: extractCustomNames=${extractCustomNames}, customNameData.size()=${customNameData.size()}")
 
         if (!extractCustomNames) {
-            LOGGER.debug("Skipping custom names output: --extract-custom-names flag not set")
+            LOGGER.debug('Skipping custom names output: --extract-custom-names flag not set')
             return
         }
 
         if (customNameData.isEmpty()) {
-            LOGGER.debug("Skipping custom names output: no custom names found")
+            LOGGER.debug('Skipping custom names output: no custom names found')
             return
         }
 
@@ -1101,7 +1148,7 @@ class Main implements Runnable {
             writer.writeLine(']')
         }
 
-        LOGGER.info("Custom names written to: all_custom_names.csv, all_custom_names.txt, all_custom_names.json")
+        LOGGER.info('Custom names written to: all_custom_names.csv, all_custom_names.txt, all_custom_names.json')
     }
 
     /**
@@ -1137,7 +1184,7 @@ class Main implements Runnable {
         boolean hasPortalSearch = findPortals
 
         if (!hasBlockSearch && !hasPortalSearch) {
-            LOGGER.debug("Block search skipped: neither --search-blocks nor --find-portals specified")
+            LOGGER.debug('Block search skipped: neither --search-blocks nor --find-portals specified')
             return
         }
 
@@ -1172,7 +1219,7 @@ class Main implements Runnable {
                     // Index-all mode: scan all blocks except air/cave_air
                     LOGGER.info("INDEX-ALL MODE: Scanning all blocks (rarity-filtered by limit: ${indexLimit == 0 ? 'unlimited' : indexLimit})")
                     LOGGER.info("Dimensions: ${searchDimensions.join(', ')}")
-                    LOGGER.info("Skipping: minecraft:air, minecraft:cave_air")
+                    LOGGER.info('Skipping: minecraft:air, minecraft:cave_air')
 
                     // Use specialized index-all method that streams directly to DB
                     BlockSearcher.indexAllBlocks(baseDirectory, searchDimensions, blockDatabase)
@@ -1216,7 +1263,7 @@ class Main implements Runnable {
         boolean hasPortalResults = portalResults && !portalResults.isEmpty()
 
         if (!hasBlockResults && !hasIndexAllMode && !hasPortalResults) {
-            LOGGER.debug("No block/portal search results to write")
+            LOGGER.debug('No block/portal search results to write')
             return
         }
 
@@ -1260,12 +1307,12 @@ class Main implements Runnable {
     static void writePortalCsv(String outputPath) {
         File csvFile = new File(outputPath, 'portals.csv')
         csvFile.withWriter('UTF-8') { BufferedWriter writer ->
-            writer.writeLine(PortalDetector.getCsvHeader())
+            writer.writeLine(PortalDetector.CSV_HEADER)
             portalResults.each { PortalDetector.Portal portal ->
                 writer.writeLine(portal.toCsvRow())
             }
         }
-        LOGGER.info("Portal CSV written to: portals.csv")
+        LOGGER.info('Portal CSV written to: portals.csv')
     }
 
     static void writePortalTxt(String outputPath) {
@@ -1292,7 +1339,7 @@ class Main implements Runnable {
                 }
             }
         }
-        LOGGER.info("Portal TXT written to: portals.txt")
+        LOGGER.info('Portal TXT written to: portals.txt')
     }
 
     static void writePortalJson(String outputPath) {
@@ -1328,7 +1375,7 @@ class Main implements Runnable {
             writer.writeLine('  }')
             writer.writeLine('}')
         }
-        LOGGER.info("Portal JSON written to: portals.json")
+        LOGGER.info('Portal JSON written to: portals.json')
     }
 
     /**
@@ -1359,7 +1406,7 @@ class Main implements Runnable {
                 writer.writeLine(block.toCsvRow())
             }
         }
-        LOGGER.info("Block CSV written to: blocks.csv")
+        LOGGER.info('Block CSV written to: blocks.csv')
     }
 
     static void writeBlockTxt(String outputPath) {
@@ -1383,7 +1430,7 @@ class Main implements Runnable {
                 writer.writeLine('')
             }
         }
-        LOGGER.info("Block TXT written to: blocks.txt")
+        LOGGER.info('Block TXT written to: blocks.txt')
     }
 
     static void writeBlockJson(String outputPath) {
@@ -1448,7 +1495,7 @@ class Main implements Runnable {
             writer.writeLine('  }')
             writer.writeLine('}')
         }
-        LOGGER.info("Block JSON written to: blocks.json")
+        LOGGER.info('Block JSON written to: blocks.json')
     }
 
     // ========== Index-All Mode: Stream from Database ==========
@@ -1466,7 +1513,7 @@ class Main implements Runnable {
 
         BlockDatabase db = BlockDatabase.openForQuery(dbFile)
         if (!db) {
-            LOGGER.warn("Failed to open block index database")
+            LOGGER.warn('Failed to open block index database')
             return
         }
 
@@ -1508,14 +1555,15 @@ class Main implements Runnable {
                         if (props instanceof Map) {
                             propsStr = props.collect { k, v -> "${k}=${v}" }.join(';')
                         }
-                    } catch (Exception e) {
+                    } catch (groovy.json.JsonException e) {
+                        // Catch all exceptions: JSON parsing may fail on malformed data
                         propsStr = propsJson  // Fallback to raw JSON if parse fails
                     }
                 }
                 writer.writeLine("${blockType},${dimension},${x},${y},${z},${propsStr},${regionFile ?: ''}")
             }
         }
-        LOGGER.info("Block CSV written to: blocks.csv")
+        LOGGER.info('Block CSV written to: blocks.csv')
     }
 
     /**
@@ -1552,8 +1600,9 @@ class Main implements Runnable {
                             if (props instanceof Map) {
                                 propsStr = " [${props.collect { k, v -> "${k}=${v}" }.join(', ')}]"
                             }
-                        } catch (Exception e) {
-                            // Ignore parse errors
+                        } catch (groovy.json.JsonException e) {
+                            // Empty catch: JSON parsing may fail on malformed data, we simply skip properties and continue
+                            LOGGER.trace("Failed to parse block properties JSON: ${e.message}")
                         }
                     }
                     writer.writeLine("  ${block.dimension}: (${block.x}, ${block.y}, ${block.z})${propsStr}")
@@ -1561,7 +1610,7 @@ class Main implements Runnable {
                 writer.writeLine('')
             }
         }
-        LOGGER.info("Block TXT written to: blocks.txt")
+        LOGGER.info('Block TXT written to: blocks.txt')
     }
 
     /**
@@ -1614,8 +1663,9 @@ class Main implements Runnable {
                             }
                             writer.write('      ')
                         }
-                    } catch (Exception e) {
-                        // Ignore parse errors
+                    } catch (groovy.json.JsonException e) {
+                        // Empty catch: JSON parsing may fail on malformed data, we simply skip properties and continue
+                        LOGGER.trace("Failed to parse block properties JSON for output: ${e.message}")
                     }
                 }
                 writer.writeLine('},')
@@ -1656,7 +1706,7 @@ class Main implements Runnable {
             writer.writeLine('  }')
             writer.writeLine('}')
         }
-        LOGGER.info("Block JSON written to: blocks.json")
+        LOGGER.info('Block JSON written to: blocks.json')
     }
 
     /**
@@ -1751,7 +1801,7 @@ class Main implements Runnable {
         }
 
         // Create deduplication hash
-        String hashKey = "${customName}|${type}|${itemOrEntityId}".hashCode().toString()
+        String hashKey = "${customName}|${type}|${itemOrEntityId}".hashCode()
 
         if (!customNameHashes.add(hashKey)) {
             LOGGER.debug("Duplicate custom name found, skipping: ${customName}")
@@ -1794,7 +1844,9 @@ class Main implements Runnable {
      */
     static ItemDatabase.ItemMetadata extractItemMetadata(CompoundTag item, String bookInfo, int x, int y, int z, Integer slotOverride = null) {
         String itemId = item.getString('id')
-        if (!itemId) return null
+        if (!itemId) {
+            return null
+        }
         // Normalize item ids: some formats/commands omit the namespace (e.g. "diamond_sword").
         // The feature request explicitly calls out both forms; normalize early so:
         // - skipCommonItems matches
@@ -1914,7 +1966,9 @@ class Main implements Runnable {
                 loreList.each { loreTag ->
                     if (loreTag instanceof StringTag) {
                         String loreText = TextUtils.extractTextContent(((StringTag) loreTag).value, false)?.trim()
-                        if (loreText) metadata.lore.add(loreText)
+                        if (loreText) {
+                            metadata.lore.add(loreText)
+                        }
                     }
                 }
             }
@@ -1949,7 +2003,9 @@ class Main implements Runnable {
                     loreList.each { loreTag ->
                         if (loreTag instanceof StringTag) {
                             String loreText = TextUtils.extractTextContent(((StringTag) loreTag).value, false)?.trim()
-                            if (loreText) metadata.lore.add(loreText)
+                            if (loreText) {
+                                metadata.lore.add(loreText)
+                            }
                         }
                     }
                 }
@@ -2015,22 +2071,30 @@ class Main implements Runnable {
      * - "EnderItems of player UUID.dat" -> "ender_chest"
      */
     static String parseContainerType(String bookInfo) {
-        if (!bookInfo) return 'unknown'
+        if (!bookInfo) {
+            return 'unknown'
+        }
 
         // Playerdata can include multiple snapshots (e.g. "<uuid>.dat" and "<uuid>.dat_old").
         // Treat these as distinct sources for item-index uniqueness, otherwise items at the same (x,y,z,slot)
         // will be de-duplicated across snapshots and the item index won't match the extractor's counts.
         boolean isDatOld = bookInfo.contains('.dat_old')
 
-        if (bookInfo.contains('Inventory of player')) return isDatOld ? 'player_inventory_old' : 'player_inventory'
+        if (bookInfo.contains('Inventory of player')) {
+            return isDatOld ? 'player_inventory_old' : 'player_inventory'
+        }
         // Historical strings used across the codebase/tests:
         // - "EnderItems of player <uuid>.dat" (older)
         // - "Ender Chest of player <uuid>.dat" (newer, more readable)
         if (bookInfo.contains('EnderItems of player') || bookInfo.contains('Ender Chest of player')) {
             return isDatOld ? 'ender_chest_old' : 'ender_chest'
         }
-        if (bookInfo.contains('In minecraft:item_frame')) return 'item_frame'
-        if (bookInfo.contains('In minecraft:glow_item_frame')) return 'glow_item_frame'
+        if (bookInfo.contains('In minecraft:item_frame')) {
+            return 'item_frame'
+        }
+        if (bookInfo.contains('In minecraft:glow_item_frame')) {
+            return 'glow_item_frame'
+        }
 
         // Try to extract container type from "Inside minecraft:X at" pattern
         def matcher = bookInfo =~ /Inside (minecraft:)?(\w+) at/
@@ -2045,9 +2109,15 @@ class Main implements Runnable {
         }
 
         // Check for nested containers
-        if (bookInfo.contains('> shulker_box')) return 'shulker_box'
-        if (bookInfo.contains('> bundle')) return 'bundle'
-        if (bookInfo.contains('> copper_chest')) return 'copper_chest'
+        if (bookInfo.contains('> shulker_box')) {
+            return 'shulker_box'
+        }
+        if (bookInfo.contains('> bundle')) {
+            return 'bundle'
+        }
+        if (bookInfo.contains('> copper_chest')) {
+            return 'copper_chest'
+        }
 
         return 'unknown'
     }
@@ -2057,17 +2127,27 @@ class Main implements Runnable {
      * Returns: overworld, nether, end, or null if unknown
      */
     static String parseDimension(String bookInfo) {
-        if (!bookInfo) return null
+        if (!bookInfo) {
+            return null
+        }
 
         // Check for player data (dimension unknown)
-        if (bookInfo.contains('of player')) return null
+        if (bookInfo.contains('of player')) {
+            return null
+        }
 
         // Check for dimension folders in path
-        if (bookInfo.contains('DIM-1') || bookInfo.contains('nether')) return 'nether'
-        if (bookInfo.contains('DIM1') || bookInfo.contains('the_end')) return 'end'
+        if (bookInfo.contains('DIM-1') || bookInfo.contains('nether')) {
+            return 'nether'
+        }
+        if (bookInfo.contains('DIM1') || bookInfo.contains('the_end')) {
+            return 'end'
+        }
 
         // Default to overworld for region files without dimension markers
-        if (bookInfo.contains('region/') || bookInfo.contains('Chunk [')) return 'overworld'
+        if (bookInfo.contains('region/') || bookInfo.contains('Chunk [')) {
+            return 'overworld'
+        }
 
         return null
     }
@@ -2077,7 +2157,9 @@ class Main implements Runnable {
      * Example: "Inventory of player 12345678-1234-1234-1234-123456789abc.dat" -> "12345678-1234-1234-1234-123456789abc"
      */
     static String parsePlayerUuid(String bookInfo) {
-        if (!bookInfo) return null
+        if (!bookInfo) {
+            return null
+        }
 
         def matcher = bookInfo =~ /of player ([0-9a-fA-F-]+)\.dat/
         if (matcher.find()) {
@@ -2091,7 +2173,9 @@ class Main implements Runnable {
      * Example: "Chunk [1, 2] (r.0.0.mca)" -> "r.0.0.mca"
      */
     static String parseRegionFile(String bookInfo) {
-        if (!bookInfo) return null
+        if (!bookInfo) {
+            return null
+        }
 
         def matcher = bookInfo =~ /\((r\.-?\d+\.-?\d+\.mca)\)/
         if (matcher.find()) {
@@ -2117,20 +2201,20 @@ class Main implements Runnable {
         return ShulkerBoxGenerator.generateShulkerBoxCommand(authorName, books, boxIndex, version)
     }
 
-    static String generateShulkerBox_1_13(String color, String author, String displayName, List<Map<String, Object>> books) {
-        return ShulkerBoxGenerator.generateShulkerBox_1_13(color, author, displayName, books)
+    static String generateShulkerBox_1_13(String color, String displayName, List<Map<String, Object>> books) {
+        return ShulkerBoxGenerator.generateShulkerBox_1_13(color, displayName, books)
     }
 
-    static String generateShulkerBox_1_14(String color, String author, String displayName, List<Map<String, Object>> books) {
-        return ShulkerBoxGenerator.generateShulkerBox_1_14(color, author, displayName, books)
+    static String generateShulkerBox_1_14(String color, String displayName, List<Map<String, Object>> books) {
+        return ShulkerBoxGenerator.generateShulkerBox_1_14(color, displayName, books)
     }
 
-    static String generateShulkerBox_1_20_5(String color, String author, String displayName, List<Map<String, Object>> books) {
-        return ShulkerBoxGenerator.generateShulkerBox_1_20_5(color, author, displayName, books)
+    static String generateShulkerBox_1_20_5(String color, String displayName, List<Map<String, Object>> books) {
+        return ShulkerBoxGenerator.generateShulkerBox_1_20_5(color, displayName, books)
     }
 
-    static String generateShulkerBox_1_21(String color, String author, String displayName, List<Map<String, Object>> books) {
-        return ShulkerBoxGenerator.generateShulkerBox_1_21(color, author, displayName, books)
+    static String generateShulkerBox_1_21(String color, String displayName, List<Map<String, Object>> books) {
+        return ShulkerBoxGenerator.generateShulkerBox_1_21(color, displayName, books)
     }
 
     static String convertFormattingCodesToJson(String text) {
@@ -2219,13 +2303,13 @@ class Main implements Runnable {
                     if (command) {
                         writer.writeLine(command)
                     }
-                } catch (Exception e) {
+                } catch (IOException e) {
+                    // Catch all exceptions: command generation or file I/O may fail
                     LOGGER.warn("Failed to write sign to ${version} mcfunction: ${e.message}")
                 }
             }
         }
     }
-
 
     /**
      * Write a book command to all mcfunction version files AND collect for shulker boxes
@@ -2254,7 +2338,8 @@ class Main implements Runnable {
                 try {
                     String command = generateBookCommand(title, author, pages, version, generation)
                     writer.writeLine(command)
-                } catch (Exception e) {
+                } catch (IOException e) {
+                    // Catch all exceptions: command generation or file I/O may fail
                     LOGGER.warn("Failed to write book to ${version} mcfunction: ${e.message}")
                 }
             }
@@ -2295,7 +2380,8 @@ class Main implements Runnable {
                                 }
                                 writer.writeLine(command)
                             }
-                        } catch (Exception e) {
+                        } catch (IOException e) {
+                            // Catch all exceptions: command generation or file I/O may fail
                             LOGGER.warn("Failed to write shulker box command for author '${author}' (box ${boxIndex}) to ${version}: ${e.message}", e)
                         }
                     }
@@ -2305,8 +2391,6 @@ class Main implements Runnable {
 
         LOGGER.info('Shulker box generation complete')
     }
-
-
 
     static void printSummaryStatistics(long elapsedMillis) {
         OutputWriters.printSummaryStatistics(
@@ -2426,142 +2510,143 @@ class Main implements Runnable {
                     .setStyle(ProgressBarStyle.ASCII)
                     .build().withCloseable { pb ->
                                 files.each { File file ->
-                         LOGGER.debug("Processing region file: ${file.name}")
+                        LOGGER.debug("Processing region file: ${file.name}")
 
-                         try {
-                             net.querz.mca.MCAFile mcaFile = MCAUtil.read(file, LoadFlags.RAW)
-                             
-                             // Check if this region was previously marked as failed - if so, mark it as recovered (only if tracking enabled)
-                             if (trackFailedRegions) {
-                                 String worldFolderName = new File(baseDirectory).name
-                                 if (failedRegionsByWorld.containsKey(worldFolderName) && failedRegionsByWorld[worldFolderName].contains(file.name)) {
-                                     recoveredRegions.add(file.name)
-                                 }
-                             }
+                        try {
+                            net.querz.mca.MCAFile mcaFile = MCAUtil.read(file, LoadFlags.RAW)
 
-                             (0..31).each { int x ->
-                                 (0..31).each { int z ->
-                                     net.querz.mca.Chunk chunk = mcaFile.getChunk(x, z)
-                                     if (!chunk) {
-                                         return
-                                     }
+                            // Check if this region was previously marked as failed - if so, mark it as recovered (only if tracking enabled)
+                            if (trackFailedRegions) {
+                                String worldFolderName = new File(baseDirectory).name
+                                if (failedRegionsByWorld.containsKey(worldFolderName) && failedRegionsByWorld[worldFolderName].contains(file.name)) {
+                                    recoveredRegions.add(file.name)
+                                }
+                            }
 
-                                     CompoundTag chunkData = chunk.handle
-                                     if (!chunkData) {
-                                         return
-                                     }
+                            (0..31).each { int x ->
+                                (0..31).each { int z ->
+                                    net.querz.mca.Chunk chunk = mcaFile.getChunk(x, z)
+                                    if (!chunk) {
+                                        return
+                                    }
 
-                                     // Handle both old and new chunk formats
-                                     CompoundTag level = chunkData.getCompoundTag('Level')
-                                     CompoundTag chunkRoot = level ?: chunkData
+                                    CompoundTag chunkData = chunk.handle
+                                    if (!chunkData) {
+                                        return
+                                    }
 
-                                     // Process block entities (chests, signs, etc.)
-                                     ListTag<CompoundTag> tileEntities = chunkRoot.containsKey('block_entities') ?
+                                    // Handle both old and new chunk formats
+                                    CompoundTag level = chunkData.getCompoundTag('Level')
+                                    CompoundTag chunkRoot = level ?: chunkData
+
+                                    // Process block entities (chests, signs, etc.)
+                                    ListTag<CompoundTag> tileEntities = chunkRoot.containsKey('block_entities') ?
                                          getCompoundTagList(chunkRoot, 'block_entities') :
                                          getCompoundTagList(chunkRoot, 'TileEntities')
 
-                                     tileEntities.each { CompoundTag tileEntity ->
-                                         String blockId = tileEntity.getString('id')
+                                    tileEntities.each { CompoundTag tileEntity ->
+                                        String blockId = tileEntity.getString('id')
 
-                                         // Process containers with items
-                                         if (hasKey(tileEntity, 'id')) {
-                                             int tileX = tileEntity.getInt('x')
-                                             int tileY = tileEntity.getInt('y')
-                                             int tileZ = tileEntity.getInt('z')
-                                             getCompoundTagList(tileEntity, 'Items').each { CompoundTag item ->
-                                                 String bookInfo = "Chunk [${x}, ${z}] Inside ${blockId} at (${tileX} ${tileY} ${tileZ}) ${file.name}"
-                                                 int booksBefore = bookCounter
-                                                 parseItem(item, bookInfo, tileX, tileY, tileZ)
-                                                 if (bookCounter > booksBefore) {
-                                                     incrementBookStats(blockId, 'Block Entity')
-                                                 }
-                                             }
-                                         }
+                                        // Process containers with items
+                                        if (hasKey(tileEntity, 'id')) {
+                                            int tileX = tileEntity.getInt('x')
+                                            int tileY = tileEntity.getInt('y')
+                                            int tileZ = tileEntity.getInt('z')
+                                            getCompoundTagList(tileEntity, 'Items').each { CompoundTag item ->
+                                                String bookInfo = "Chunk [${x}, ${z}] Inside ${blockId} at (${tileX} ${tileY} ${tileZ}) ${file.name}"
+                                                int booksBefore = bookCounter
+                                                parseItem(item, bookInfo, tileX, tileY, tileZ)
+                                                if (bookCounter > booksBefore) {
+                                                    incrementBookStats(blockId, 'Block Entity')
+                                                }
+                                            }
+                                        }
 
-                                         // Process lecterns (single book)
-                                         if (hasKey(tileEntity, 'Book')) {
-                                             int lectX = tileEntity.getInt('x')
-                                             int lectY = tileEntity.getInt('y')
-                                             int lectZ = tileEntity.getInt('z')
-                                             CompoundTag book = getCompoundTag(tileEntity, 'Book')
-                                             String bookInfo = "Chunk [${x}, ${z}] Inside ${blockId} at (${lectX} ${lectY} ${lectZ}) ${file.name}"
-                                             int booksBefore = bookCounter
-                                             parseItem(book, bookInfo, lectX, lectY, lectZ)
-                                             if (bookCounter > booksBefore) {
-                                                 incrementBookStats('Lectern', 'Block Entity')
-                                             }
-                                         }
+                                        // Process lecterns (single book)
+                                        if (hasKey(tileEntity, 'Book')) {
+                                            int lectX = tileEntity.getInt('x')
+                                            int lectY = tileEntity.getInt('y')
+                                            int lectZ = tileEntity.getInt('z')
+                                            CompoundTag book = getCompoundTag(tileEntity, 'Book')
+                                            String bookInfo = "Chunk [${x}, ${z}] Inside ${blockId} at (${lectX} ${lectY} ${lectZ}) ${file.name}"
+                                            int booksBefore = bookCounter
+                                            parseItem(book, bookInfo, lectX, lectY, lectZ)
+                                            if (bookCounter > booksBefore) {
+                                                incrementBookStats('Lectern', 'Block Entity')
+                                            }
+                                        }
 
-                                         // Process signs
-                                         String signInfo = "Chunk [${x}, ${z}]\t(${tileEntity.getInt('x')} ${tileEntity.getInt('y')} ${tileEntity.getInt('z')})\t\t"
-                                         if (hasKey(tileEntity, 'Text1')) {
-                                             parseSign(tileEntity, signWriter, signInfo)
+                                        // Process signs
+                                        String signInfo = "Chunk [${x}, ${z}]\t(${tileEntity.getInt('x')} ${tileEntity.getInt('y')} ${tileEntity.getInt('z')})\t\t"
+                                        if (hasKey(tileEntity, 'Text1')) {
+                                            parseSign(tileEntity, signWriter, signInfo)
                                          } else if (hasKey(tileEntity, 'front_text')) {
-                                             parseSignNew(tileEntity, signWriter, signInfo)
-                                         }
-                                     }
+                                            parseSignNew(tileEntity, signWriter, signInfo)
+                                        }
+                                    }
 
-                                     // Process entities in chunk (for proto-chunks)
-                                     ListTag<CompoundTag> entities = chunkRoot.containsKey('entities') ?
+                                    // Process entities in chunk (for proto-chunks)
+                                    ListTag<CompoundTag> entities = chunkRoot.containsKey('entities') ?
                                          getCompoundTagList(chunkRoot, 'entities') :
                                          getCompoundTagList(chunkRoot, 'Entities')
 
-                                     entities.each { CompoundTag entity ->
-                                         String entityId = entity.getString('id')
-                                         ListTag<?> entityPos = getListTag(entity, 'Pos')
-                                         int xPos = getDoubleAt(entityPos, 0) as int
-                                         int yPos = getDoubleAt(entityPos, 1) as int
-                                         int zPos = getDoubleAt(entityPos, 2) as int
+                                    entities.each { CompoundTag entity ->
+                                        String entityId = entity.getString('id')
+                                        ListTag<?> entityPos = getListTag(entity, 'Pos')
+                                        int xPos = getDoubleAt(entityPos, 0) as int
+                                        int yPos = getDoubleAt(entityPos, 1) as int
+                                        int zPos = getDoubleAt(entityPos, 2) as int
 
-                                         // Entities with inventory
-                                         if (hasKey(entity, 'Items')) {
-                                             getCompoundTagList(entity, 'Items').each { CompoundTag item ->
-                                                 String bookInfo = "Chunk [${x}, ${z}] In ${entityId} at (${xPos} ${yPos} ${zPos}) ${file.name}"
-                                                 int booksBefore = bookCounter
-                                                 parseItem(item, bookInfo, xPos, yPos, zPos)
-                                                 if (bookCounter > booksBefore) {
-                                                     incrementBookStats(entityId, 'Entity')
-                                                 }
-                                             }
-                                         }
+                                        // Entities with inventory
+                                        if (hasKey(entity, 'Items')) {
+                                            getCompoundTagList(entity, 'Items').each { CompoundTag item ->
+                                                String bookInfo = "Chunk [${x}, ${z}] In ${entityId} at (${xPos} ${yPos} ${zPos}) ${file.name}"
+                                                int booksBefore = bookCounter
+                                                parseItem(item, bookInfo, xPos, yPos, zPos)
+                                                if (bookCounter > booksBefore) {
+                                                    incrementBookStats(entityId, 'Entity')
+                                                }
+                                            }
+                                        }
 
-                                         // Item frames and items on ground
-                                         if (hasKey(entity, 'Item')) {
-                                             CompoundTag item = getCompoundTag(entity, 'Item')
-                                             String bookInfo = "Chunk [${x}, ${z}] In ${entityId} at (${xPos} ${yPos} ${zPos}) ${file.name}"
-                                             int booksBefore = bookCounter
-                                             parseItem(item, bookInfo, xPos, yPos, zPos)
-                                             if (bookCounter > booksBefore) {
-                                                 incrementBookStats(entityId, 'Entity')
-                                             }
-                                         }
-                                     }
-                                 }
-                             }
-                         } catch (Exception e) {
-                             if (trackFailedRegions) {
-                                 // Check if this region is known to have failed before - if so, suppress the error message
-                                 String worldFolderName = new File(baseDirectory).name
-                                 boolean isKnownFailure = failedRegionsByWorld.containsKey(worldFolderName) && failedRegionsByWorld[worldFolderName].contains(file.name)
+                                        // Item frames and items on ground
+                                        if (hasKey(entity, 'Item')) {
+                                            CompoundTag item = getCompoundTag(entity, 'Item')
+                                            String bookInfo = "Chunk [${x}, ${z}] In ${entityId} at (${xPos} ${yPos} ${zPos}) ${file.name}"
+                                            int booksBefore = bookCounter
+                                            parseItem(item, bookInfo, xPos, yPos, zPos)
+                                            if (bookCounter > booksBefore) {
+                                                incrementBookStats(entityId, 'Entity')
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                         } catch (IOException e) {
+                            // Catch all exceptions: region file parsing can fail in many ways (corruption, format changes, NBT errors)
+                            if (trackFailedRegions) {
+                                // Check if this region is known to have failed before - if so, suppress the error message
+                                String worldFolderName = new File(baseDirectory).name
+                                boolean isKnownFailure = failedRegionsByWorld.containsKey(worldFolderName) && failedRegionsByWorld[worldFolderName].contains(file.name)
 
-                                 if (isKnownFailure) {
-                                     LOGGER.debug("(Previously failed region, error suppressed) ${file.name}: ${e.message}")
+                                if (isKnownFailure) {
+                                    LOGGER.debug("(Previously failed region, error suppressed) ${file.name}: ${e.message}")
                                  } else {
-                                     LOGGER.warn("Failed to read region file ${file.name}: ${e.message}")
-                                     // Track this as a new failure
-                                     if (!failedRegionsByWorld.containsKey(worldFolderName)) {
-                                         failedRegionsByWorld[worldFolderName] = [] as Set
-                                     }
-                                     failedRegionsByWorld[worldFolderName].add(file.name)
-                                 }
+                                    LOGGER.warn("Failed to read region file ${file.name}: ${e.message}")
+                                    // Track this as a new failure
+                                    if (!failedRegionsByWorld.containsKey(worldFolderName)) {
+                                        failedRegionsByWorld[worldFolderName] = [] as Set
+                                    }
+                                    failedRegionsByWorld[worldFolderName].add(file.name)
+                                }
                              } else {
-                                 // Always log when tracking is disabled
-                                 LOGGER.warn("Failed to read region file ${file.name}: ${e.message}")
-                             }
-                         }
+                                // Always log when tracking is disabled
+                                LOGGER.warn("Failed to read region file ${file.name}: ${e.message}")
+                            }
+                        }
 
-                         pb.step()
-                                 }
+                        pb.step()
+                                }
                     }
 
             signWriter.writeLine('\nCompleted.')
@@ -2604,103 +2689,104 @@ class Main implements Runnable {
                 .setStyle(ProgressBarStyle.ASCII)
                 .build().withCloseable { pb ->
                             files.each { File file ->
-                     LOGGER.debug("Processing entity file: ${file.name}")
+                    LOGGER.debug("Processing entity file: ${file.name}")
 
-                     try {
-                         net.querz.mca.MCAFile mcaFile = MCAUtil.read(file, LoadFlags.RAW)
-                         
-                         // Check if this entity file was previously marked as failed - if so, mark it as recovered (only if tracking enabled)
-                         if (trackFailedRegions) {
-                             String worldFolderName = new File(baseDirectory).name
-                             if (failedRegionsByWorld.containsKey(worldFolderName) && failedRegionsByWorld[worldFolderName].contains(file.name)) {
-                                 recoveredRegions.add(file.name)
-                             }
-                         }
+                    try {
+                        net.querz.mca.MCAFile mcaFile = MCAUtil.read(file, LoadFlags.RAW)
 
-                         (0..31).each { int x ->
-                             (0..31).each { int z ->
-                                 net.querz.mca.Chunk chunk = mcaFile.getChunk(x, z)
-                                 if (!chunk) {
-                                     return
-                                 }
+                        // Check if this entity file was previously marked as failed - if so, mark it as recovered (only if tracking enabled)
+                        if (trackFailedRegions) {
+                            String worldFolderName = new File(baseDirectory).name
+                            if (failedRegionsByWorld.containsKey(worldFolderName) && failedRegionsByWorld[worldFolderName].contains(file.name)) {
+                                recoveredRegions.add(file.name)
+                            }
+                        }
 
-                                 CompoundTag chunkData = chunk.handle
-                                 if (!chunkData) {
-                                     return
-                                 }
+                        (0..31).each { int x ->
+                            (0..31).each { int z ->
+                                net.querz.mca.Chunk chunk = mcaFile.getChunk(x, z)
+                                if (!chunk) {
+                                    return
+                                }
 
-                                 CompoundTag level = chunkData.getCompoundTag('Level')
-                                 CompoundTag chunkRoot = level ?: chunkData
+                                CompoundTag chunkData = chunk.handle
+                                if (!chunkData) {
+                                    return
+                                }
 
-                                 ListTag<CompoundTag> entities = chunkRoot.containsKey('entities') ?
+                                CompoundTag level = chunkData.getCompoundTag('Level')
+                                CompoundTag chunkRoot = level ?: chunkData
+
+                                ListTag<CompoundTag> entities = chunkRoot.containsKey('entities') ?
                                      getCompoundTagList(chunkRoot, 'entities') :
                                      getCompoundTagList(chunkRoot, 'Entities')
 
-                                 entities.each { CompoundTag entity ->
-                                     String entityId = entity.getString('id')
-                                     ListTag<?> entityPos = getListTag(entity, 'Pos')
-                                     int xPos = entityPos.size() >= 3 ? getDoubleAt(entityPos, 0) as int : 0
-                                     int yPos = entityPos.size() >= 3 ? getDoubleAt(entityPos, 1) as int : 0
-                                     int zPos = entityPos.size() >= 3 ? getDoubleAt(entityPos, 2) as int : 0
+                                entities.each { CompoundTag entity ->
+                                    String entityId = entity.getString('id')
+                                    ListTag<?> entityPos = getListTag(entity, 'Pos')
+                                    int xPos = entityPos.size() >= 3 ? getDoubleAt(entityPos, 0) as int : 0
+                                    int yPos = entityPos.size() >= 3 ? getDoubleAt(entityPos, 1) as int : 0
+                                    int zPos = entityPos.size() >= 3 ? getDoubleAt(entityPos, 2) as int : 0
 
-                                     // Extract custom name from entity if enabled
-                                     if (extractCustomNames) {
-                                         String customName = extractCustomNameFromEntity(entity)
-                                         if (customName) {
-                                             String location = "Chunk [${x}, ${z}] Entity ${entityId} at (${xPos} ${yPos} ${zPos}) ${file.name}"
-                                             recordCustomName(customName, entityId, 'entity', location, xPos, yPos, zPos)
-                                         }
-                                     }
+                                    // Extract custom name from entity if enabled
+                                    if (extractCustomNames) {
+                                        String customName = extractCustomNameFromEntity(entity)
+                                        if (customName) {
+                                            String location = "Chunk [${x}, ${z}] Entity ${entityId} at (${xPos} ${yPos} ${zPos}) ${file.name}"
+                                            recordCustomName(customName, entityId, 'entity', location, xPos, yPos, zPos)
+                                        }
+                                    }
 
-                                     // Entities with inventory
-                                     if (hasKey(entity, 'Items')) {
-                                         getCompoundTagList(entity, 'Items').each { CompoundTag item ->
-                                             String bookInfo = "Chunk [${x}, ${z}] In ${entityId} at (${xPos} ${yPos} ${zPos}) ${file.name}"
-                                             int booksBefore = bookCounter
-                                             parseItem(item, bookInfo, xPos, yPos, zPos)
-                                             if (bookCounter > booksBefore) {
-                                                 incrementBookStats(entityId, 'Entity')
-                                             }
-                                         }
-                                     }
+                                    // Entities with inventory
+                                    if (hasKey(entity, 'Items')) {
+                                        getCompoundTagList(entity, 'Items').each { CompoundTag item ->
+                                            String bookInfo = "Chunk [${x}, ${z}] In ${entityId} at (${xPos} ${yPos} ${zPos}) ${file.name}"
+                                            int booksBefore = bookCounter
+                                            parseItem(item, bookInfo, xPos, yPos, zPos)
+                                            if (bookCounter > booksBefore) {
+                                                incrementBookStats(entityId, 'Entity')
+                                            }
+                                        }
+                                    }
 
-                                     // Item frames and items on ground
-                                     if (hasKey(entity, 'Item')) {
-                                         CompoundTag item = getCompoundTag(entity, 'Item')
-                                         String bookInfo = "Chunk [${x}, ${z}] In ${entityId} at (${xPos} ${yPos} ${zPos}) ${file.name}"
-                                         int booksBefore = bookCounter
-                                         parseItem(item, bookInfo, xPos, yPos, zPos)
-                                         if (bookCounter > booksBefore) {
-                                             incrementBookStats(entityId, 'Entity')
-                                         }
-                                     }
-                                 }
-                             }
-                         }
-                     } catch (Exception e) {
-                         if (trackFailedRegions) {
-                             // Check if this entity file is known to have failed before - if so, suppress the error message
-                             String worldFolderName = new File(baseDirectory).name
-                             boolean isKnownFailure = failedRegionsByWorld.containsKey(worldFolderName) && failedRegionsByWorld[worldFolderName].contains(file.name)
+                                    // Item frames and items on ground
+                                    if (hasKey(entity, 'Item')) {
+                                        CompoundTag item = getCompoundTag(entity, 'Item')
+                                        String bookInfo = "Chunk [${x}, ${z}] In ${entityId} at (${xPos} ${yPos} ${zPos}) ${file.name}"
+                                        int booksBefore = bookCounter
+                                        parseItem(item, bookInfo, xPos, yPos, zPos)
+                                        if (bookCounter > booksBefore) {
+                                            incrementBookStats(entityId, 'Entity')
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                     } catch (IOException e) {
+                        // Catch all exceptions: entity file parsing can fail in many ways (corruption, format changes, NBT errors)
+                        if (trackFailedRegions) {
+                            // Check if this entity file is known to have failed before - if so, suppress the error message
+                            String worldFolderName = new File(baseDirectory).name
+                            boolean isKnownFailure = failedRegionsByWorld.containsKey(worldFolderName) && failedRegionsByWorld[worldFolderName].contains(file.name)
 
-                             if (isKnownFailure) {
-                                 LOGGER.debug("(Previously failed entity file, error suppressed) ${file.name}: ${e.message}")
+                            if (isKnownFailure) {
+                                LOGGER.debug("(Previously failed entity file, error suppressed) ${file.name}: ${e.message}")
                              } else {
-                                 LOGGER.warn("Failed to read entity file ${file.name}: ${e.message}")
-                                 // Track this as a new failure
-                                 if (!failedRegionsByWorld.containsKey(worldFolderName)) {
-                                     failedRegionsByWorld[worldFolderName] = [] as Set
-                                 }
-                                 failedRegionsByWorld[worldFolderName].add(file.name)
-                             }
+                                LOGGER.warn("Failed to read entity file ${file.name}: ${e.message}")
+                                // Track this as a new failure
+                                if (!failedRegionsByWorld.containsKey(worldFolderName)) {
+                                    failedRegionsByWorld[worldFolderName] = [] as Set
+                                }
+                                failedRegionsByWorld[worldFolderName].add(file.name)
+                            }
                          } else {
-                             // Always log when tracking is disabled
-                             LOGGER.warn("Failed to read entity file ${file.name}: ${e.message}")
-                         }
-                     }
+                            // Always log when tracking is disabled
+                            LOGGER.warn("Failed to read entity file ${file.name}: ${e.message}")
+                        }
+                    }
 
-                     pb.step()
-                             }
+                    pb.step()
+                            }
                 }
 
         LOGGER.debug('Entity processing complete!')
@@ -2924,9 +3010,9 @@ class Main implements Runnable {
             }
         }
 
-        // Note: Lecterns are handled as block entities with "Book" tag (not "Items")
-        // They are scanned separately in the block entity processing code
-        // Decorated pots are handled as block entities with "Items" tag (standard container)
+    // Note: Lecterns are handled as block entities with "Book" tag (not "Items")
+    // They are scanned separately in the block entity processing code
+    // Decorated pots are handled as block entities with "Items" tag (standard container)
     }
 
     // ========== Text Utility Methods (delegated to TextUtils) ==========
@@ -3028,7 +3114,6 @@ class Main implements Runnable {
 
         // Extract coordinates and location info
         List<Object> locationInfo = extractLocationInfo(bookInfo)
-        String coordsForFilename = locationInfo[0]
         String locationForFilename = locationInfo[1]
         Integer x = locationInfo[2]
         Integer y = locationInfo[3]
@@ -3493,8 +3578,8 @@ class Main implements Runnable {
         String paddedLine4 = padSignLine(line4)
 
         // Write to file with delimiter between lines
-         // Write sign to mcfunction files
-         writeSignToMcfunction([line1, line2, line3, line4], signInfo)
+        // Write sign to mcfunction files
+        writeSignToMcfunction([line1, line2, line3, line4], signInfo)
 
         signWriter.with {
             write(signInfo)
@@ -3567,11 +3652,11 @@ class Main implements Runnable {
             List<Object> coords = extractSignCoordinates(signInfo)
             LOGGER.debug("Removed empty sign at coordinates: ${coords[0]}, ${coords[1]}, ${coords[2]}")
             return
-        }
+    }
 
         // Pad lines to 15 characters and write to file with delimiter
         List<String> paddedLines = extractedFrontLines.collect { String text -> padSignLine(text) }
-        
+
         // Write sign to mcfunction files (preserve back_text if it exists)
         writeSignToMcfunction(extractedFrontLines, signInfo, extractedBackLines)
         signWriter.write(signInfo)
@@ -3660,4 +3745,4 @@ class Main implements Runnable {
         return NbtUtils.isCompoundList(list)
     }
 
-}
+        }

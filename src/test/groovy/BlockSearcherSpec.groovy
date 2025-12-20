@@ -460,10 +460,10 @@ class BlockSearcherSpec extends Specification {
     }
 
     // =========================================================================
-    // createBlockLocation() Tests
+    // makeBlockLocation() Tests
     // =========================================================================
 
-    def "createBlockLocation should create location with all fields"() {
+    def "makeBlockLocation should create location with all fields"() {
         given:
         CompoundTag blockTag = new CompoundTag()
         blockTag.putString('Name', 'minecraft:nether_portal')
@@ -472,7 +472,7 @@ class BlockSearcherSpec extends Specification {
         blockTag.put('Properties', properties)
 
         when:
-        BlockSearcher.BlockLocation loc = BlockSearcher.createBlockLocation(
+        BlockSearcher.BlockLocation loc = BlockSearcher.makeBlockLocation(
             blockTag, 'overworld', 100, 64, 200, 'r.0.0.mca'
         )
 
@@ -486,13 +486,13 @@ class BlockSearcherSpec extends Specification {
         loc.regionFile == 'r.0.0.mca'
     }
 
-    def "createBlockLocation should handle missing properties"() {
+    def "makeBlockLocation should handle missing properties"() {
         given:
         CompoundTag blockTag = new CompoundTag()
         blockTag.putString('Name', 'minecraft:stone')
 
         when:
-        BlockSearcher.BlockLocation loc = BlockSearcher.createBlockLocation(
+        BlockSearcher.BlockLocation loc = BlockSearcher.makeBlockLocation(
             blockTag, 'overworld', 100, 64, 200, null
         )
 

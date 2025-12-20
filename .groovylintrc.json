@@ -32,6 +32,8 @@
     "excludes": [
         "**/test/**",
         "**/build/**",
-        "**/.gradle/**"
+        "**/bin/**",
+        "**/.gradle/**",
+        "**/config/**"
     ]
 }

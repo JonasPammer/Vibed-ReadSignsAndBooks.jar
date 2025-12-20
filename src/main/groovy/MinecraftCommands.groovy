@@ -15,12 +15,8 @@
  * This class is stateless - all methods are static utilities.
  */
 import net.querz.nbt.tag.ListTag
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
 
 class MinecraftCommands {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(MinecraftCommands)
 
     /**
      * Escape text for use in Minecraft commands.
@@ -376,11 +372,11 @@ class MinecraftCommands {
                 "'[\"\",{\"text\":\"${escaped}\"}]'"
             }.join(',')
         } else {
-            backMessages = "'[\"\",{\"text\":\"\"}]', '[\"\",{\"text\":\"\"}]', '[\"\",{\"text\":\"\"}]', '[\"\",{\"text\":\"\"}]'".toString()
-        }
+            backMessages = "'[\"\",{\"text\":\"\"}]', '[\"\",{\"text\":\"\"}]', '[\"\",{\"text\":\"\"}]', '[\"\",{\"text\":\"\"}]'"
+    }
 
         return "setblock ~${x} ~ ~${z} oak_sign[rotation=0,waterlogged=false]{front_text:{messages:[${frontMessages}],has_glowing_text:0},back_text:{messages:[${backMessages}],has_glowing_text:0},is_waxed:0} replace"
-    }
+}
 
     /**
      * Generate sign for Minecraft 1.20.5+ (component format).
@@ -415,7 +411,7 @@ class MinecraftCommands {
             }.join(',')
         } else {
             backMessages = '[[{"text":""}]], [[{"text":""}]], [[{"text":""}]], [[{"text":""}]]'
-        }
+    }
 
         return "setblock ~${x} ~ ~${z} oak_sign[rotation=0,waterlogged=false]{front_text:{messages:[${frontMessages}],has_glowing_text:0},back_text:{messages:[${backMessages}],has_glowing_text:0},is_waxed:0} replace"
     }

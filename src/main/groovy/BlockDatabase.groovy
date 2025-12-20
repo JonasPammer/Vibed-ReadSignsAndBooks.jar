@@ -17,14 +17,15 @@ import groovy.json.JsonBuilder
 import groovy.sql.Sql
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import java.sql.SQLException
 
-class BlockDatabase {
+class BlockDatabase implements AutoCloseable {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BlockDatabase)
 
-    private Sql sql
-    private int blockLimit
-    private Map<String, Integer> countCache = [:]  // In-memory count tracking for fast limit checks
+    private final Sql sql
+    private final int blockLimit
+    private final Map<String, Integer> countCache = [:]  // In-memory count tracking for fast limit checks
     private String worldPath
     private String minecraftVersion
 
@@ -93,7 +94,7 @@ class BlockDatabase {
         sql.execute('CREATE INDEX IF NOT EXISTS idx_coords ON blocks(x, y, z)')
         sql.execute('CREATE INDEX IF NOT EXISTS idx_block_dim ON blocks(block_type, dimension)')
 
-        LOGGER.debug("Database schema initialized")
+        LOGGER.debug('Database schema initialized')
     }
 
     /**
@@ -116,7 +117,7 @@ class BlockDatabase {
      * @return Metadata value or null if not found
      */
     String getMetadata(String key) {
-        def row = sql.firstRow('SELECT value FROM metadata WHERE key = ?', [key])
+        groovy.sql.GroovyRowResult row = sql.firstRow('SELECT value FROM metadata WHERE key = ?', [key])
         return row?.value
     }
 
@@ -205,7 +206,7 @@ class BlockDatabase {
             }
 
             return false  // Duplicate (already exists)
-        } catch (Exception e) {
+        } catch (SQLException e) {
             LOGGER.warn("Failed to insert block ${blockType} at (${x}, ${y}, ${z}): ${e.message}")
             return false
         }
@@ -223,7 +224,7 @@ class BlockDatabase {
         String normalizedType = blockType.contains(':') ? blockType : "minecraft:${blockType}"
 
         String query = 'SELECT block_type, dimension, x, y, z, properties, region_file FROM blocks WHERE block_type = ?'
-        List params = [normalizedType]
+        List<Object> params = [normalizedType]
 
         if (dimension) {
             query += ' AND dimension = ?'
@@ -253,7 +254,7 @@ class BlockDatabase {
               AND y BETWEEN ? AND ?
               AND z BETWEEN ? AND ?
         '''
-        List params = [x - radius, x + radius, y - radius, y + radius, z - radius, z + radius]
+        List<Object> params = [x - radius, x + radius, y - radius, y + radius, z - radius, z + radius]
 
         if (dimension) {
             query += ' AND dimension = ?'
@@ -278,19 +279,19 @@ class BlockDatabase {
      * Get count for a specific block type.
      *
      * @param blockType Block type to count
-     * @return Map with total_found and indexed_count, or null if not found
+     * @return Map with total_found and indexed_count, or empty map if not found
      */
     Map getBlockCount(String blockType) {
         String normalizedType = blockType.contains(':') ? blockType : "minecraft:${blockType}"
-        def row = sql.firstRow('SELECT total_found, indexed_count, limit_reached FROM block_summary WHERE block_type = ?', [normalizedType])
-        return row ? [total_found: row.total_found, indexed_count: row.indexed_count, limit_reached: row.limit_reached] : null
+        groovy.sql.GroovyRowResult row = sql.firstRow('SELECT total_found, indexed_count, limit_reached FROM block_summary WHERE block_type = ?', [normalizedType])
+        return row ? [total_found: row.total_found, indexed_count: row.indexed_count, limit_reached: row.limit_reached] : [:]
     }
 
     /**
      * Get total number of unique block types indexed.
      */
     int getBlockTypeCount() {
-        def row = sql.firstRow('SELECT COUNT(DISTINCT block_type) as count FROM block_summary')
+        groovy.sql.GroovyRowResult row = sql.firstRow('SELECT COUNT(DISTINCT block_type) as count FROM block_summary')
         return row?.count ?: 0
     }
 
@@ -298,7 +299,7 @@ class BlockDatabase {
      * Get total number of blocks indexed.
      */
     int getTotalBlocksIndexed() {
-        def row = sql.firstRow('SELECT SUM(indexed_count) as total FROM block_summary')
+        groovy.sql.GroovyRowResult row = sql.firstRow('SELECT SUM(indexed_count) as total FROM block_summary')
         return row?.total ?: 0
     }
 
@@ -329,8 +330,8 @@ class BlockDatabase {
     void close() {
         try {
             sql?.close()
-            LOGGER.debug("Block database closed")
-        } catch (Exception e) {
+            LOGGER.debug('Block database closed')
+        } catch (SQLException e) {
             LOGGER.warn("Error closing database: ${e.message}")
         }
     }
@@ -343,7 +344,7 @@ class BlockDatabase {
      */
     List<Map> queryAllBlocks(String dimension = null) {
         String query = 'SELECT block_type, dimension, x, y, z, properties, region_file FROM blocks'
-        List params = []
+        List<Object> params = []
 
         if (dimension) {
             query += ' WHERE dimension = ?'
@@ -363,7 +364,7 @@ class BlockDatabase {
      */
     void streamBlocks(Closure callback, String dimension = null) {
         String query = 'SELECT block_type, dimension, x, y, z, properties, region_file FROM blocks'
-        List params = []
+        List<Object> params = []
 
         if (dimension) {
             query += ' WHERE dimension = ?'
@@ -381,7 +382,7 @@ class BlockDatabase {
      * Get total count of indexed blocks.
      */
     int getTotalBlockCount() {
-        def row = sql.firstRow('SELECT COUNT(*) as count FROM blocks')
+        groovy.sql.GroovyRowResult row = sql.firstRow('SELECT COUNT(*) as count FROM blocks')
         return row?.count ?: 0
     }
 
@@ -398,4 +399,5 @@ class BlockDatabase {
         // Use a large limit (won't matter for queries)
         return new BlockDatabase(dbFile, Integer.MAX_VALUE)
     }
+
 }

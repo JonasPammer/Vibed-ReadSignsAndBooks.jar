@@ -68,7 +68,8 @@ class TextUtils {
                 }
                 return remainder.trim()
             }
-        } catch (Exception e) {
+        } catch (StringIndexOutOfBoundsException e) {
+            // Catch string index errors from substring operations
             LOGGER.debug("Failed to extract player name from: ${bookInfo}", e)
         }
         return 'unknown'
@@ -119,21 +120,20 @@ class TextUtils {
             // Check if 'extra' key exists (even if empty array)
             if (pageJSON instanceof Map && pageJSON.containsKey('extra')) {
                 Object extra = pageJSON.get('extra')
-                
+
                 // Handle extra as a list/array
                 if (extra instanceof List) {
                     List extraList = extra as List
                     // Return empty string for empty extra array
-                    if (extraList.isEmpty()) {
+                    if (extraList.empty) {
                         return ''
                     }
                     return extraList.collect { Object item ->
                         extractTextFromItem(item, removeFormatting)
                     }.join('')
-                } else {
-                    // extra is a single object, recursively extract
-                    return extractTextFromItem(extra, removeFormatting)
                 }
+                // extra is a single object, recursively extract
+                return extractTextFromItem(extra, removeFormatting)
             } else if (pageJSON.text) {
                 return removeTextFormattingIfEnabled(pageJSON.text, removeFormatting)
             }
@@ -153,33 +153,34 @@ class TextUtils {
      * @return The extracted text
      */
     private static String extractTextFromItem(Object item, boolean removeFormatting) {
-        if (item == null) {
-            return ''
-        }
-        if (item instanceof String) {
-            return removeTextFormattingIfEnabled((String) item, removeFormatting)
-        }
-        if (item instanceof Map) {
-            Map itemMap = item as Map
-            // Recursively handle nested extra arrays
-            if (itemMap.containsKey('extra')) {
-                Object extra = itemMap.get('extra')
-                if (extra instanceof List) {
-                    List extraList = extra as List
-                    if (extraList.isEmpty()) {
-                        return ''
+        switch (item) {
+            case null:
+                return ''
+            case String:
+                return removeTextFormattingIfEnabled((String) item, removeFormatting)
+            case Map:
+                Map itemMap = item as Map
+                // Recursively handle nested extra arrays
+                if (itemMap.containsKey('extra')) {
+                    Object extra = itemMap.get('extra')
+                    if (extra instanceof List) {
+                        List extraList = extra as List
+                        if (extraList.empty) {
+                            return ''
+                        }
+                        return extraList.collect { Object nestedItem ->
+                            extractTextFromItem(nestedItem, removeFormatting)
+                        }.join('')
                     }
-                    return extraList.collect { Object nestedItem ->
-                        extractTextFromItem(nestedItem, removeFormatting)
-                    }.join('')
-                } else {
                     return extractTextFromItem(extra, removeFormatting)
                 }
-            } else if (itemMap.containsKey('text')) {
-                return removeTextFormattingIfEnabled(itemMap.get('text') as String ?: '', removeFormatting)
-            }
+                if (itemMap.containsKey('text')) {
+                    return removeTextFormattingIfEnabled(itemMap.get('text') as String ?: '', removeFormatting)
+                }
+                return ''
+            default:
+                return ''
         }
-        return ''
     }
 
     /**
@@ -205,18 +206,17 @@ class TextUtils {
             // Check if 'extra' key exists (even if empty array)
             if (pageJSON instanceof Map && pageJSON.containsKey('extra')) {
                 Object extra = pageJSON.get('extra')
-                
+
                 if (extra instanceof List) {
                     List extraList = extra as List
-                    if (extraList.isEmpty()) {
+                    if (extraList.empty) {
                         return ''
                     }
                     return extraList.collect { Object item ->
                         extractTextFromItemPreserveFormatting(item)
                     }.join('')
-                } else {
-                    return extractTextFromItemPreserveFormatting(extra)
                 }
+                return extractTextFromItemPreserveFormatting(extra)
             } else if (pageJSON.text) {
                 return pageJSON.text
             }
@@ -235,33 +235,34 @@ class TextUtils {
      * @return The extracted text with formatting preserved
      */
     private static String extractTextFromItemPreserveFormatting(Object item) {
-        if (item == null) {
-            return ''
-        }
-        if (item instanceof String) {
-            return (String) item
-        }
-        if (item instanceof Map) {
-            Map itemMap = item as Map
-            // Recursively handle nested extra arrays
-            if (itemMap.containsKey('extra')) {
-                Object extra = itemMap.get('extra')
-                if (extra instanceof List) {
-                    List extraList = extra as List
-                    if (extraList.isEmpty()) {
-                        return ''
+        switch (item) {
+            case null:
+                return ''
+            case String:
+                return (String) item
+            case Map:
+                Map itemMap = item as Map
+                // Recursively handle nested extra arrays
+                if (itemMap.containsKey('extra')) {
+                    Object extra = itemMap.get('extra')
+                    if (extra instanceof List) {
+                        List extraList = extra as List
+                        if (extraList.empty) {
+                            return ''
+                        }
+                        return extraList.collect { Object nestedItem ->
+                            extractTextFromItemPreserveFormatting(nestedItem)
+                        }.join('')
                     }
-                    return extraList.collect { Object nestedItem ->
-                        extractTextFromItemPreserveFormatting(nestedItem)
-                    }.join('')
-                } else {
                     return extractTextFromItemPreserveFormatting(extra)
                 }
-            } else if (itemMap.containsKey('text')) {
-                return itemMap.get('text') as String ?: ''
-            }
+                if (itemMap.containsKey('text')) {
+                    return itemMap.get('text') as String ?: ''
+                }
+                return ''
+            default:
+                return ''
         }
-        return ''
     }
 
     /**
@@ -289,7 +290,8 @@ class TextUtils {
                     z = Integer.parseInt(parts[2])
                 }
             }
-        } catch (Exception e) {
+        } catch (StringIndexOutOfBoundsException | NumberFormatException e) {
+            // Catch string index errors and number parsing errors from coordinate extraction
             LOGGER.debug("Failed to parse sign coordinates from: ${signInfo}")
         }
 

@@ -1,22 +1,39 @@
+import atlantafx.base.theme.PrimerDark
+import atlantafx.base.theme.PrimerLight
+import com.jthemedetecor.OsThemeDetector
+import javafx.animation.KeyFrame
+import javafx.animation.Timeline
 import javafx.application.Application
 import javafx.application.Platform
 import javafx.geometry.Insets
 import javafx.geometry.Pos
 import javafx.scene.Scene
-import javafx.scene.control.*
-import javafx.scene.layout.*
+import javafx.scene.control.Alert
+import javafx.scene.control.Alert.AlertType
+import javafx.scene.control.Button
+import javafx.scene.control.CheckBox
+import javafx.scene.control.Label
+import javafx.scene.control.Menu
+import javafx.scene.control.MenuBar
+import javafx.scene.control.MenuItem
+import javafx.scene.control.Separator
+import javafx.scene.control.SeparatorMenuItem
+import javafx.scene.control.TextArea
+import javafx.scene.control.TextField
+import javafx.scene.input.Dragboard
+import javafx.scene.input.DragEvent
+import javafx.scene.input.TransferMode
+import javafx.scene.layout.BorderPane
+import javafx.scene.layout.HBox
+import javafx.scene.layout.Priority
+import javafx.scene.layout.VBox
 import javafx.stage.DirectoryChooser
 import javafx.stage.Stage
-import java.awt.Desktop
-import javafx.animation.Timeline
-import javafx.animation.KeyFrame
 import javafx.util.Duration
-import javafx.scene.input.TransferMode
-import javafx.scene.input.DragEvent
-import javafx.scene.input.Dragboard
-import com.jthemedetecor.OsThemeDetector
-import atlantafx.base.theme.PrimerLight
-import atlantafx.base.theme.PrimerDark
+import java.awt.Desktop
+import java.net.URI
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 /**
  * Modern GUI for ReadSignsAndBooks using pure JavaFX
@@ -24,22 +41,22 @@ import atlantafx.base.theme.PrimerDark
  */
 class GUI extends Application {
 
-    static TextField worldPathField
-    static TextField outputPathField
-    static CheckBox removeFormattingCheckBox
-    static CheckBox extractCustomNamesCheckBox
-    static CheckBox findPortalsCheckBox
-    static CheckBox overworldCheckBox
-    static CheckBox netherCheckBox
-    static CheckBox endCheckBox
-    static TextArea logArea
-    static Label statusLabel
-    static File worldDir
-    static File outputFolder
-    static File actualOutputFolder
-    static Button extractBtn
-    static Timeline elapsedTimeTimer
-    static long extractionStartTime
+    TextField worldPathField
+    TextField outputPathField
+    CheckBox removeFormattingCheckBox
+    CheckBox extractCustomNamesCheckBox
+    CheckBox findPortalsCheckBox
+    CheckBox overworldCheckBox
+    CheckBox netherCheckBox
+    CheckBox endCheckBox
+    TextArea logArea
+    Label statusLabel
+    File worldDir
+    File outputFolder
+    File actualOutputFolder
+    Button extractBtn
+    Timeline elapsedTimeTimer
+    long extractionStartTime
 
     void start(Stage stage) {
         stage.title = 'ReadSignsAndBooks Extractor'
@@ -53,33 +70,34 @@ class GUI extends Application {
             if (iconStream) {
                 stage.icons.add(new javafx.scene.image.Image(iconStream))
             }
-        } catch (Exception e) {
-            // Silently fail if icon cannot be loaded - not critical
+        } catch (IOException e) {
+            // Icon loading is optional, silently ignore if not found - trace level for debugging only
+            org.slf4j.LoggerFactory.getLogger(GUI).trace('Icon not found, using default', e)
         }
 
         // Set up GUI log handler with rolling buffer to prevent TextArea freeze
         // (GitHub issue #12: TextArea.appendText() has O(n) performance, causing UI freeze with large logs)
-        final int MAX_LOG_CHARS = 80000  // ~80KB of log text (prevents exponential slowdown)
+        final int maxLogChars = 80000  // ~80KB of log text (prevents exponential slowdown)
 
-        GuiLogAppender.setLogHandler { message ->
+        GuiLogAppender.logHandler = { message ->
             def currentLength = logArea.text.length()
             def newLength = currentLength + message.length()
 
-            if (newLength > MAX_LOG_CHARS) {
+            if (newLength > maxLogChars) {
                 // Remove oldest ~20% of text to make room (avoids frequent trimming)
-                def trimAmount = (int)(MAX_LOG_CHARS * 0.2) + message.length()
+                def trimAmount = (int)(maxLogChars * 0.2) + message.length()
                 logArea.deleteText(0, Math.min(trimAmount, currentLength))
             }
             logArea.appendText(message)
         }
 
         // Clean up on close
-        stage.onCloseRequest = {
+        stage.onCloseRequest = { event ->
             GuiLogAppender.clearLogHandler()
         }
 
         // Create menu bar
-        def menuBar = createMenuBar()
+        def menuBar = setupMenuBar()
 
         // Main content layout
         def contentRoot = new VBox(15)
@@ -98,8 +116,8 @@ class GUI extends Application {
         HBox.setHgrow(worldPathField, Priority.ALWAYS)  // Make it grow horizontally
         setupDragAndDrop(worldPathField, true)  // Enable drag-and-drop for world folder
         def worldBtn = new Button('Browse...')
-        worldBtn.onAction = { selectWorldDirectory(stage) }
-        worldBox.children.addAll(new Label('World Directory:').with { it.minWidth = 120; it }, worldPathField, worldBtn)
+        worldBtn.onAction = { event -> selectWorldDirectory(stage) }
+        worldBox.children.addAll(new Label('World Directory:').with { label -> label.minWidth = 120; label }, worldPathField, worldBtn)
 
         // Output folder selection (optional)
         def outputBox = new HBox(10)
@@ -110,22 +128,22 @@ class GUI extends Application {
         updateOutputFolderPrompt()  // Set initial prompt text
         setupDragAndDrop(outputPathField, false)  // Enable drag-and-drop for output folder
         def outputBtn = new Button('Browse...')
-        outputBtn.onAction = { selectOutputFolder(stage) }
-        outputBox.children.addAll(new Label('Output Folder:').with { it.minWidth = 120; it }, outputPathField, outputBtn)
+        outputBtn.onAction = { event -> selectOutputFolder(stage) }
+        outputBox.children.addAll(new Label('Output Folder:').with { label -> label.minWidth = 120; label }, outputPathField, outputBtn)
 
         // Remove formatting checkbox
         def formattingBox = new HBox(10)
         formattingBox.alignment = Pos.CENTER_LEFT
         removeFormattingCheckBox = new CheckBox('Remove Minecraft formatting codes (§ codes)')
         removeFormattingCheckBox.selected = false
-        formattingBox.children.addAll(new Label('Options:').with { it.minWidth = 120; it }, removeFormattingCheckBox)
+        formattingBox.children.addAll(new Label('Options:').with { label -> label.minWidth = 120; label }, removeFormattingCheckBox)
 
         // Extract custom names checkbox
         def customNamesBox = new HBox(10)
         customNamesBox.alignment = Pos.CENTER_LEFT
         extractCustomNamesCheckBox = new CheckBox('Extract custom names from items and entities')
         extractCustomNamesCheckBox.selected = false
-        customNamesBox.children.addAll(new Label('').with { it.minWidth = 120; it }, extractCustomNamesCheckBox)
+        customNamesBox.children.addAll(new Label('').with { label -> label.minWidth = 120; label }, extractCustomNamesCheckBox)
 
         // Block Search section with visual grouping
         def blockSearchSection = new VBox(8)
@@ -161,16 +179,16 @@ class GUI extends Application {
         extractBtn = new Button('Extract')
         extractBtn.minWidth = 150
         extractBtn.style = '-fx-font-size: 14px; -fx-background-color: #4CAF50; -fx-text-fill: white;'
-        extractBtn.onAction = { runExtraction() }
+        extractBtn.onAction = { event -> runExtraction() }
         def openFolderBtn = new Button('Open Output Folder')
         openFolderBtn.minWidth = 130
-        openFolderBtn.onAction = { openOutputFolder() }
+        openFolderBtn.onAction = { event -> openOutputFolder() }
         def clearBtn = new Button('Clear Log')
         clearBtn.minWidth = 100
-        clearBtn.onAction = { logArea.text = '' }
+        clearBtn.onAction = { event -> logArea.text = '' }
         def exitBtn = new Button('Exit')
         exitBtn.minWidth = 100
-        exitBtn.onAction = { Platform.exit() }
+        exitBtn.onAction = { event -> Platform.exit() }
         btnBox.children.addAll(extractBtn, openFolderBtn, clearBtn, exitBtn)
 
         // Status label
@@ -197,7 +215,7 @@ class GUI extends Application {
             btnBox,
             new Separator(),
             statusLabel,
-            new Label('Extraction Log:').with { it.style = '-fx-font-weight: bold;'; it },
+            new Label('Extraction Log:').with { label -> label.style = '-fx-font-weight: bold;'; label },
             logArea
         )
 
@@ -226,10 +244,12 @@ class GUI extends Application {
      */
     void parseGuiArguments() {
         // Skip when not launched via Application.launch() (e.g., TestFX tests)
-        def params = getParameters()
-        if (params == null) return
-        
-        def args = params.getRaw() as String[]
+        def params = parameters
+        if (params == null) {
+            return
+        }
+
+        def args = params.raw as String[]
 
         // Use Picocli to parse args into Main's static fields
         // parseArgs doesn't execute run(), just populates the @Option fields
@@ -238,7 +258,7 @@ class GUI extends Application {
         // Apply parsed values to GUI controls
         if (Main.customWorldDirectory) {
             def dir = new File(Main.customWorldDirectory)
-            if (dir.exists() && dir.isDirectory()) {
+            if (dir.exists() && dir.directory) {
                 worldDir = dir
                 worldPathField.text = dir.absolutePath
                 updateOutputFolderPrompt()
@@ -290,7 +310,7 @@ class GUI extends Application {
             if (countdown[0] > 0) {
                 statusLabel.text = "Auto-starting in ${countdown[0]}..."
             } else {
-                statusLabel.text = "Starting extraction..."
+                statusLabel.text = 'Starting extraction...'
             }
         }))
         countdownTimer.cycleCount = 3
@@ -299,18 +319,18 @@ class GUI extends Application {
             runExtraction()
         }
 
-        statusLabel.text = "Auto-starting in 3..."
+        statusLabel.text = 'Auto-starting in 3...'
         countdownTimer.play()
     }
 
-    MenuBar createMenuBar() {
+    MenuBar setupMenuBar() {
         def menuBar = new MenuBar()
 
         // Help menu
         def helpMenu = new Menu('Help')
 
         def githubItem = new MenuItem('View on GitHub')
-        githubItem.onAction = {
+        githubItem.onAction = { event ->
             try {
                 def desktop = Desktop.desktop
                 if (desktop && desktop.isSupported(Desktop.Action.BROWSE)) {
@@ -318,13 +338,14 @@ class GUI extends Application {
                 } else {
                     showAlert('GitHub', 'Project URL:\nhttps://github.com/Vibed/ReadSignsAndBooks.jar', Alert.AlertType.INFORMATION)
                 }
-            } catch (Exception e) {
+            } catch (IOException | URISyntaxException e) {
+                // Catch browser/URI exceptions during GitHub URL opening
                 showAlert('Error', "Could not open browser: ${e.message}", Alert.AlertType.ERROR)
             }
         }
 
         def aboutItem = new MenuItem('About')
-        aboutItem.onAction = {
+        aboutItem.onAction = { event ->
             showAlert('About',
                 'ReadSignsAndBooks v1.0.0\n\n' +
                 'Attribution:\n' +
@@ -347,7 +368,7 @@ class GUI extends Application {
         def separator = new SeparatorMenuItem()
 
         def licensesItem = new MenuItem('Third-Party Licenses')
-        licensesItem.onAction = {
+        licensesItem.onAction = { event ->
             showLicensesDialog()
         }
 
@@ -376,7 +397,7 @@ class GUI extends Application {
     }
 
     void updateOutputFolderPrompt() {
-        def dateStamp = new java.text.SimpleDateFormat('yyyy-MM-dd').format(new Date())
+        def dateStamp = new SimpleDateFormat('yyyy-MM-dd', Locale.US).format(new Date())
         def defaultPath
 
         if (worldDir) {
@@ -408,7 +429,7 @@ class GUI extends Application {
             } else {
                 showAlert('Error', 'Cannot open folder: Desktop operations not supported', Alert.AlertType.ERROR)
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
             showAlert('Error', "Could not open folder: ${e.message}", Alert.AlertType.ERROR)
         }
     }
@@ -454,9 +475,15 @@ class GUI extends Application {
 
                 // Build dimensions list from checkboxes
                 def selectedDimensions = []
-                if (overworldCheckBox.selected) selectedDimensions += 'overworld'
-                if (netherCheckBox.selected) selectedDimensions += 'nether'
-                if (endCheckBox.selected) selectedDimensions += 'end'
+                if (overworldCheckBox.selected) {
+                    selectedDimensions += 'overworld'
+                }
+                if (netherCheckBox.selected) {
+                    selectedDimensions += 'nether'
+                }
+                if (endCheckBox.selected) {
+                    selectedDimensions += 'end'
+                }
                 if (selectedDimensions) {
                     args += ['--search-dimensions', selectedDimensions.join(',')]
                 }
@@ -477,8 +504,8 @@ class GUI extends Application {
 
                     // Build summary message
                     def portalCount = Main.portalResults?.size() ?: 0
-                    def portalStr = portalCount > 0 ? ", ${portalCount} portals" : ""
-                    statusLabel.text = String.format("Complete! %d books, %d signs%s (took %02d:%02d)",
+                    def portalStr = portalCount > 0 ? ", ${portalCount} portals" : ''
+                    statusLabel.text = String.format('Complete! %d books, %d signs%s (took %02d:%02d)',
                         Main.bookHashes.size(), Main.signHashes.size(), portalStr, minutes, seconds)
 
                     def alertMsg = "Extraction complete!\n\nBooks: ${Main.bookHashes.size()}\nSigns: ${Main.signHashes.size()}"
@@ -489,7 +516,7 @@ class GUI extends Application {
                     showAlert('Success', alertMsg, Alert.AlertType.INFORMATION)
                 }
 
-            } catch (Exception e) {
+            } catch (IOException | IllegalArgumentException | IllegalStateException e) {
                 Platform.runLater {
                     // Stop timer and re-enable button
                     elapsedTimeTimer?.stop()
@@ -533,10 +560,10 @@ class GUI extends Application {
 
             if (db.hasFiles()) {
                 def files = db.files
-                if (files && files.size() > 0) {
+                if (files && !files.empty) {
                     def droppedFile = files[0]  // Take first file/folder
 
-                    if (droppedFile.isDirectory()) {
+                    if (droppedFile.directory) {
                         if (isWorldFolder) {
                             worldDir = droppedFile
                             worldPathField.text = droppedFile.absolutePath
@@ -568,17 +595,17 @@ class GUI extends Application {
         // Use jSystemThemeDetector to detect system theme
         try {
             def detector = OsThemeDetector.detector
-            def isDark = detector.isDark()
+            def isDark = detector.dark
 
             // Apply AtlantaFX theme based on system preference
             if (isDark) {
-                Application.setUserAgentStylesheet(new PrimerDark().getUserAgentStylesheet())
+                Application.userAgentStylesheet = new PrimerDark().userAgentStylesheet
             } else {
-                Application.setUserAgentStylesheet(new PrimerLight().getUserAgentStylesheet())
+                Application.userAgentStylesheet = new PrimerLight().userAgentStylesheet
             }
-        } catch (Exception e) {
-            // Default to light theme if detection fails
-            Application.setUserAgentStylesheet(new PrimerLight().getUserAgentStylesheet())
+        } catch (UnsupportedOperationException | SecurityException e) {
+            // Default to light theme if detection fails - exception may occur if theme detection unavailable
+            Application.userAgentStylesheet = new PrimerLight().userAgentStylesheet
         }
     }
 
@@ -613,7 +640,7 @@ class GUI extends Application {
                     '- SLF4J & Logback (MIT & EPL/LGPL)\n' +
                     '- Other dependencies as listed in build.gradle'
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
             licenseText.text = "Error loading license information: ${e.message}\n\n" +
                 'Please check that the project was built correctly.'
         }
@@ -650,4 +677,5 @@ class GUI extends Application {
     static void main(String[] args) {
         launch(GUI, args)
     }
+
 }

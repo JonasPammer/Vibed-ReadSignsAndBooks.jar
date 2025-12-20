@@ -26,7 +26,7 @@ class DatapackGenerator {
     private static final Logger LOGGER = LoggerFactory.getLogger(DatapackGenerator)
 
     /**
-     * Create the datapack directory structure for a specific Minecraft version.
+     * Set up the datapack directory structure for a specific Minecraft version.
      *
      * Structure for 1.21+:
      * readbooks_datapack_VERSION/
@@ -51,19 +51,19 @@ class DatapackGenerator {
      * @param version Version identifier (e.g., '1_13', '1_14', '1_20_5', '1_21')
      * @return The function directory File object
      */
-    static File createDatapackStructure(String baseDirectory, String outputFolder, String version) {
+    static File setupDatapackStructure(String baseDirectory, String outputFolder, String version) {
         String datapackName = "readbooks_datapack_${version}"
         // outputFolder may be an absolute path when the user provides -o/--output (or in tests).
         // Avoid string concatenation with baseDirectory which breaks on Windows paths like:
         //   <world>\\C:\\absolute\\output\\...
         File outputBaseDir = new File(outputFolder)
-        if (!outputBaseDir.isAbsolute()) {
+        if (!outputBaseDir.absolute) {
             outputBaseDir = new File(baseDirectory, outputFolder)
         }
 
         File datapackRoot = new File(outputBaseDir, datapackName)
-        File dataFolder = new File(datapackRoot, "data")
-        File namespaceFolder = new File(dataFolder, "readbooks")
+        File dataFolder = new File(datapackRoot, 'data')
+        File namespaceFolder = new File(dataFolder, 'readbooks')
 
         // CRITICAL: Pre-1.21 uses "functions" (plural), 1.21+ uses "function" (singular)
         // This changed in Minecraft Java Edition 1.21 snapshot 24w21a
@@ -78,7 +78,7 @@ class DatapackGenerator {
     }
 
     /**
-     * Create pack.mcmeta file for a datapack.
+     * Write pack.mcmeta file for a datapack.
      *
      * @param baseDirectory The world/project base directory
      * @param outputFolder The output folder path (relative to baseDirectory)
@@ -86,15 +86,15 @@ class DatapackGenerator {
      * @param packFormat The pack_format number for this Minecraft version
      * @param description Human-readable description of the datapack
      */
-    static void createPackMcmeta(String baseDirectory, String outputFolder, String version, int packFormat, String description) {
+    static void writePackMcmeta(String baseDirectory, String outputFolder, String version, int packFormat, String description) {
         String datapackName = "readbooks_datapack_${version}"
         File outputBaseDir = new File(outputFolder)
-        if (!outputBaseDir.isAbsolute()) {
+        if (!outputBaseDir.absolute) {
             outputBaseDir = new File(baseDirectory, outputFolder)
         }
 
         File datapackRoot = new File(outputBaseDir, datapackName)
-        File packMcmetaFile = new File(datapackRoot, "pack.mcmeta")
+        File packMcmetaFile = new File(datapackRoot, 'pack.mcmeta')
 
         // Create pack.mcmeta JSON content
         Map<String, Object> packData = [

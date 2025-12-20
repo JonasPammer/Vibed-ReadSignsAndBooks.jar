@@ -17,20 +17,14 @@
  * - Minecraft Data Components (1.20.5+): https://minecraft.wiki/w/Data_component_format
  */
 import groovy.json.JsonBuilder
-import groovy.json.JsonSlurper
 import groovy.sql.Sql
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import java.sql.SQLException
 
-class ItemDatabase {
+class ItemDatabase implements AutoCloseable {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ItemDatabase)
-
-    private Sql sql
-    private int itemLimit
-    private Map<String, Integer> countCache = [:]  // In-memory count tracking for fast limit checks
-    private String worldPath
-    private String minecraftVersion
 
     // Default items to skip (very common blocks that would flood the database)
     static final Set<String> DEFAULT_SKIP_ITEMS = [
@@ -40,6 +34,12 @@ class ItemDatabase {
         'minecraft:gravel', 'minecraft:diorite', 'minecraft:granite',
         'minecraft:andesite', 'minecraft:tuff', 'minecraft:calcite'
     ] as Set
+
+    private final Sql sql
+    private final int itemLimit
+    private final Map<String, Integer> countCache = [:]  // In-memory count tracking for fast limit checks
+    private String worldPath
+    private String minecraftVersion
 
     /**
      * Create a new item database.
@@ -132,7 +132,7 @@ class ItemDatabase {
             ON items(item_id, dimension, x, y, z, slot, container_type, COALESCE(player_uuid, ''))
         ''')
 
-        LOGGER.debug("Item database schema initialized")
+        LOGGER.debug('Item database schema initialized')
     }
 
     /**
@@ -149,7 +149,7 @@ class ItemDatabase {
      * Get metadata value.
      */
     String getMetadata(String key) {
-        def row = sql.firstRow('SELECT value FROM metadata WHERE key = ?', [key])
+        groovy.sql.GroovyRowResult row = sql.firstRow('SELECT value FROM metadata WHERE key = ?', [key])
         return row?.value
     }
 
@@ -187,6 +187,7 @@ class ItemDatabase {
      * Data class for item metadata extracted from NBT.
      */
     static class ItemMetadata {
+
         String itemId
         int count = 1
         String dimension
@@ -207,12 +208,13 @@ class ItemDatabase {
         }
 
         boolean hasEnchantments() {
-            return !enchantments.isEmpty() || !storedEnchantments.isEmpty()
+            return !enchantments.empty || !storedEnchantments.empty
         }
 
         boolean hasCustomName() {
-            return customName != null && !customName.trim().isEmpty()
+            return customName != null && !customName.trim().empty
         }
+
     }
 
     /**
@@ -250,9 +252,9 @@ class ItemDatabase {
         }
 
         // Convert collections to JSON
-        String enchantmentsJson = metadata.enchantments.isEmpty() ? null : new JsonBuilder(metadata.enchantments).toString()
-        String storedEnchJson = metadata.storedEnchantments.isEmpty() ? null : new JsonBuilder(metadata.storedEnchantments).toString()
-        String loreJson = metadata.lore.isEmpty() ? null : new JsonBuilder(metadata.lore).toString()
+        String enchantmentsJson = metadata.enchantments.empty ? null : new JsonBuilder(metadata.enchantments).toString()
+        String storedEnchJson = metadata.storedEnchantments.empty ? null : new JsonBuilder(metadata.storedEnchantments).toString()
+        String loreJson = metadata.lore.empty ? null : new JsonBuilder(metadata.lore).toString()
 
         try {
             int inserted = sql.executeUpdate('''
@@ -311,7 +313,7 @@ class ItemDatabase {
                     total_count = total_count + ?
             ''', [itemId, metadata.count, metadata.count])
             return false
-        } catch (Exception e) {
+        } catch (SQLException e) {
             LOGGER.warn("Failed to insert item ${itemId} at (${metadata.x}, ${metadata.y}, ${metadata.z}): ${e.message}")
             return false
         }
@@ -333,7 +335,7 @@ class ItemDatabase {
                    lore, unbreakable, region_file
             FROM items WHERE item_id = ?
         '''
-        List params = [normalizedId]
+        List<Object> params = [normalizedId]
 
         if (dimension) {
             query += ' AND dimension = ?'
@@ -342,7 +344,7 @@ class ItemDatabase {
 
         query += ' ORDER BY dimension, x, y, z'
 
-        return sql.rows(query, params)
+        return sql.rows(query, params) ?: []
     }
 
     /**
@@ -358,7 +360,7 @@ class ItemDatabase {
                    custom_name, damage, enchantments, stored_enchantments, region_file
             FROM items WHERE (enchantments IS NOT NULL OR stored_enchantments IS NOT NULL)
         ''')
-        List params = []
+        List<Object> params = []
 
         if (enchantmentFilter) {
             // Search in both enchantments columns for the filter text
@@ -374,7 +376,7 @@ class ItemDatabase {
 
         query.append(' ORDER BY item_id, dimension, x, y, z')
 
-        return sql.rows(query.toString(), params)
+        return sql.rows(query.toString(), params) ?: []
     }
 
     /**
@@ -390,7 +392,7 @@ class ItemDatabase {
                    custom_name, enchantments, region_file
             FROM items WHERE custom_name IS NOT NULL
         ''')
-        List params = []
+        List<Object> params = []
 
         if (nameFilter) {
             query.append(' AND custom_name LIKE ?')
@@ -404,7 +406,7 @@ class ItemDatabase {
 
         query.append(' ORDER BY custom_name, item_id, dimension')
 
-        return sql.rows(query.toString(), params)
+        return sql.rows(query.toString(), params) ?: []
     }
 
     /**
@@ -419,7 +421,7 @@ class ItemDatabase {
               AND y BETWEEN ? AND ?
               AND z BETWEEN ? AND ?
         ''')
-        List params = [x - radius, x + radius, y - radius, y + radius, z - radius, z + radius]
+        List<Object> params = [x - radius, x + radius, y - radius, y + radius, z - radius, z + radius]
 
         if (dimension) {
             query.append(' AND dimension = ?')
@@ -428,7 +430,7 @@ class ItemDatabase {
 
         query.append(' ORDER BY item_id, x, y, z')
 
-        return sql.rows(query.toString(), params)
+        return sql.rows(query.toString(), params) ?: []
     }
 
     /**
@@ -442,15 +444,15 @@ class ItemDatabase {
                    with_custom_name, limit_reached
             FROM item_summary
             ORDER BY total_count DESC
-        ''')
+        ''') ?: []
     }
 
     /**
      * Get count for a specific item type.
      */
-    Map getItemCount(String itemId) {
+    Map<String, Object> getItemCount(String itemId) {
         String normalizedId = itemId.contains(':') ? itemId : "minecraft:${itemId}"
-        def row = sql.firstRow('''
+        groovy.sql.GroovyRowResult row = sql.firstRow('''
             SELECT total_count, unique_locations, with_enchantments, with_custom_name, limit_reached
             FROM item_summary WHERE item_id = ?
         ''', [normalizedId])
@@ -460,14 +462,14 @@ class ItemDatabase {
             with_enchantments: row.with_enchantments,
             with_custom_name: row.with_custom_name,
             limit_reached: row.limit_reached
-        ] : null
+        ] : [:]
     }
 
     /**
      * Get total number of unique item types indexed.
      */
     int getItemTypeCount() {
-        def row = sql.firstRow('SELECT COUNT(DISTINCT item_id) as count FROM item_summary')
+        groovy.sql.GroovyRowResult row = sql.firstRow('SELECT COUNT(DISTINCT item_id) as count FROM item_summary')
         return row?.count ?: 0
     }
 
@@ -475,7 +477,7 @@ class ItemDatabase {
      * Get total number of items indexed.
      */
     int getTotalItemsIndexed() {
-        def row = sql.firstRow('SELECT SUM(unique_locations) as total FROM item_summary')
+        groovy.sql.GroovyRowResult row = sql.firstRow('SELECT SUM(unique_locations) as total FROM item_summary')
         return row?.total ?: 0
     }
 
@@ -483,7 +485,7 @@ class ItemDatabase {
      * Get total count of all items (including those not stored due to limit).
      */
     long getTotalItemCount() {
-        def row = sql.firstRow('SELECT SUM(total_count) as total FROM item_summary')
+        groovy.sql.GroovyRowResult row = sql.firstRow('SELECT SUM(total_count) as total FROM item_summary')
         return row?.total ?: 0L
     }
 
@@ -511,11 +513,14 @@ class ItemDatabase {
     /**
      * Close the database connection.
      */
+    @Override
     void close() {
         try {
-            sql?.close()
-            LOGGER.debug("Item database closed")
-        } catch (Exception e) {
+            if (sql) {
+                sql.close()
+            }
+            LOGGER.debug('Item database closed')
+        } catch (SQLException e) {
             LOGGER.warn("Error closing database: ${e.message}")
         }
     }
@@ -533,4 +538,5 @@ class ItemDatabase {
         // Use a large limit (won't matter for queries)
         return new ItemDatabase(dbFile, Integer.MAX_VALUE)
     }
+
 }

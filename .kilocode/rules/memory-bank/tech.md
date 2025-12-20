@@ -234,7 +234,7 @@ java -Xmx10G -jar ReadSignsAndBooks.jar /path/to/world --output-format stendhal
 
 **Directory Naming Change**: Minecraft 1.21 snapshot 24w21a changed directory names from plural (`functions/`) to singular (`function/`). See @.kilocode/rules/memory-bank/minecraft-datapacks.md for complete table and details.
 
-**Implementation**: `getPackFormat(version)` method maps version strings to pack_format numbers. `createDatapackStructure(version)` uses version-specific directory naming.
+**Implementation**: `getPackFormat(version)` method maps version strings to pack_format numbers. `setupDatapackStructure(version)` uses version-specific directory naming.
 
 **Source**: https://minecraft.wiki/w/Pack_format (verified 2025-11-18)
 

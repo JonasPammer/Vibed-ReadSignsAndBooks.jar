@@ -17,7 +17,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Pre-1.21 versions (1.13-1.20.6): Use `functions/` (plural)
 1.21+ versions: Use `function/` (singular)
 
-**ALWAYS** use version-specific directory naming in `createDatapackStructure()`:
+**ALWAYS** use version-specific directory naming in `setupDatapackStructure()`:
 ```groovy
 String functionDirName = (version == '1_21') ? 'function' : 'functions'
 ```
