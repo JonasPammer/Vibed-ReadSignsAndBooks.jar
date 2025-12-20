@@ -96,8 +96,14 @@ class Main implements Runnable {
     @Option(names = ['--track-failed-regions'], description = 'Track and suppress errors for repeatedly failing region files (default: false)', defaultValue = 'false')
     static boolean trackFailedRegions = false
 
-    @Option(names = ['--search-blocks'], description = 'Search for specific block types (comma-separated, e.g., "obsidian,nether_portal")', split = ',')
+    @Option(names = ['--search-blocks'], description = 'Search for specific block types (comma-separated). If no types specified, indexes all blocks (rarity-filtered by --index-limit). Always skips air/cave_air.', split = ',', arity = '0..1')
     static List<String> searchBlocks = []
+
+    // Flag to track if --search-blocks was explicitly specified (even with no args)
+    static boolean searchBlocksSpecified = false
+
+    @CommandLine.Spec
+    static CommandLine.Model.CommandSpec commandSpec
 
     @Option(names = ['--find-portals'], description = 'Find all nether portals with intelligent clustering (outputs one entry per portal structure)', defaultValue = 'false')
     static boolean findPortals = false
@@ -203,6 +209,8 @@ class Main implements Runnable {
 
         // Reset block search options and results
         searchBlocks = []
+        searchBlocksSpecified = false
+        commandSpec = null
         findPortals = false
         searchDimensions = ['overworld', 'nether', 'end']
         blockOutputFormat = 'csv'
@@ -260,6 +268,12 @@ class Main implements Runnable {
 
     @Override
     void run() {
+        // Detect if --search-blocks was explicitly specified (even without arguments)
+        if (commandSpec != null) {
+            CommandLine.ParseResult parseResult = commandSpec.commandLine().getParseResult()
+            searchBlocksSpecified = parseResult.hasMatchedOption('--search-blocks')
+        }
+
         try {
             // Check if this is a query-only mode (no extraction needed)
             if (indexQuery || indexList) {
@@ -1109,10 +1123,17 @@ class Main implements Runnable {
     // ========== Block Search and Portal Detection ==========
 
     /**
-     * Run block search and/or portal detection if enabled via CLI flags
+     * Run block search and/or portal detection if enabled via CLI flags.
+     *
+     * Supports two modes:
+     * 1. Targeted search: --search-blocks obsidian,nether_portal (specific block types)
+     * 2. Index-all mode: --search-blocks (no arguments) - indexes all blocks except air/cave_air,
+     *    rarity-filtered by --index-limit
      */
     static void runBlockSearch() {
-        boolean hasBlockSearch = searchBlocks && !searchBlocks.isEmpty()
+        boolean hasSpecificBlocks = searchBlocks && !searchBlocks.isEmpty()
+        boolean hasIndexAllMode = searchBlocksSpecified && !hasSpecificBlocks
+        boolean hasBlockSearch = hasSpecificBlocks || hasIndexAllMode
         boolean hasPortalSearch = findPortals
 
         if (!hasBlockSearch && !hasPortalSearch) {
@@ -1147,12 +1168,25 @@ class Main implements Runnable {
 
             // Run block search with database indexing
             if (hasBlockSearch) {
-                Set<String> targetBlocks = BlockSearcher.parseBlockIds(searchBlocks.join(','))
-                LOGGER.info("Searching for blocks: ${targetBlocks.join(', ')}")
-                LOGGER.info("Dimensions: ${searchDimensions.join(', ')}")
+                if (hasIndexAllMode) {
+                    // Index-all mode: scan all blocks except air/cave_air
+                    LOGGER.info("INDEX-ALL MODE: Scanning all blocks (rarity-filtered by limit: ${indexLimit == 0 ? 'unlimited' : indexLimit})")
+                    LOGGER.info("Dimensions: ${searchDimensions.join(', ')}")
+                    LOGGER.info("Skipping: minecraft:air, minecraft:cave_air")
 
-                blockSearchResults = BlockSearcher.searchBlocks(baseDirectory, targetBlocks, searchDimensions, blockDatabase)
-                LOGGER.info("Found ${blockSearchResults.size()} matching blocks")
+                    // Use specialized index-all method that streams directly to DB
+                    BlockSearcher.indexAllBlocks(baseDirectory, searchDimensions, blockDatabase)
+                    // Results stay in DB only - no in-memory list needed
+                    blockSearchResults = []  // Empty - will stream from DB for output
+                } else {
+                    // Targeted search mode
+                    Set<String> targetBlocks = BlockSearcher.parseBlockIds(searchBlocks.join(','))
+                    LOGGER.info("Searching for blocks: ${targetBlocks.join(', ')}")
+                    LOGGER.info("Dimensions: ${searchDimensions.join(', ')}")
+
+                    blockSearchResults = BlockSearcher.searchBlocks(baseDirectory, targetBlocks, searchDimensions, blockDatabase)
+                    LOGGER.info("Found ${blockSearchResults.size()} matching blocks")
+                }
             }
         } finally {
             // Close database
@@ -1170,13 +1204,18 @@ class Main implements Runnable {
     }
 
     /**
-     * Write block search and portal detection results to output files
+     * Write block search and portal detection results to output files.
+     *
+     * Handles two modes:
+     * 1. Targeted search: writes from blockSearchResults list
+     * 2. Index-all mode: streams from block_index.db database
      */
     static void writeBlockSearchOutput() {
         boolean hasBlockResults = blockSearchResults && !blockSearchResults.isEmpty()
+        boolean hasIndexAllMode = searchBlocksSpecified && (searchBlocks == null || searchBlocks.isEmpty())
         boolean hasPortalResults = portalResults && !portalResults.isEmpty()
 
-        if (!hasBlockResults && !hasPortalResults) {
+        if (!hasBlockResults && !hasIndexAllMode && !hasPortalResults) {
             LOGGER.debug("No block/portal search results to write")
             return
         }
@@ -1190,7 +1229,11 @@ class Main implements Runnable {
 
         // Write block search results
         if (hasBlockResults) {
+            // Targeted search mode - use in-memory results
             writeBlockOutput(outputPath)
+        } else if (hasIndexAllMode) {
+            // Index-all mode - stream from database
+            writeBlockOutputFromDb(outputPath)
         }
     }
 
@@ -1400,6 +1443,214 @@ class Main implements Runnable {
             byDimension.eachWithIndex { String dim, Integer count, int idx ->
                 String comma = idx < byDimension.size() - 1 ? ',' : ''
                 writer.writeLine("      \"${dim}\": ${count}${comma}")
+            }
+            writer.writeLine('    }')
+            writer.writeLine('  }')
+            writer.writeLine('}')
+        }
+        LOGGER.info("Block JSON written to: blocks.json")
+    }
+
+    // ========== Index-All Mode: Stream from Database ==========
+
+    /**
+     * Write block output by streaming from the database (index-all mode).
+     * This avoids loading all blocks into memory.
+     */
+    static void writeBlockOutputFromDb(String outputPath) {
+        File dbFile = new File(outputPath, 'block_index.db')
+        if (!dbFile.exists()) {
+            LOGGER.warn("Block index database not found: ${dbFile.absolutePath}")
+            return
+        }
+
+        BlockDatabase db = BlockDatabase.openForQuery(dbFile)
+        if (!db) {
+            LOGGER.warn("Failed to open block index database")
+            return
+        }
+
+        try {
+            int totalBlocks = db.getTotalBlockCount()
+            LOGGER.info("Writing block output from database (${totalBlocks} blocks indexed)")
+
+            switch (blockOutputFormat.toLowerCase()) {
+                case 'json':
+                    writeBlockJsonFromDb(outputPath, db)
+                    break
+                case 'txt':
+                    writeBlockTxtFromDb(outputPath, db)
+                    break
+                case 'csv':
+                default:
+                    writeBlockCsvFromDb(outputPath, db)
+                    break
+            }
+        } finally {
+            db.close()
+        }
+    }
+
+    /**
+     * Write blocks.csv by streaming from database.
+     */
+    static void writeBlockCsvFromDb(String outputPath, BlockDatabase db) {
+        File csvFile = new File(outputPath, 'blocks.csv')
+        csvFile.withWriter('UTF-8') { BufferedWriter writer ->
+            writer.writeLine('block_type,dimension,x,y,z,properties,region_file')
+
+            db.streamBlocks { String blockType, String dimension, int x, int y, int z, String propsJson, String regionFile ->
+                // Convert JSON properties back to k=v;k=v format for consistency
+                String propsStr = ''
+                if (propsJson) {
+                    try {
+                        def props = JSON_SLURPER.parseText(propsJson)
+                        if (props instanceof Map) {
+                            propsStr = props.collect { k, v -> "${k}=${v}" }.join(';')
+                        }
+                    } catch (Exception e) {
+                        propsStr = propsJson  // Fallback to raw JSON if parse fails
+                    }
+                }
+                writer.writeLine("${blockType},${dimension},${x},${y},${z},${propsStr},${regionFile ?: ''}")
+            }
+        }
+        LOGGER.info("Block CSV written to: blocks.csv")
+    }
+
+    /**
+     * Write blocks.txt by streaming from database.
+     * Groups by block type on the fly by detecting type changes while iterating ordered rows.
+     */
+    static void writeBlockTxtFromDb(String outputPath, BlockDatabase db) {
+        File txtFile = new File(outputPath, 'blocks.txt')
+        int totalBlocks = db.getTotalBlockCount()
+
+        txtFile.withWriter('UTF-8') { BufferedWriter writer ->
+            writer.writeLine('Block Search Report (Index-All Mode)')
+            writer.writeLine('=' * 80)
+            writer.writeLine("Total blocks indexed: ${totalBlocks}")
+            writer.writeLine('')
+
+            // Get summary for per-type counts
+            List<Map> summary = db.getSummary()
+            summary.each { Map row ->
+                String blockType = row.block_type
+                int count = row.indexed_count
+                boolean limitReached = row.limit_reached == 1
+
+                writer.writeLine("${blockType} (${count} indexed${limitReached ? ', limit reached' : ''}):")
+                writer.writeLine('-' * 40)
+
+                // Query blocks of this type
+                List<Map> blocks = db.queryByBlockType(blockType)
+                blocks.each { Map block ->
+                    String propsStr = ''
+                    if (block.properties) {
+                        try {
+                            def props = JSON_SLURPER.parseText(block.properties)
+                            if (props instanceof Map) {
+                                propsStr = " [${props.collect { k, v -> "${k}=${v}" }.join(', ')}]"
+                            }
+                        } catch (Exception e) {
+                            // Ignore parse errors
+                        }
+                    }
+                    writer.writeLine("  ${block.dimension}: (${block.x}, ${block.y}, ${block.z})${propsStr}")
+                }
+                writer.writeLine('')
+            }
+        }
+        LOGGER.info("Block TXT written to: blocks.txt")
+    }
+
+    /**
+     * Write blocks.json by streaming from database.
+     */
+    static void writeBlockJsonFromDb(String outputPath, BlockDatabase db) {
+        File jsonFile = new File(outputPath, 'blocks.json')
+        int totalBlocks = db.getTotalBlockCount()
+
+        // Pre-compute summary counts
+        Map<String, Integer> byType = [:]
+        Map<String, Integer> byDimension = [:]
+        List<Map> summary = db.getSummary()
+        summary.each { Map row ->
+            byType[row.block_type] = row.indexed_count
+        }
+
+        jsonFile.withWriter('UTF-8') { BufferedWriter writer ->
+            writer.writeLine('{')
+            writer.writeLine('  "blocks": [')
+
+            int blockIndex = 0
+            db.streamBlocks { String blockType, String dimension, int x, int y, int z, String propsJson, String regionFile ->
+                byDimension[dimension] = (byDimension[dimension] ?: 0) + 1
+
+                if (blockIndex > 0) {
+                    writer.writeLine(',')
+                }
+                writer.writeLine('    {')
+                writer.writeLine("      \"type\": ${escapeJson(blockType)},")
+                writer.writeLine("      \"dimension\": ${escapeJson(dimension)},")
+                writer.writeLine('      "coordinates": {')
+                writer.writeLine("        \"x\": ${x},")
+                writer.writeLine("        \"y\": ${y},")
+                writer.writeLine("        \"z\": ${z}")
+                writer.writeLine('      },')
+
+                // Parse properties
+                writer.write('      "properties": {')
+                if (propsJson) {
+                    try {
+                        def props = JSON_SLURPER.parseText(propsJson)
+                        if (props instanceof Map && !props.isEmpty()) {
+                            writer.writeLine('')
+                            int propIdx = 0
+                            props.each { String k, v ->
+                                String comma = propIdx < props.size() - 1 ? ',' : ''
+                                writer.writeLine("        \"${k}\": ${escapeJson(v?.toString())}${comma}")
+                                propIdx++
+                            }
+                            writer.write('      ')
+                        }
+                    } catch (Exception e) {
+                        // Ignore parse errors
+                    }
+                }
+                writer.writeLine('},')
+                writer.write("      \"region\": ${escapeJson(regionFile)}")
+                writer.writeLine('')
+                writer.write('    }')
+
+                blockIndex++
+            }
+
+            if (blockIndex > 0) {
+                writer.writeLine('')
+            }
+            writer.writeLine('  ],')
+            writer.writeLine('  "summary": {')
+            writer.writeLine("    \"total_blocks\": ${totalBlocks},")
+            writer.writeLine('    "mode": "index-all",')
+
+            // Write by_type
+            writer.writeLine('    "by_type": {')
+            int typeIdx = 0
+            byType.each { String type, Integer count ->
+                String comma = typeIdx < byType.size() - 1 ? ',' : ''
+                writer.writeLine("      ${escapeJson(type)}: ${count}${comma}")
+                typeIdx++
+            }
+            writer.writeLine('    },')
+
+            // Write by_dimension
+            writer.writeLine('    "by_dimension": {')
+            int dimIdx = 0
+            byDimension.each { String dim, Integer count ->
+                String comma = dimIdx < byDimension.size() - 1 ? ',' : ''
+                writer.writeLine("      \"${dim}\": ${count}${comma}")
+                dimIdx++
             }
             writer.writeLine('    }')
             writer.writeLine('  }')

@@ -199,16 +199,33 @@ class BlockSearcher {
     }
 
     /**
+     * Block types to always skip during index-all mode.
+     * These are extremely common and generally not useful to index.
+     */
+    static final Set<String> EXCLUDED_BLOCK_TYPES = [
+        'minecraft:air',
+        'minecraft:cave_air'
+    ] as Set
+
+    /**
      * Index ALL blocks in the world to a database (not just specific types).
-     * This is used when --build-block-index is specified without --search-blocks.
+     * This is used when --search-blocks is specified without arguments (rarity-index mode).
+     *
+     * Features:
+     * - Always skips air/cave_air blocks
+     * - Tracks saturated types to avoid unnecessary database calls
+     * - Uses palette-level skipping for optimal performance
      *
      * @param worldPath Path to Minecraft world save directory
      * @param dimensions List of dimensions to search (overworld, nether, end)
      * @param database BlockDatabase to write found blocks to
      */
     static void indexAllBlocks(String worldPath, List<String> dimensions, BlockDatabase database) {
-        LOGGER.info("Building comprehensive block index...")
+        LOGGER.info("Building comprehensive block index (rarity-filtered)...")
         LOGGER.info("Dimensions to index: ${dimensions}")
+
+        // Track block types that have reached their limit (avoid further insertBlock calls)
+        Set<String> saturatedTypes = [] as Set
 
         // Use transaction for batch inserts
         database.beginTransaction()
@@ -245,7 +262,7 @@ class BlockSearcher {
                     .build().withCloseable { pb ->
                         regionFiles.each { File file ->
                             try {
-                                indexRegionFile(file, dimension, database)
+                                indexRegionFile(file, dimension, database, saturatedTypes)
                             } catch (Exception e) {
                                 LOGGER.warn("Failed to index ${file.name}: ${e.message}")
                             }
@@ -261,12 +278,20 @@ class BlockSearcher {
         }
 
         LOGGER.info("Block indexing complete: ${database.getBlockTypeCount()} block types, ${database.getTotalBlocksIndexed()} blocks indexed")
+        if (!saturatedTypes.isEmpty()) {
+            LOGGER.info("Saturated types (reached limit): ${saturatedTypes.size()}")
+        }
     }
 
     /**
      * Index all blocks in a region file to the database.
+     *
+     * @param regionFile The .mca region file to process
+     * @param dimension The dimension name
+     * @param database The database to write to
+     * @param saturatedTypes Set of block types that have reached their limit (updated in place)
      */
-    static void indexRegionFile(File regionFile, String dimension, BlockDatabase database) {
+    static void indexRegionFile(File regionFile, String dimension, BlockDatabase database, Set<String> saturatedTypes) {
         MCAFile mcaFile = MCAUtil.read(regionFile, LoadFlags.RAW)
 
         // Parse region coordinates from filename (r.X.Z.mca)
@@ -284,16 +309,30 @@ class BlockSearcher {
                 int chunkAbsX = regionX * 32 + chunkLocalX
                 int chunkAbsZ = regionZ * 32 + chunkLocalZ
 
-                indexChunk(chunk, dimension, regionFile.name, chunkAbsX, chunkAbsZ, database)
+                indexChunk(chunk, dimension, regionFile.name, chunkAbsX, chunkAbsZ, database, saturatedTypes)
             }
         }
     }
 
     /**
-     * Index all blocks in a chunk to the database.
+     * Index all blocks in a chunk to the database with rarity filtering.
+     *
+     * Optimizations:
+     * - Skips excluded block types (air, cave_air)
+     * - Skips already-saturated block types (reached limit)
+     * - Palette-level skipping: if all palette entries are excluded or saturated, skip entire section
+     * - For uniform sections (single palette entry), stop early if type becomes saturated
+     *
+     * @param chunk The chunk to index
+     * @param dimension The dimension name
+     * @param regionFileName The region file name for reference
+     * @param chunkAbsX Absolute chunk X coordinate
+     * @param chunkAbsZ Absolute chunk Z coordinate
+     * @param database The database to write to
+     * @param saturatedTypes Set of block types that have reached their limit (updated in place)
      */
     static void indexChunk(Chunk chunk, String dimension, String regionFileName,
-                           int chunkAbsX, int chunkAbsZ, BlockDatabase database) {
+                           int chunkAbsX, int chunkAbsZ, BlockDatabase database, Set<String> saturatedTypes) {
         CompoundTag chunkData = chunk.handle
         if (!chunkData) return
 
@@ -323,14 +362,23 @@ class BlockSearcher {
             ListTag<?> palette = blockStates.getListTag('palette')
             if (!palette || palette.size() == 0) return
 
-            // Skip sections with only air
-            if (palette.size() == 1) {
-                def entry = palette.get(0)
+            // Extract all block types from palette and check if section should be skipped
+            List<String> paletteTypes = []
+            boolean hasUsefulBlocks = false
+            (0..<palette.size()).each { int i ->
+                def entry = palette.get(i)
                 if (entry instanceof CompoundTag) {
-                    String blockName = ((CompoundTag) entry).getString('Name')
-                    if (blockName == 'minecraft:air') return
+                    String blockType = ((CompoundTag) entry).getString('Name')
+                    paletteTypes.add(blockType)
+                    // A block is useful if it's not excluded AND not already saturated
+                    if (!EXCLUDED_BLOCK_TYPES.contains(blockType) && !saturatedTypes.contains(blockType)) {
+                        hasUsefulBlocks = true
+                    }
                 }
             }
+
+            // Palette-level skip: if all blocks are excluded or saturated, skip entire section
+            if (!hasUsefulBlocks) return
 
             // Get packed block data
             long[] data = null
@@ -338,20 +386,33 @@ class BlockSearcher {
                 data = blockStates.getLongArray('data')
             }
 
-            // If only one block type in palette (and it's not air), all blocks are that type
+            // If only one block type in palette, handle uniformly
             if (palette.size() == 1) {
                 CompoundTag blockTag = (CompoundTag) palette.get(0)
                 String blockType = blockTag.getString('Name')
+
+                // Skip excluded blocks
+                if (EXCLUDED_BLOCK_TYPES.contains(blockType)) return
+                // Skip already saturated
+                if (saturatedTypes.contains(blockType)) return
+
                 Map<String, String> properties = extractBlockProperties(blockTag)
 
-                // Insert all 4096 blocks of this type
+                // Insert blocks until type becomes saturated
                 (0..15).each { int localY ->
+                    if (saturatedTypes.contains(blockType)) return  // Early exit if saturated
                     (0..15).each { int localZ ->
+                        if (saturatedTypes.contains(blockType)) return
                         (0..15).each { int localX ->
+                            if (saturatedTypes.contains(blockType)) return
                             int worldX = chunkAbsX * 16 + localX
                             int worldY = sectionY * 16 + localY
                             int worldZ = chunkAbsZ * 16 + localZ
-                            database.insertBlock(blockType, dimension, worldX, worldY, worldZ, properties, regionFileName)
+                            boolean inserted = database.insertBlock(blockType, dimension, worldX, worldY, worldZ, properties, regionFileName)
+                            if (!inserted) {
+                                // Insert returned false = limit reached, mark as saturated
+                                saturatedTypes.add(blockType)
+                            }
                         }
                     }
                 }
@@ -392,8 +453,11 @@ class BlockSearcher {
 
                         String blockType = blockTag.getString('Name')
 
-                        // Skip air blocks
-                        if (blockType == 'minecraft:air') return
+                        // Skip excluded blocks
+                        if (EXCLUDED_BLOCK_TYPES.contains(blockType)) return
+
+                        // Skip already saturated blocks
+                        if (saturatedTypes.contains(blockType)) return
 
                         Map<String, String> properties = extractBlockProperties(blockTag)
 
@@ -401,7 +465,11 @@ class BlockSearcher {
                         int worldY = sectionY * 16 + localY
                         int worldZ = chunkAbsZ * 16 + localZ
 
-                        database.insertBlock(blockType, dimension, worldX, worldY, worldZ, properties, regionFileName)
+                        boolean inserted = database.insertBlock(blockType, dimension, worldX, worldY, worldZ, properties, regionFileName)
+                        if (!inserted) {
+                            // Insert returned false = limit reached, mark as saturated
+                            saturatedTypes.add(blockType)
+                        }
                     }
                 }
             }

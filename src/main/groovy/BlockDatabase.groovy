@@ -193,8 +193,14 @@ class BlockDatabase {
 
             if (inserted > 0) {
                 // Update cache and indexed_count
-                countCache[blockType] = currentCount + 1
+                int newCount = currentCount + 1
+                countCache[blockType] = newCount
                 sql.execute('UPDATE block_summary SET indexed_count = indexed_count + 1 WHERE block_type = ?', [blockType])
+
+                // Mark limit_reached when we hit exactly the limit
+                if (blockLimit > 0 && newCount >= blockLimit) {
+                    sql.execute('UPDATE block_summary SET limit_reached = 1 WHERE block_type = ?', [blockType])
+                }
                 return true
             }
 
@@ -327,6 +333,56 @@ class BlockDatabase {
         } catch (Exception e) {
             LOGGER.warn("Error closing database: ${e.message}")
         }
+    }
+
+    /**
+     * Query all blocks from the database in a deterministic order.
+     *
+     * @param dimension Optional dimension filter
+     * @return List of all block records as maps
+     */
+    List<Map> queryAllBlocks(String dimension = null) {
+        String query = 'SELECT block_type, dimension, x, y, z, properties, region_file FROM blocks'
+        List params = []
+
+        if (dimension) {
+            query += ' WHERE dimension = ?'
+            params << dimension
+        }
+
+        query += ' ORDER BY block_type, dimension, x, y, z'
+        return sql.rows(query, params)
+    }
+
+    /**
+     * Stream all blocks from the database, calling the provided callback for each row.
+     * This avoids loading all blocks into memory at once.
+     *
+     * @param callback Closure receiving (blockType, dimension, x, y, z, properties, regionFile)
+     * @param dimension Optional dimension filter
+     */
+    void streamBlocks(Closure callback, String dimension = null) {
+        String query = 'SELECT block_type, dimension, x, y, z, properties, region_file FROM blocks'
+        List params = []
+
+        if (dimension) {
+            query += ' WHERE dimension = ?'
+            params << dimension
+        }
+
+        query += ' ORDER BY block_type, dimension, x, y, z'
+
+        sql.eachRow(query, params) { row ->
+            callback(row.block_type, row.dimension, row.x, row.y, row.z, row.properties, row.region_file)
+        }
+    }
+
+    /**
+     * Get total count of indexed blocks.
+     */
+    int getTotalBlockCount() {
+        def row = sql.firstRow('SELECT COUNT(*) as count FROM blocks')
+        return row?.count ?: 0
     }
 
     /**
