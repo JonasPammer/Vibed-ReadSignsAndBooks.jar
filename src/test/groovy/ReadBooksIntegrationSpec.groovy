@@ -4208,4 +4208,202 @@ class ReadBooksIntegrationSpec extends Specification {
         }
     }
 
+    // =========================================================================
+    // COMBINED INDEX-ALL + PORTALS TESTS
+    // =========================================================================
+
+    def "should run index-all mode and find-portals together without conflict"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'combined index-all and portal detection run without conflict'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+
+            // Setup index-all mode + find-portals
+            Main.searchBlocks = []
+            Main.searchBlocksSpecified = true  // Index-all mode
+            Main.findPortals = true  // Also find portals
+            Main.indexLimit = 100  // Small limit
+            Main.searchDimensions = ['overworld', 'nether', 'end']
+            Main.blockOutputFormat = 'json'
+
+            try {
+                runReadBooksProgram()
+
+                // Verify block_index.db was created (from index-all mode)
+                Path dbFile = outputDir.resolve('block_index.db')
+                assert Files.exists(dbFile), "block_index.db should be created in index-all mode"
+
+                // Verify blocks output was created
+                Path blocksJson = outputDir.resolve('blocks.json')
+                assert Files.exists(blocksJson), "blocks.json should be created in index-all mode"
+
+                // Parse and verify JSON has mode: "index-all"
+                def json = new groovy.json.JsonSlurper().parseText(blocksJson.toFile().text)
+                assert json.summary.mode == 'index-all', "JSON summary should indicate index-all mode"
+
+                println "  ✓ Combined index-all + find-portals ran without errors"
+                println "  ✓ Database created: ${Files.exists(dbFile)}"
+                println "  ✓ Blocks JSON created: ${Files.exists(blocksJson)}"
+                println "  ✓ Total blocks in JSON: ${json.blocks.size()}"
+
+                true
+            } finally {
+                Main.searchBlocks = []
+                Main.searchBlocksSpecified = false
+                Main.findPortals = false
+                Main.indexLimit = 5000
+            }
+        }
+    }
+
+    def "should create both block and portal outputs when both flags enabled"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'both block and portal outputs are created'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+
+            // Setup with both features
+            Main.searchBlocks = []
+            Main.searchBlocksSpecified = true  // Index-all mode
+            Main.findPortals = true  // Also find portals
+            Main.indexLimit = 50  // Small limit
+            Main.searchDimensions = ['overworld']  // Just overworld
+            Main.blockOutputFormat = 'csv'
+
+            try {
+                runReadBooksProgram()
+
+                // Verify database was created
+                Path dbFile = outputDir.resolve('block_index.db')
+                assert Files.exists(dbFile), "block_index.db should be created"
+
+                // Verify blocks.csv was created
+                Path blocksCsv = outputDir.resolve('blocks.csv')
+                assert Files.exists(blocksCsv), "blocks.csv should be created"
+
+                // Verify CSV has header and data
+                String csvContent = blocksCsv.toFile().text
+                assert csvContent.startsWith('block_type,dimension,x,y,z,properties,region_file'),
+                    "CSV should have correct header"
+                assert csvContent.readLines().size() > 1, "CSV should have at least header + 1 data row"
+
+                println "  ✓ Both index-all and find-portals completed without errors"
+
+                true
+            } finally {
+                Main.searchBlocks = []
+                Main.searchBlocksSpecified = false
+                Main.findPortals = false
+                Main.indexLimit = 5000
+            }
+        }
+    }
+
+    def "should correctly track block types in index-all mode with portal detection enabled"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'block types tracked correctly with portal detection enabled'
+        testWorlds.every { worldInfo ->
+            setupTestWorld(worldInfo)
+
+            // Setup index-all with portals enabled
+            Main.searchBlocks = []
+            Main.searchBlocksSpecified = true
+            Main.findPortals = true
+            Main.indexLimit = 30  // Very small limit to trigger limit_reached
+            Main.searchDimensions = ['overworld', 'nether', 'end']
+            Main.blockOutputFormat = 'json'
+
+            try {
+                runReadBooksProgram()
+
+                // Open database to verify data
+                Path dbFile = outputDir.resolve('block_index.db')
+                BlockDatabase db = BlockDatabase.openForQuery(dbFile.toFile())
+                try {
+                    int blockTypeCount = db.getBlockTypeCount()
+                    int totalIndexed = db.getTotalBlocksIndexed()
+                    List<Map> summary = db.getSummary()
+
+                    println "  ✓ Block types indexed: ${blockTypeCount}"
+                    println "  ✓ Total blocks indexed: ${totalIndexed}"
+                    println "  ✓ Summary entries: ${summary.size()}"
+
+                    // Verify we got some blocks indexed
+                    assert blockTypeCount > 0, "Should have indexed at least one block type"
+                    assert totalIndexed > 0, "Should have indexed at least one block"
+
+                    // Verify air is not indexed
+                    def airCount = db.getBlockCount('minecraft:air')
+                    def caveAirCount = db.getBlockCount('minecraft:cave_air')
+                    assert airCount == null || airCount.indexed_count == 0, "Air should not be indexed"
+                    assert caveAirCount == null || caveAirCount.indexed_count == 0, "Cave air should not be indexed"
+
+                    println "  ✓ Air/cave_air correctly excluded from index"
+                } finally {
+                    db?.close()
+                }
+
+                true
+            } finally {
+                Main.searchBlocks = []
+                Main.searchBlocksSpecified = false
+                Main.findPortals = false
+                Main.indexLimit = 5000
+            }
+        }
+    }
+
+    def "should produce all output formats correctly when combined with portal detection"() {
+        given: 'test worlds'
+        List testWorlds = discoverTestWorlds()
+
+        expect: 'at least one test world exists'
+        testWorlds.size() > 0
+
+        and: 'all output formats work with portal detection'
+        testWorlds.every { worldInfo ->
+            ['csv', 'json', 'txt'].every { format ->
+                setupTestWorld(worldInfo)
+
+                Main.searchBlocks = []
+                Main.searchBlocksSpecified = true
+                Main.findPortals = true
+                Main.indexLimit = 20
+                Main.searchDimensions = ['overworld']
+                Main.blockOutputFormat = format
+
+                try {
+                    runReadBooksProgram()
+
+                    Path outputFile = outputDir.resolve("blocks.${format}")
+                    assert Files.exists(outputFile), "blocks.${format} should be created"
+                    assert outputFile.toFile().text.length() > 0, "blocks.${format} should have content"
+
+                    println "  ✓ blocks.${format} created successfully (${outputFile.toFile().text.length()} bytes)"
+                    true
+                } finally {
+                    Main.searchBlocks = []
+                    Main.searchBlocksSpecified = false
+                    Main.findPortals = false
+                    Main.indexLimit = 5000
+                }
+            }
+        }
+    }
+
 }

@@ -763,4 +763,256 @@ class BlockDatabaseSpec extends Specification {
         noExceptionThrown()
         // After close, operations should fail (but we can't easily test this without catching exceptions)
     }
+
+    // =========================================================================
+    // Streaming Invariant Tests
+    // =========================================================================
+
+    def "queryAllBlocks and streamBlocks should return same data"() {
+        given:
+        File dbFile = tempDir.resolve('test.db').toFile()
+        BlockDatabase db = new BlockDatabase(dbFile)
+        // Insert blocks in various dimensions
+        db.insertBlock('minecraft:stone', 'overworld', 100, 64, 200, [facing: 'north'], 'r.0.0.mca')
+        db.insertBlock('minecraft:dirt', 'nether', 50, 32, 100, null, 'r.0.0.mca')
+        db.insertBlock('minecraft:chest', 'end', 0, 0, 0, [type: 'single'], 'r.0.0.mca')
+
+        when:
+        List<Map> queryResults = db.queryAllBlocks()
+        List<Map> streamResults = []
+        db.streamBlocks({ blockType, dimension, x, y, z, properties, regionFile ->
+            streamResults << [
+                block_type: blockType,
+                dimension: dimension,
+                x: x,
+                y: y,
+                z: z,
+                properties: properties,
+                region_file: regionFile
+            ]
+        })
+
+        then:
+        queryResults.size() == streamResults.size()
+        queryResults.size() == 3
+        // Verify ordering matches - both should be ORDER BY block_type, dimension, x, y, z
+        queryResults.eachWithIndex { queryRow, i ->
+            def streamRow = streamResults[i]
+            assert queryRow.block_type == streamRow.block_type
+            assert queryRow.dimension == streamRow.dimension
+            assert queryRow.x == streamRow.x
+            assert queryRow.y == streamRow.y
+            assert queryRow.z == streamRow.z
+        }
+
+        cleanup:
+        db?.close()
+    }
+
+    def "streamBlocks should respect dimension filter and only yield matching rows"() {
+        given:
+        File dbFile = tempDir.resolve('test.db').toFile()
+        BlockDatabase db = new BlockDatabase(dbFile)
+        db.insertBlock('minecraft:stone', 'overworld', 0, 0, 0)
+        db.insertBlock('minecraft:stone', 'nether', 0, 0, 0)
+        db.insertBlock('minecraft:stone', 'end', 0, 0, 0)
+        db.insertBlock('minecraft:dirt', 'overworld', 1, 0, 0)
+
+        when:
+        List<String> overworldDimensions = []
+        db.streamBlocks({ blockType, dimension, x, y, z, properties, regionFile ->
+            overworldDimensions << dimension
+        }, 'overworld')
+
+        List<String> netherDimensions = []
+        db.streamBlocks({ blockType, dimension, x, y, z, properties, regionFile ->
+            netherDimensions << dimension
+        }, 'nether')
+
+        then:
+        overworldDimensions.every { it == 'overworld' }
+        overworldDimensions.size() == 2  // stone + dirt in overworld
+        netherDimensions.every { it == 'nether' }
+        netherDimensions.size() == 1  // Only stone in nether
+
+        cleanup:
+        db?.close()
+    }
+
+    def "streamBlocks ordering should match queryAllBlocks ordering exactly"() {
+        given:
+        File dbFile = tempDir.resolve('test.db').toFile()
+        BlockDatabase db = new BlockDatabase(dbFile)
+        // Insert in non-sorted order to verify both methods sort the same way
+        db.insertBlock('minecraft:zinc', 'overworld', 10, 5, 20)
+        db.insertBlock('minecraft:apple', 'nether', 100, 50, 200)
+        db.insertBlock('minecraft:apple', 'end', 5, 5, 5)
+        db.insertBlock('minecraft:zinc', 'end', 1, 1, 1)
+        db.insertBlock('minecraft:apple', 'end', 5, 5, 4)  // Same x, y, lower z
+
+        when:
+        List<Map> queryResults = db.queryAllBlocks()
+        List<String> streamOrder = []
+        db.streamBlocks({ blockType, dimension, x, y, z, properties, regionFile ->
+            streamOrder << "${blockType}|${dimension}|${x}|${y}|${z}"
+        })
+
+        then:
+        // Verify same ordering for both
+        queryResults.size() == streamOrder.size()
+        queryResults.size() == 5
+        queryResults.eachWithIndex { row, i ->
+            def expected = "${row.block_type}|${row.dimension}|${row.x}|${row.y}|${row.z}"
+            assert streamOrder[i] == expected, "Mismatch at index $i: expected $expected, got ${streamOrder[i]}"
+        }
+        // Verify ORDER BY block_type, dimension, x, y, z
+        // apple comes before zinc; end < nether < overworld; lower coords first
+        queryResults[0].block_type == 'minecraft:apple'
+        queryResults[0].dimension == 'end'
+
+        cleanup:
+        db?.close()
+    }
+
+    def "getTotalBlocksIndexed should equal count of queryAllBlocks when no limit hit"() {
+        given:
+        File dbFile = tempDir.resolve('test.db').toFile()
+        BlockDatabase db = new BlockDatabase(dbFile, 0)  // Unlimited
+        (1..25).each { i ->
+            db.insertBlock('minecraft:stone', 'overworld', i, 0, 0)
+        }
+        (1..15).each { i ->
+            db.insertBlock('minecraft:dirt', 'nether', i, 0, 0)
+        }
+
+        when:
+        int totalIndexed = db.getTotalBlocksIndexed()
+        List<Map> allBlocks = db.queryAllBlocks()
+
+        then:
+        totalIndexed == allBlocks.size()
+        totalIndexed == 40  // 25 + 15
+
+        cleanup:
+        db?.close()
+    }
+
+    def "getTotalBlocksIndexed should be less than total_found when limit is hit"() {
+        given:
+        File dbFile = tempDir.resolve('test.db').toFile()
+        BlockDatabase db = new BlockDatabase(dbFile, 5)  // Limit of 5 per type
+        // Insert 10 stone blocks
+        (1..10).each { i ->
+            db.insertBlock('minecraft:stone', 'overworld', i, 0, 0)
+        }
+
+        when:
+        int totalIndexed = db.getTotalBlocksIndexed()
+        Map count = db.getBlockCount('minecraft:stone')
+
+        then:
+        totalIndexed == 5  // Only 5 indexed
+        count.total_found == 10  // All 10 counted
+        count.indexed_count == 5
+        count.limit_reached == 1
+
+        cleanup:
+        db?.close()
+    }
+
+    def "queryAllBlocks with dimension filter should match streamBlocks with same filter"() {
+        given:
+        File dbFile = tempDir.resolve('test.db').toFile()
+        BlockDatabase db = new BlockDatabase(dbFile)
+        db.insertBlock('minecraft:stone', 'overworld', 0, 0, 0)
+        db.insertBlock('minecraft:stone', 'nether', 0, 0, 0)
+        db.insertBlock('minecraft:chest', 'overworld', 1, 0, 0)
+
+        when:
+        List<Map> queryOverworld = db.queryAllBlocks('overworld')
+        List<Map> streamOverworld = []
+        db.streamBlocks({ blockType, dimension, x, y, z, properties, regionFile ->
+            streamOverworld << [block_type: blockType, dimension: dimension]
+        }, 'overworld')
+
+        then:
+        queryOverworld.size() == streamOverworld.size()
+        queryOverworld.size() == 2
+        queryOverworld.every { it.dimension == 'overworld' }
+
+        cleanup:
+        db?.close()
+    }
+
+    def "streamBlocks callback receives correct parameter types"() {
+        given:
+        File dbFile = tempDir.resolve('test.db').toFile()
+        BlockDatabase db = new BlockDatabase(dbFile)
+        Map<String, String> props = [facing: 'north', waterlogged: 'true']
+        db.insertBlock('minecraft:chest', 'overworld', 100, 64, 200, props, 'r.0.0.mca')
+
+        when:
+        def capturedParams = [:]
+        db.streamBlocks({ blockType, dimension, x, y, z, properties, regionFile ->
+            capturedParams.blockType = blockType
+            capturedParams.dimension = dimension
+            capturedParams.x = x
+            capturedParams.y = y
+            capturedParams.z = z
+            capturedParams.properties = properties
+            capturedParams.regionFile = regionFile
+        })
+
+        then:
+        capturedParams.blockType instanceof String
+        capturedParams.blockType == 'minecraft:chest'
+        capturedParams.dimension instanceof String
+        capturedParams.dimension == 'overworld'
+        capturedParams.x instanceof Integer
+        capturedParams.x == 100
+        capturedParams.y instanceof Integer
+        capturedParams.y == 64
+        capturedParams.z instanceof Integer
+        capturedParams.z == 200
+        capturedParams.properties instanceof String
+        capturedParams.properties.contains('facing')
+        capturedParams.regionFile instanceof String
+        capturedParams.regionFile == 'r.0.0.mca'
+
+        cleanup:
+        db?.close()
+    }
+
+    def "streamBlocks with no blocks should call callback zero times"() {
+        given:
+        File dbFile = tempDir.resolve('test.db').toFile()
+        BlockDatabase db = new BlockDatabase(dbFile)
+        int callCount = 0
+
+        when:
+        db.streamBlocks({ blockType, dimension, x, y, z, properties, regionFile ->
+            callCount++
+        })
+
+        then:
+        callCount == 0
+
+        cleanup:
+        db?.close()
+    }
+
+    def "queryAllBlocks should return empty list for empty database"() {
+        given:
+        File dbFile = tempDir.resolve('test.db').toFile()
+        BlockDatabase db = new BlockDatabase(dbFile)
+
+        when:
+        List<Map> results = db.queryAllBlocks()
+
+        then:
+        results.isEmpty()
+
+        cleanup:
+        db?.close()
+    }
 }
