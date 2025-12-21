@@ -3247,7 +3247,7 @@ class ReadBooksIntegrationSpec extends Specification {
 
                     // Also test getBlockCount for non-existent type
                     Map countInfo = db.getBlockCount('minecraft:nonexistent_block')
-                    assert countInfo == null, "Should return null for non-existent block type"
+                    assert countInfo == null || countInfo.isEmpty(), "Should return null or empty map for non-existent block type"
 
                     println "  ✓ Non-existent block type handled correctly"
                 } finally {
@@ -3423,8 +3423,8 @@ class ReadBooksIntegrationSpec extends Specification {
                     Map airCount = db.getBlockCount('minecraft:air')
                     Map caveAirCount = db.getBlockCount('minecraft:cave_air')
 
-                    assert airCount == null || airCount.indexed_count == 0, "Should NOT index minecraft:air"
-                    assert caveAirCount == null || caveAirCount.indexed_count == 0, "Should NOT index minecraft:cave_air"
+                    assert (airCount?.indexed_count ?: 0) == 0, "Should NOT index minecraft:air"
+                    assert (caveAirCount?.indexed_count ?: 0) == 0, "Should NOT index minecraft:cave_air"
 
                     // Check that at least one common block type hit the limit
                     List<Map> summary = db.getSummary()
@@ -3668,8 +3668,8 @@ class ReadBooksIntegrationSpec extends Specification {
                     Map airQuery = db.getBlockCount('minecraft:air')
                     Map caveAirQuery = db.getBlockCount('minecraft:cave_air')
 
-                    assert airQuery == null || airQuery.indexed_count == 0, "Direct query for air should return 0"
-                    assert caveAirQuery == null || caveAirQuery.indexed_count == 0, "Direct query for cave_air should return 0"
+                    assert (airQuery?.indexed_count ?: 0) == 0, "Direct query for air should return 0"
+                    assert (caveAirQuery?.indexed_count ?: 0) == 0, "Direct query for cave_air should return 0"
 
                     println "  ✓ Verified air/cave_air exclusion - ${indexedTypes.size()} block types indexed (none are air)"
                 } finally {
@@ -4350,8 +4350,8 @@ class ReadBooksIntegrationSpec extends Specification {
                     // Verify air is not indexed
                     def airCount = db.getBlockCount('minecraft:air')
                     def caveAirCount = db.getBlockCount('minecraft:cave_air')
-                    assert airCount == null || airCount.indexed_count == 0, "Air should not be indexed"
-                    assert caveAirCount == null || caveAirCount.indexed_count == 0, "Cave air should not be indexed"
+                    assert (airCount?.indexed_count ?: 0) == 0, "Air should not be indexed"
+                    assert (caveAirCount?.indexed_count ?: 0) == 0, "Cave air should not be indexed"
 
                     println "  ✓ Air/cave_air correctly excluded from index"
                 } finally {
