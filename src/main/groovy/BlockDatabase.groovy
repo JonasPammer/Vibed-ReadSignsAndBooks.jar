@@ -163,6 +163,7 @@ class BlockDatabase implements AutoCloseable {
      * @param regionFile Optional source region file name
      * @return true if inserted, false if limit reached or duplicate
      */
+    @SuppressWarnings('ParameterCount')
     boolean insertBlock(String blockType, String dimension, int x, int y, int z,
                         Map<String, String> properties = null, String regionFile = null) {
         // Get current count from cache (or initialize if first time seeing this block type)
@@ -210,7 +211,7 @@ class BlockDatabase implements AutoCloseable {
             LOGGER.warn("Failed to insert block ${blockType} at (${x}, ${y}, ${z}): ${e.message}")
             return false
         }
-    }
+                        }
 
     /**
      * Query blocks by type.

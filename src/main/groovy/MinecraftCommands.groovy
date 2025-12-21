@@ -365,7 +365,7 @@ class MinecraftCommands {
         }.join(',')
 
         String backMessages
-        if (backLines && backLines.any { it }) {
+        if (backLines && backLines.any { String line -> line }) {
             backMessages = (0..3).collect { int i ->
                 String line = i < backLines.size() ? backLines[i] : ''
                 String escaped = escapeForMinecraftCommand(line, '1_20')
@@ -403,7 +403,7 @@ class MinecraftCommands {
         }.join(',')
 
         String backMessages
-        if (backLines && backLines.any { it }) {
+        if (backLines && backLines.any { String line -> line }) {
             backMessages = (0..3).collect { int i ->
                 String line = i < backLines.size() ? backLines[i] : ''
                 String escaped = escapeForMinecraftCommand(line, '1_20_5')

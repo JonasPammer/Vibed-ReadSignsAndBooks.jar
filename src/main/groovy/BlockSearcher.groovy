@@ -41,6 +41,7 @@ class BlockSearcher {
     /**
      * Data class representing a found block location
      */
+    @SuppressWarnings('ParameterCount')
     static class BlockLocation {
 
         String blockType
@@ -58,7 +59,7 @@ class BlockSearcher {
             this.z = z
             this.properties = properties ?: [:]
             this.regionFile = regionFile
-                      }
+        }
 
         @Override
         boolean equals(Object obj) {
@@ -340,6 +341,7 @@ class BlockSearcher {
      * @param database The database to write to
      * @param saturatedTypes Set of block types that have reached their limit (updated in place)
      */
+    @SuppressWarnings('ParameterCount')
     static void indexChunk(Chunk chunk, String dimension, String regionFileName,
                            int chunkAbsX, int chunkAbsZ, BlockDatabase database, Set<String> saturatedTypes) {
         CompoundTag chunkData = chunk.handle
@@ -463,7 +465,7 @@ class BlockSearcher {
             // Build palette map
             Map<Integer, CompoundTag> paletteMap = [:]
             (0..<paletteSize).each { int i ->
-                def entry = palette.get(i)
+                Object entry = palette.get(i)
                 if (entry instanceof CompoundTag) {
                     paletteMap[i] = (CompoundTag) entry
                 }
@@ -525,7 +527,7 @@ class BlockSearcher {
         if (blockTag.containsKey('Properties')) {
             CompoundTag props = blockTag.getCompoundTag('Properties')
             props.keySet().each { String key ->
-                def value = props.get(key)
+                Object value = props.get(key)
                 if (value instanceof StringTag) {
                     properties[key] = ((StringTag) value).value
                 }
@@ -592,6 +594,7 @@ class BlockSearcher {
      * @param chunkAbsZ Absolute chunk Z coordinate
      * @return List of BlockLocation objects found in this chunk
      */
+    @SuppressWarnings('ParameterCount')
     static List<BlockLocation> processChunk(Chunk chunk, Set<String> targetBlocks,
                                              String dimension, String regionFileName,
                                              int chunkAbsX, int chunkAbsZ) {
@@ -731,7 +734,7 @@ class BlockSearcher {
     static Set<String> extractPaletteBlockNames(ListTag<?> palette) {
         Set<String> names = [] as Set
         (0..<palette.size()).each { int i ->
-            def entry = palette.get(i)
+            Object entry = palette.get(i)
             if (entry instanceof CompoundTag) {
                 CompoundTag tag = (CompoundTag) entry
                 if (tag.containsKey('Name')) {
@@ -748,7 +751,7 @@ class BlockSearcher {
     static Map<Integer, CompoundTag> assemblePaletteMap(ListTag<?> palette, Set<String> targetBlocks) {
         Map<Integer, CompoundTag> map = [:]
         (0..<palette.size()).each { int i ->
-            def entry = palette.get(i)
+            Object entry = palette.get(i)
             if (entry instanceof CompoundTag) {
                 CompoundTag tag = (CompoundTag) entry
                 if (tag.containsKey('Name')) {
@@ -775,6 +778,7 @@ class BlockSearcher {
     /**
      * Create a BlockLocation from a palette block tag
      */
+    @SuppressWarnings('ParameterCount')
     static BlockLocation makeBlockLocation(CompoundTag blockTag, String dimension,
                                             int x, int y, int z, String regionFile) {
         String blockType = blockTag.getString('Name')
@@ -783,7 +787,7 @@ class BlockSearcher {
         if (blockTag.containsKey('Properties')) {
             CompoundTag props = blockTag.getCompoundTag('Properties')
             props.keySet().each { String key ->
-                def value = props.get(key)
+                Object value = props.get(key)
                 if (value instanceof StringTag) {
                     properties[key] = ((StringTag) value).value
                 }

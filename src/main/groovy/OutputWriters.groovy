@@ -135,6 +135,7 @@ class OutputWriters {
      * @param booksByContainerType Map of book counts by container type
      * @param bookMetadataList List of book metadata for table display
      */
+    @SuppressWarnings('ParameterCount')
     static void printSummaryStatistics(
             String baseDirectory,
             String outputFolder,
@@ -208,7 +209,7 @@ class OutputWriters {
         LOGGER.info("\n${'=' * 80}")
         LOGGER.info('SUMMARY STATISTICS')
         LOGGER.info('=' * 80)
-        LOGGER.info("\nBooks:")
+        LOGGER.info('\nBooks:')
         LOGGER.info("  Total unique books found: ${bookHashes.size()}")
         LOGGER.info("  Total books extracted (including duplicates): ${bookCounter}")
         LOGGER.info("  Duplicate books: ${bookCounter - bookHashes.size()}")

@@ -52,6 +52,12 @@ class Main implements Runnable {
     // Human-readable generation names
     private static final List<String> GENERATION_NAMES = ['Original', 'Copy of Original', 'Copy of Copy', 'Tattered']
 
+    // Default dimensions for block/portal search
+    private static final List<String> DEFAULT_DIMENSIONS = ['overworld', 'nether', 'end']
+
+    // Minecraft command versions for book/sign generation
+    private static final List<String> MC_VERSIONS = ['1_13', '1_14', '1_20_5', '1_21']
+
     // State file management for tracking failed region files
     static Map<String, Set<String>> failedRegionsByWorld = [:]  // worldFolderName -> Set of failed region filenames
     static Set<String> recoveredRegions = [] as Set  // Regions that recovered in this run
@@ -106,7 +112,7 @@ class Main implements Runnable {
     static boolean findPortals = false
 
     @Option(names = ['--search-dimensions'], description = 'Dimensions to search for blocks/portals (default: all). Options: overworld,nether,end', split = ',', defaultValue = 'overworld,nether,end')
-    static List<String> searchDimensions = ['overworld', 'nether', 'end']
+    static List<String> searchDimensions = DEFAULT_DIMENSIONS
 
     @Option(names = ['--block-output-format'], description = 'Output format for block search (csv, json, txt)', defaultValue = 'csv')
     static String blockOutputFormat = 'csv'
@@ -209,7 +215,7 @@ class Main implements Runnable {
         searchBlocksSpecified = false
         commandSpec = null
         findPortals = false
-        searchDimensions = ['overworld', 'nether', 'end']
+        searchDimensions = DEFAULT_DIMENSIONS
         blockOutputFormat = 'csv'
         blockSearchResults = []
         portalResults = []
@@ -250,17 +256,8 @@ class Main implements Runnable {
 
     static boolean shouldUseGui(String[] args) {
         // No arguments? Assume GUI (double-clicked JAR)
-        if (args.length == 0) {
-            return true
-        }
-
-        // Explicit GUI flag
-        if (args.contains('--gui') || args.contains('-g')) {
-            return true
-        }
-
-        // Otherwise use CLI
-        return false
+        // Explicit GUI flag also triggers GUI mode
+        return args.length == 0 || args.contains('--gui') || args.contains('-g')
     }
 
     @Override
@@ -335,7 +332,7 @@ class Main implements Runnable {
      */
     static File findBlockIndexDatabase() {
         // Helper closure to search a directory for block_index.db
-        def searchDirectory = { String dirPath ->
+        Closure<File> searchDirectory = { String dirPath ->
             if (!dirPath) {
                 return null
             }
@@ -355,9 +352,9 @@ class Main implements Runnable {
             // Check in ReadBooks subfolder
             File readBooksDir = new File(dir, 'ReadBooks')
             if (readBooksDir.exists()) {
-                File[] dateFolders = readBooksDir.listFiles()?.findAll {
-                    it.isDirectory() && it.name.matches('\\d{4}-\\d{2}-\\d{2}')
-                }?.sort { -it.lastModified() }
+                File[] dateFolders = readBooksDir.listFiles()?.findAll { File f ->
+                    f.directory && f.name.matches('\\d{4}-\\d{2}-\\d{2}')
+                }?.sort { File f -> -f.lastModified() }
 
                 if (dateFolders) {
                     for (File folder : dateFolders) {
@@ -367,12 +364,12 @@ class Main implements Runnable {
                         }
                     }
                 }
-            }
+                }
 
             // Check if path itself contains date folders (e.g., -o points to ReadBooks folder)
-            File[] dateFolders = dir.listFiles()?.findAll {
-                it.isDirectory() && it.name.matches('\\d{4}-\\d{2}-\\d{2}')
-            }?.sort { -it.lastModified() }
+            File[] dateFolders = dir.listFiles()?.findAll { File f ->
+                f.directory && f.name.matches('\\d{4}-\\d{2}-\\d{2}')
+            }?.sort { File f -> -f.lastModified() }
 
             if (dateFolders) {
                 for (File folder : dateFolders) {
@@ -384,7 +381,7 @@ class Main implements Runnable {
             }
 
             return null
-        }
+            }
 
         // Search in order: -o, -w, current directory
         File result = searchDirectory(customOutputDirectory)
@@ -403,25 +400,24 @@ class Main implements Runnable {
         }
 
         return null
-    }
+            }
 
     /**
      * Get expected database path for error messages.
      */
     static String getExpectedDatabasePath() {
-        if (customOutputDirectory) {
-            return "${customOutputDirectory}${File.separator}block_index.db"
-        }
-        return "${baseDirectory}${File.separator}ReadBooks${File.separator}YYYY-MM-DD${File.separator}block_index.db"
+        return customOutputDirectory ?
+            "${customOutputDirectory}${File.separator}block_index.db" :
+            "${baseDirectory}${File.separator}ReadBooks${File.separator}YYYY-MM-DD${File.separator}block_index.db"
     }
 
     /**
      * Print block index summary (--index-list).
      */
     static void printBlockIndexSummary(BlockDatabase db) {
-        List<Map> summary = db.getSummary()
+        List<Map> summary = db.summary
 
-        if (summary.isEmpty()) {
+        if (summary.empty) {
             LOGGER.info('No blocks indexed in database.')
             return
         }
@@ -462,7 +458,7 @@ class Main implements Runnable {
             LOGGER.info("  Block limit: ${blockLimitMeta} per type")
         }
         LOGGER.info("  Total block types: ${summary.size()}")
-        LOGGER.info("  Total blocks indexed: ${db.getTotalBlocksIndexed()}")
+        LOGGER.info("  Total blocks indexed: ${db.totalBlocksIndexed}")
     }
 
     /**
@@ -474,7 +470,7 @@ class Main implements Runnable {
 
         List<Map> blocks = db.queryByBlockType(normalizedType, dimension)
 
-        if (blocks.isEmpty()) {
+        if (blocks.empty) {
             LOGGER.info("No blocks found for type: ${normalizedType}" + (dimension ? " in ${dimension}" : ''))
             return
         }
@@ -548,7 +544,7 @@ class Main implements Runnable {
      */
     static File findItemIndexDatabase() {
         // Helper closure to search a directory for item_index.db
-        def searchDirectory = { String dirPath ->
+        Closure<File> searchDirectory = { String dirPath ->
             if (!dirPath) {
                 return null
             }
@@ -568,9 +564,9 @@ class Main implements Runnable {
             // Check in ReadBooks subfolder
             File readBooksDir = new File(dir, 'ReadBooks')
             if (readBooksDir.exists()) {
-                File[] dateFolders = readBooksDir.listFiles()?.findAll {
-                    it.isDirectory() && it.name.matches('\\d{4}-\\d{2}-\\d{2}')
-                }?.sort { -it.lastModified() }
+                File[] dateFolders = readBooksDir.listFiles()?.findAll { File f ->
+                    f.directory && f.name.matches('\\d{4}-\\d{2}-\\d{2}')
+                }?.sort { File f -> -f.lastModified() }
 
                 if (dateFolders) {
                     for (File folder : dateFolders) {
@@ -580,12 +576,12 @@ class Main implements Runnable {
                         }
                     }
                 }
-            }
+                }
 
             // Check if path itself contains date folders (e.g., -o points to ReadBooks folder)
-            File[] dateFolders = dir.listFiles()?.findAll {
-                it.isDirectory() && it.name.matches('\\d{4}-\\d{2}-\\d{2}')
-            }?.sort { -it.lastModified() }
+            File[] dateFolders = dir.listFiles()?.findAll { File f ->
+                f.directory && f.name.matches('\\d{4}-\\d{2}-\\d{2}')
+            }?.sort { File f -> -f.lastModified() }
 
             if (dateFolders) {
                 for (File folder : dateFolders) {
@@ -597,7 +593,7 @@ class Main implements Runnable {
             }
 
             return null
-        }
+            }
 
         // Search in order: -o, -w, current directory
         File result = searchDirectory(customOutputDirectory)
@@ -616,15 +612,15 @@ class Main implements Runnable {
         }
 
         return null
-    }
+            }
 
     /**
      * Print item index summary (--item-list).
      */
     static void printItemIndexSummary(ItemDatabase db) {
-        List<Map> summary = db.getSummary()
+        List<Map> summary = db.summary
 
-        if (summary.isEmpty()) {
+        if (summary.empty) {
             LOGGER.info('No items indexed in database.')
             return
         }
@@ -655,8 +651,8 @@ class Main implements Runnable {
         // Print totals
         LOGGER.info('')
         LOGGER.info("Total item types: ${summary.size()}")
-        LOGGER.info("Total items: ${String.format('%,d', db.getTotalItemCount())}")
-        LOGGER.info("Indexed items: ${String.format('%,d', db.getTotalItemsIndexed())}")
+        LOGGER.info("Total items: ${String.format('%,d', db.totalItemCount)}")
+        LOGGER.info("Indexed items: ${String.format('%,d', db.totalItemsIndexed)}")
     }
 
     /**
@@ -682,13 +678,13 @@ class Main implements Runnable {
             // Query all items - get summary instead
             LOGGER.info('Use --item-list to see all item types. Showing items with enchantments or custom names...')
             items = db.queryEnchantedItems(null, dimension) + db.queryNamedItems(null, dimension)
-            items = items.unique { "${it.item_id}|${it.x}|${it.y}|${it.z}" }
+            items = items.unique { Map item -> "${item.item_id}|${item.x}|${item.y}|${item.z}" }
         } else {
             // Query specific item type
             items = db.queryByItemType(query, dimension)
         }
 
-        if (items.isEmpty()) {
+        if (items.empty) {
             LOGGER.info('No items found' + (dimension ? " in ${dimension}" : ''))
             return
         }
@@ -779,7 +775,7 @@ class Main implements Runnable {
                 Set<String> failedRegions = failedRegionsByWorld[worldFolderName]
                 failedRegions.removeAll(recoveredRegions)  // Remove regions that recovered
 
-                if (failedRegions.isEmpty()) {
+                if (failedRegions.empty) {
                     stateData.remove(worldFolderName)
                     LOGGER.info("All previously failed regions recovered! Removing state for world: ${worldFolderName}")
                 } else {
@@ -789,7 +785,7 @@ class Main implements Runnable {
             }
 
             // Write state file as JSON
-            if (stateData.isEmpty()) {
+            if (stateData.empty) {
                 if (stateFile.exists()) {
                     stateFile.delete()
                 }
@@ -832,7 +828,7 @@ class Main implements Runnable {
      */
     static File resolveOutputBaseDir() {
         File out = new File(outputFolder)
-        return out.isAbsolute() ? out : new File(baseDirectory, outputFolder)
+        return out.absolute ? out : new File(baseDirectory, outputFolder)
     }
 
     /**
@@ -842,7 +838,7 @@ class Main implements Runnable {
      */
     static File resolveMaybeRelativeToWorld(String path) {
         File f = new File(path)
-        return f.isAbsolute() ? f : new File(baseDirectory, path)
+        return f.absolute ? f : new File(baseDirectory, path)
     }
 
     static void runExtraction() {
@@ -881,7 +877,7 @@ class Main implements Runnable {
         // Create directories
         [outputFolder, booksFolder, duplicatesFolder].each { String folder ->
             File f = new File(folder)
-            if (!f.isAbsolute()) {
+            if (!f.absolute) {
                 f = new File(baseDirectory, folder)
             }
             f.mkdirs()
@@ -918,7 +914,7 @@ class Main implements Runnable {
 
             // Create datapack structures and initialize mcfunction writers for each Minecraft version
             LOGGER.info('Creating Minecraft datapacks...')
-            ['1_13', '1_14', '1_20_5', '1_21'].each { String version ->
+            MC_VERSIONS.each { String version ->
                 // Create datapack directory structure
                 File functionFolder = setupDatapackStructure(version)
 
@@ -947,8 +943,8 @@ class Main implements Runnable {
                 LOGGER.info("Skip common items: ${skipCommonItems}")
 
                 itemDatabase = new ItemDatabase(dbFile, itemLimit)
-                itemDatabase.setWorldPath(baseDirectory)
-                itemDatabase.setExtractionDate(new SimpleDateFormat('yyyy-MM-dd HH:mm:ss', Locale.US).format(new Date()))
+                itemDatabase.worldPath = baseDirectory
+                itemDatabase.extractionDate = new SimpleDateFormat('yyyy-MM-dd HH:mm:ss', Locale.US).format(new Date())
                 itemDatabase.setItemLimitMetadata()
                 itemDatabase.beginTransaction()  // Use transaction for batch inserts
             }
@@ -962,14 +958,14 @@ class Main implements Runnable {
             writeShulkerBoxesToMcfunction()
 
             // Flush and close all mcfunction writers
-            mcfunctionWriters.values().each {
-                it?.flush()
-                it?.close()
+            mcfunctionWriters.values().each { BufferedWriter writer ->
+                writer?.flush()
+                writer?.close()
             }
             // Flush and close all sign mcfunction writers
-            signsMcfunctionWriters.values().each {
-                it?.flush()
-                it?.close()
+            signsMcfunctionWriters.values().each { BufferedWriter writer ->
+                writer?.flush()
+                writer?.close()
             }
 
             // Write CSV exports
@@ -982,9 +978,9 @@ class Main implements Runnable {
                 itemDatabase.commitTransaction()
                 LOGGER.info('')
                 LOGGER.info('Item Index Summary:')
-                LOGGER.info("  Item types indexed: ${itemDatabase.getItemTypeCount()}")
-                LOGGER.info("  Unique items indexed: ${itemDatabase.getTotalItemsIndexed()}")
-                LOGGER.info("  Total items found: ${itemDatabase.getTotalItemCount()}")
+                LOGGER.info("  Item types indexed: ${itemDatabase.itemTypeCount}")
+                LOGGER.info("  Unique items indexed: ${itemDatabase.totalItemsIndexed}")
+                LOGGER.info("  Total items found: ${itemDatabase.totalItemCount}")
                 itemDatabase.close()
                 itemDatabase = null
             }
@@ -1004,13 +1000,13 @@ class Main implements Runnable {
         } catch (IllegalStateException | IOException e) {
             LOGGER.error("Fatal error: ${e.message}", e)
             combinedBooksWriter?.close()
-            mcfunctionWriters.values().each { it?.close() }
+            mcfunctionWriters.values().each { BufferedWriter writer -> writer?.close() }
             // Rollback and close item database on error
             if (itemDatabase) {
                 try {
                     itemDatabase.rollbackTransaction()
                 } catch (java.sql.SQLException ignored) {
-                    // Ignore rollback errors - database may already be closed or in invalid state
+                // Ignore rollback errors - database may already be closed or in invalid state
                 }
                 itemDatabase.close()
                 itemDatabase = null
@@ -1020,15 +1016,15 @@ class Main implements Runnable {
                 saveFailedRegionsState()
             }
             throw e
-            }
         }
+    }
 
     /**
      * Dynamically add a file appender to Logback at runtime
      * This allows us to avoid creating log files until extraction actually runs
      */
     static void addFileAppender(String logFilePath) {
-        LoggerContext lc = (LoggerContext) LoggerFactory.getILoggerFactory()
+        LoggerContext lc = (LoggerContext) LoggerFactory.ILoggerFactory
 
         // Create and configure the encoder
         PatternLayoutEncoder ple = new PatternLayoutEncoder()
@@ -1073,7 +1069,7 @@ class Main implements Runnable {
             return
         }
 
-        if (customNameData.isEmpty()) {
+        if (customNameData.empty) {
             LOGGER.debug('Skipping custom names output: no custom names found')
             return
         }
@@ -1107,7 +1103,7 @@ class Main implements Runnable {
             writer.writeLine('')
 
             // Group by type
-            Map<String, List<Map<String, Object>>> groupedByType = customNameData.groupBy { it.type as String }
+            Map<String, List<Map<String, Object>>> groupedByType = customNameData.groupBy { Map<String, Object> data -> data.type as String }
 
             groupedByType.each { String type, List<Map<String, Object>> items ->
                 writer.writeLine("${type.toUpperCase()}S (${items.size()}):")
@@ -1178,7 +1174,7 @@ class Main implements Runnable {
      *    rarity-filtered by --index-limit
      */
     static void runBlockSearch() {
-        boolean hasSpecificBlocks = searchBlocks && !searchBlocks.isEmpty()
+        boolean hasSpecificBlocks = searchBlocks && !searchBlocks.empty
         boolean hasIndexAllMode = searchBlocksSpecified && !hasSpecificBlocks
         boolean hasBlockSearch = hasSpecificBlocks || hasIndexAllMode
         boolean hasPortalSearch = findPortals
@@ -1200,8 +1196,8 @@ class Main implements Runnable {
             LOGGER.info("Block limit per type: ${indexLimit == 0 ? 'unlimited' : indexLimit}")
 
             blockDatabase = new BlockDatabase(dbFile, indexLimit)
-            blockDatabase.setWorldPath(baseDirectory)
-            blockDatabase.setExtractionDate(new SimpleDateFormat('yyyy-MM-dd HH:mm:ss', Locale.US).format(new Date()))
+            blockDatabase.worldPath = baseDirectory
+            blockDatabase.extractionDate = new SimpleDateFormat('yyyy-MM-dd HH:mm:ss', Locale.US).format(new Date())
             blockDatabase.setBlockLimitMetadata()
         }
 
@@ -1241,8 +1237,8 @@ class Main implements Runnable {
                 // Print summary
                 LOGGER.info('')
                 LOGGER.info('Block Index Summary:')
-                LOGGER.info("  Block types indexed: ${blockDatabase.getBlockTypeCount()}")
-                LOGGER.info("  Total blocks indexed: ${blockDatabase.getTotalBlocksIndexed()}")
+                LOGGER.info("  Block types indexed: ${blockDatabase.blockTypeCount}")
+                LOGGER.info("  Total blocks indexed: ${blockDatabase.totalBlocksIndexed}")
 
                 blockDatabase.close()
                 blockDatabase = null
@@ -1258,9 +1254,9 @@ class Main implements Runnable {
      * 2. Index-all mode: streams from block_index.db database
      */
     static void writeBlockSearchOutput() {
-        boolean hasBlockResults = blockSearchResults && !blockSearchResults.isEmpty()
-        boolean hasIndexAllMode = searchBlocksSpecified && (searchBlocks == null || searchBlocks.isEmpty())
-        boolean hasPortalResults = portalResults && !portalResults.isEmpty()
+        boolean hasBlockResults = blockSearchResults && !blockSearchResults.empty
+        boolean hasIndexAllMode = searchBlocksSpecified && (searchBlocks == null || searchBlocks.empty)
+        boolean hasPortalResults = portalResults && !portalResults.empty
 
         if (!hasBlockResults && !hasIndexAllMode && !hasPortalResults) {
             LOGGER.debug('No block/portal search results to write')
@@ -1324,7 +1320,7 @@ class Main implements Runnable {
             writer.writeLine('')
 
             // Group by dimension
-            Map<String, List<PortalDetector.Portal>> byDimension = portalResults.groupBy { it.dimension }
+            Map<String, List<PortalDetector.Portal>> byDimension = portalResults.groupBy { PortalDetector.Portal portal -> portal.dimension }
 
             byDimension.each { String dimension, List<PortalDetector.Portal> portals ->
                 writer.writeLine("${dimension.toUpperCase()} (${portals.size()} portals):")
@@ -1418,7 +1414,7 @@ class Main implements Runnable {
             writer.writeLine('')
 
             // Group by block type
-            Map<String, List<BlockSearcher.BlockLocation>> byType = blockSearchResults.groupBy { it.blockType }
+            Map<String, List<BlockSearcher.BlockLocation>> byType = blockSearchResults.groupBy { BlockSearcher.BlockLocation block -> block.blockType }
 
             byType.each { String blockType, List<BlockSearcher.BlockLocation> blocks ->
                 writer.writeLine("${blockType} (${blocks.size()} found):")
@@ -1448,7 +1444,7 @@ class Main implements Runnable {
                 writer.writeLine("        \"z\": ${block.z}")
                 writer.writeLine('      },')
                 writer.write('      "properties": {')
-                if (block.properties && !block.properties.isEmpty()) {
+                if (block.properties && !block.properties.empty) {
                     writer.writeLine('')
                     block.properties.eachWithIndex { String k, String v, int idx ->
                         String comma = idx < block.properties.size() - 1 ? ',' : ''
@@ -1518,7 +1514,7 @@ class Main implements Runnable {
         }
 
         try {
-            int totalBlocks = db.getTotalBlockCount()
+            int totalBlocks = db.totalBlockCount
             LOGGER.info("Writing block output from database (${totalBlocks} blocks indexed)")
 
             switch (blockOutputFormat.toLowerCase()) {
@@ -1551,9 +1547,9 @@ class Main implements Runnable {
                 String propsStr = ''
                 if (propsJson) {
                     try {
-                        def props = JSON_SLURPER.parseText(propsJson)
+                        Object props = JSON_SLURPER.parseText(propsJson)
                         if (props instanceof Map) {
-                            propsStr = props.collect { k, v -> "${k}=${v}" }.join(';')
+                            propsStr = props.collect { String k, Object v -> "${k}=${v}" }.join(';')
                         }
                     } catch (groovy.json.JsonException e) {
                         // Catch all exceptions: JSON parsing may fail on malformed data
@@ -1572,7 +1568,7 @@ class Main implements Runnable {
      */
     static void writeBlockTxtFromDb(String outputPath, BlockDatabase db) {
         File txtFile = new File(outputPath, 'blocks.txt')
-        int totalBlocks = db.getTotalBlockCount()
+        int totalBlocks = db.totalBlockCount
 
         txtFile.withWriter('UTF-8') { BufferedWriter writer ->
             writer.writeLine('Block Search Report (Index-All Mode)')
@@ -1581,7 +1577,7 @@ class Main implements Runnable {
             writer.writeLine('')
 
             // Get summary for per-type counts
-            List<Map> summary = db.getSummary()
+            List<Map> summary = db.summary
             summary.each { Map row ->
                 String blockType = row.block_type
                 int count = row.indexed_count
@@ -1596,9 +1592,9 @@ class Main implements Runnable {
                     String propsStr = ''
                     if (block.properties) {
                         try {
-                            def props = JSON_SLURPER.parseText(block.properties)
+                            Object props = JSON_SLURPER.parseText(block.properties)
                             if (props instanceof Map) {
-                                propsStr = " [${props.collect { k, v -> "${k}=${v}" }.join(', ')}]"
+                                propsStr = " [${props.collect { String k, Object v -> "${k}=${v}" }.join(', ')}]"
                             }
                         } catch (groovy.json.JsonException e) {
                             // Empty catch: JSON parsing may fail on malformed data, we simply skip properties and continue
@@ -1618,12 +1614,12 @@ class Main implements Runnable {
      */
     static void writeBlockJsonFromDb(String outputPath, BlockDatabase db) {
         File jsonFile = new File(outputPath, 'blocks.json')
-        int totalBlocks = db.getTotalBlockCount()
+        int totalBlocks = db.totalBlockCount
 
         // Pre-compute summary counts
         Map<String, Integer> byType = [:]
         Map<String, Integer> byDimension = [:]
-        List<Map> summary = db.getSummary()
+        List<Map> summary = db.summary
         summary.each { Map row ->
             byType[row.block_type] = row.indexed_count
         }
@@ -1652,8 +1648,8 @@ class Main implements Runnable {
                 writer.write('      "properties": {')
                 if (propsJson) {
                     try {
-                        def props = JSON_SLURPER.parseText(propsJson)
-                        if (props instanceof Map && !props.isEmpty()) {
+                        Object props = JSON_SLURPER.parseText(propsJson)
+                        if (props instanceof Map && !props.empty) {
                             writer.writeLine('')
                             int propIdx = 0
                             props.each { String k, v ->
@@ -1765,7 +1761,7 @@ class Main implements Runnable {
         }
 
         // Return null if empty or whitespace
-        if (customName && customName.trim().isEmpty()) {
+        if (customName && customName.trim().empty) {
             return null
         }
         return customName?.trim()
@@ -1785,7 +1781,7 @@ class Main implements Runnable {
         }
 
         // Return null if empty or whitespace
-        if (customName && customName.trim().isEmpty()) {
+        if (customName && customName.trim().empty) {
             return null
         }
         return customName?.trim()
@@ -1795,6 +1791,7 @@ class Main implements Runnable {
      * Record a custom name with deduplication
      * Creates hash from: customName|type|itemOrEntityId
      */
+    @SuppressWarnings('ParameterCount')
     static void recordCustomName(String customName, String itemOrEntityId, String type, String location, int x, int y, int z) {
         if (!customName) {
             return
@@ -1842,6 +1839,7 @@ class Main implements Runnable {
      * @param z Z coordinate
      * @return ItemMetadata object or null if item should be skipped
      */
+    @SuppressWarnings('ParameterCount')
     static ItemDatabase.ItemMetadata extractItemMetadata(CompoundTag item, String bookInfo, int x, int y, int z, Integer slotOverride = null) {
         String itemId = item.getString('id')
         if (!itemId) {
@@ -1868,7 +1866,7 @@ class Main implements Runnable {
 
         // Extract count
         if (item.containsKey('Count') || item.containsKey('count')) {
-            def countTag = item.get('Count') ?: item.get('count')
+            Object countTag = item.get('Count') ?: item.get('count')
             if (countTag instanceof NumberTag) {
                 metadata.count = ((NumberTag) countTag).asInt()
             }
@@ -1884,7 +1882,7 @@ class Main implements Runnable {
         // For 1.20.5+ component containers (minecraft:container), the slot may live on the container entry instead;
         // callers can supply slotOverride to preserve uniqueness in the item index.
         if (item.containsKey('Slot') || item.containsKey('slot')) {
-            def slotTag = item.get('Slot') ?: item.get('slot')
+            Object slotTag = item.get('Slot') ?: item.get('slot')
             if (slotTag instanceof NumberTag) {
                 metadata.slot = ((NumberTag) slotTag).asInt()
             }
@@ -1923,7 +1921,7 @@ class Main implements Runnable {
 
         // Damage
         if (hasKey(components, 'minecraft:damage')) {
-            def damageTag = components.get('minecraft:damage')
+            Object damageTag = components.get('minecraft:damage')
             if (damageTag instanceof NumberTag) {
                 metadata.damage = ((NumberTag) damageTag).asInt()
             }
@@ -1935,7 +1933,7 @@ class Main implements Runnable {
             if (hasKey(enchants, 'levels')) {
                 CompoundTag levels = getCompoundTag(enchants, 'levels')
                 levels.keySet().each { String enchantName ->
-                    def levelTag = levels.get(enchantName)
+                    Object levelTag = levels.get(enchantName)
                     if (levelTag instanceof NumberTag) {
                         String shortName = enchantName.replace('minecraft:', '')
                         metadata.enchantments[shortName] = ((NumberTag) levelTag).asInt()
@@ -1950,7 +1948,7 @@ class Main implements Runnable {
             if (hasKey(storedEnchants, 'levels')) {
                 CompoundTag levels = getCompoundTag(storedEnchants, 'levels')
                 levels.keySet().each { String enchantName ->
-                    def levelTag = levels.get(enchantName)
+                    Object levelTag = levels.get(enchantName)
                     if (levelTag instanceof NumberTag) {
                         String shortName = enchantName.replace('minecraft:', '')
                         metadata.storedEnchantments[shortName] = ((NumberTag) levelTag).asInt()
@@ -2014,7 +2012,7 @@ class Main implements Runnable {
 
         // Damage
         if (hasKey(tag, 'Damage')) {
-            def damageTag = tag.get('Damage')
+            Object damageTag = tag.get('Damage')
             if (damageTag instanceof NumberTag) {
                 metadata.damage = ((NumberTag) damageTag).asInt()
             }
@@ -2028,7 +2026,7 @@ class Main implements Runnable {
                     if (enchantTag instanceof CompoundTag) {
                         CompoundTag enchant = (CompoundTag) enchantTag
                         String enchantId = enchant.getString('id')?.replace('minecraft:', '')
-                        def lvlTag = enchant.get('lvl')
+                        Object lvlTag = enchant.get('lvl')
                         if (enchantId && lvlTag instanceof NumberTag) {
                             metadata.enchantments[enchantId] = ((NumberTag) lvlTag).asInt()
                         }
@@ -2045,7 +2043,7 @@ class Main implements Runnable {
                     if (enchantTag instanceof CompoundTag) {
                         CompoundTag enchant = (CompoundTag) enchantTag
                         String enchantId = enchant.getString('id')?.replace('minecraft:', '')
-                        def lvlTag = enchant.get('lvl')
+                        Object lvlTag = enchant.get('lvl')
                         if (enchantId && lvlTag instanceof NumberTag) {
                             metadata.storedEnchantments[enchantId] = ((NumberTag) lvlTag).asInt()
                         }
@@ -2056,7 +2054,7 @@ class Main implements Runnable {
 
         // Unbreakable
         if (hasKey(tag, 'Unbreakable')) {
-            def unbTag = tag.get('Unbreakable')
+            Object unbTag = tag.get('Unbreakable')
             if (unbTag instanceof NumberTag) {
                 metadata.unbreakable = ((NumberTag) unbTag).asInt() != 0
             }
@@ -2097,7 +2095,7 @@ class Main implements Runnable {
         }
 
         // Try to extract container type from "Inside minecraft:X at" pattern
-        def matcher = bookInfo =~ /Inside (minecraft:)?(\w+) at/
+        java.util.regex.Matcher matcher = bookInfo =~ /Inside (minecraft:)?(\w+) at/
         if (matcher.find()) {
             return matcher.group(2)
         }
@@ -2115,11 +2113,7 @@ class Main implements Runnable {
         if (bookInfo.contains('> bundle')) {
             return 'bundle'
         }
-        if (bookInfo.contains('> copper_chest')) {
-            return 'copper_chest'
-        }
-
-        return 'unknown'
+        return bookInfo.contains('> copper_chest') ? 'copper_chest' : 'unknown'
     }
 
     /**
@@ -2145,11 +2139,7 @@ class Main implements Runnable {
         }
 
         // Default to overworld for region files without dimension markers
-        if (bookInfo.contains('region/') || bookInfo.contains('Chunk [')) {
-            return 'overworld'
-        }
-
-        return null
+        return (bookInfo.contains('region/') || bookInfo.contains('Chunk [')) ? 'overworld' : null
     }
 
     /**
@@ -2161,7 +2151,7 @@ class Main implements Runnable {
             return null
         }
 
-        def matcher = bookInfo =~ /of player ([0-9a-fA-F-]+)\.dat/
+        java.util.regex.Matcher matcher = bookInfo =~ /of player ([0-9a-fA-F-]+)\.dat/
         if (matcher.find()) {
             return matcher.group(1)
         }
@@ -2177,7 +2167,7 @@ class Main implements Runnable {
             return null
         }
 
-        def matcher = bookInfo =~ /\((r\.-?\d+\.-?\d+\.mca)\)/
+        java.util.regex.Matcher matcher = bookInfo =~ /\((r\.-?\d+\.-?\d+\.mca)\)/
         if (matcher.find()) {
             return matcher.group(1)
         }
@@ -2235,7 +2225,11 @@ class Main implements Runnable {
      */
     static Map<String, Object> allocateSignPosition(List<String> lines, List<Object> originalCoords, String signInfo) {
         String signKey = lines.join('|')  // Use text as unique key
-        if (!signsByHash.containsKey(signKey)) {
+        if (signsByHash.containsKey(signKey)) {
+            // Duplicate sign - increment Z offset
+            Map<String, Object> existing = signsByHash[signKey]
+            existing.z++
+        } else {
             signsByHash[signKey] = [
                 x: signXCoordinate,
                 z: 0,  // First occurrence at Z 0, duplicates at Z+1, Z+2, etc.
@@ -2246,10 +2240,6 @@ class Main implements Runnable {
                 signInfo: signInfo
             ]
             signXCoordinate++
-        } else {
-            // Duplicate sign - increment Z offset
-            Map<String, Object> existing = signsByHash[signKey]
-            existing.z++
         }
         return signsByHash[signKey]
     }
@@ -2295,7 +2285,7 @@ class Main implements Runnable {
         // Allocate coordinates once for all versions
         Map<String, Object> position = allocateSignPosition(frontLines, originalCoords, signInfo)
 
-        ['1_13', '1_14', '1_20_5', '1_21'].each { String version ->
+        MC_VERSIONS.each { String version ->
             BufferedWriter writer = signsMcfunctionWriters[version]
             if (writer) {
                 try {
@@ -2332,7 +2322,7 @@ class Main implements Runnable {
             generation: generation
         ])
 
-        ['1_13', '1_14', '1_20_5', '1_21'].each { String version ->
+        MC_VERSIONS.each { String version ->
             BufferedWriter writer = mcfunctionWriters[version]
             if (writer) {
                 try {
@@ -2351,7 +2341,7 @@ class Main implements Runnable {
      * Called after all books have been extracted and collected by author
      */
     static void writeShulkerBoxesToMcfunction() {
-        if (booksByAuthor.isEmpty()) {
+        if (booksByAuthor.empty) {
             LOGGER.debug('No books collected by author, skipping shulker box generation')
             return
         }
@@ -2368,7 +2358,7 @@ class Main implements Runnable {
             LOGGER.debug("Author '${author}' has ${authorBooks.size()} books requiring ${boxCount} shulker box(es)")
 
             (0..<boxCount).each { int boxIndex ->
-                ['1_13', '1_14', '1_20_5', '1_21'].each { String version ->
+                MC_VERSIONS.each { String version ->
                     BufferedWriter writer = mcfunctionWriters[version]
                     if (writer) {
                         try {
@@ -2408,7 +2398,7 @@ class Main implements Runnable {
     /**
      * Read books from player data files (player inventories and ender chests)
      */
-    public static void readPlayerData() {
+    static void readPlayerData() {
         LOGGER.debug('Starting readPlayerData()')
         File folder = new File(baseDirectory, 'playerdata')
 
@@ -2485,7 +2475,7 @@ class Main implements Runnable {
      * - Old format: "Text1", "Text2", "Text3", "Text4" fields
      * - New format: "front_text"/"back_text" with "messages" array
      */
-    public static void readSignsAndBooks() {
+    static void readSignsAndBooks() {
         LOGGER.debug('Starting readSignsAndBooks()')
         File folder = new File(baseDirectory, 'region')
 
@@ -2666,7 +2656,7 @@ class Main implements Runnable {
      * - Removed "Level" wrapper tag
      * - Renamed "Entities" → "entities"
      */
-    public static void readEntities() {
+    static void readEntities() {
         LOGGER.debug('Starting readEntities()')
         File folder = new File(baseDirectory, 'entities')
 
@@ -2823,7 +2813,8 @@ class Main implements Runnable {
      * - Flower Pot (can only hold flowers/plants)
      * - Jukebox (can only hold music discs)
      */
-    public static void parseItem(CompoundTag item, String bookInfo, int x = 0, int y = 0, int z = 0, Integer slotOverride = null) {
+    @SuppressWarnings('ParameterCount')
+    static void parseItem(CompoundTag item, String bookInfo, int x = 0, int y = 0, int z = 0, Integer slotOverride = null) {
         String itemId = item.getString('id')
         if (itemId && !itemId.contains(':')) {
             itemId = "minecraft:${itemId}"
@@ -2865,7 +2856,7 @@ class Main implements Runnable {
             // so two shulkers at the same (x,y,z) don't collide in the SQLite UNIQUE constraint.
             Integer parentSlot = slotOverride
             if (parentSlot == null && (item.containsKey('Slot') || item.containsKey('slot'))) {
-                def parentSlotTag = item.get('Slot') ?: item.get('slot')
+                Object parentSlotTag = item.get('Slot') ?: item.get('slot')
                 if (parentSlotTag instanceof NumberTag) {
                     parentSlot = ((NumberTag) parentSlotTag).asInt()
                 }
@@ -2880,7 +2871,7 @@ class Main implements Runnable {
                         CompoundTag shelkerItem = getCompoundTag(containerEntry, 'item')
                         Integer slot = null
                         if (containerEntry.containsKey('slot')) {
-                            def slotTag = containerEntry.get('slot')
+                            Object slotTag = containerEntry.get('slot')
                             if (slotTag instanceof NumberTag) {
                                 slot = ((NumberTag) slotTag).asInt()
                             }
@@ -2901,7 +2892,7 @@ class Main implements Runnable {
                     // when multiple shulkers exist at the same coordinates.
                     Integer innerSlot = null
                     if (shelkerItem.containsKey('Slot') || shelkerItem.containsKey('slot')) {
-                        def innerSlotTag = shelkerItem.get('Slot') ?: shelkerItem.get('slot')
+                        Object innerSlotTag = shelkerItem.get('Slot') ?: shelkerItem.get('slot')
                         if (innerSlotTag instanceof NumberTag) {
                             innerSlot = ((NumberTag) innerSlotTag).asInt()
                         }
@@ -2927,7 +2918,7 @@ class Main implements Runnable {
                     // Same uniqueness trick as shulkers: prefix list index with parent slot.
                     Integer parentSlot = slotOverride
                     if (parentSlot == null && (item.containsKey('Slot') || item.containsKey('slot'))) {
-                        def parentSlotTag = item.get('Slot') ?: item.get('slot')
+                        Object parentSlotTag = item.get('Slot') ?: item.get('slot')
                         if (parentSlotTag instanceof NumberTag) {
                             parentSlot = ((NumberTag) parentSlotTag).asInt()
                         }
@@ -2958,7 +2949,7 @@ class Main implements Runnable {
                 if (hasKey(components, 'minecraft:container')) {
                     Integer parentSlot = slotOverride
                     if (parentSlot == null && (item.containsKey('Slot') || item.containsKey('slot'))) {
-                        def parentSlotTag = item.get('Slot') ?: item.get('slot')
+                        Object parentSlotTag = item.get('Slot') ?: item.get('slot')
                         if (parentSlotTag instanceof NumberTag) {
                             parentSlot = ((NumberTag) parentSlotTag).asInt()
                         }
@@ -2968,7 +2959,7 @@ class Main implements Runnable {
                         CompoundTag chestItem = getCompoundTag(containerEntry, 'item')
                         Integer slot = null
                         if (containerEntry.containsKey('slot')) {
-                            def slotTag = containerEntry.get('slot')
+                            Object slotTag = containerEntry.get('slot')
                             if (slotTag instanceof NumberTag) {
                                 slot = ((NumberTag) slotTag).asInt()
                             }
@@ -2988,7 +2979,7 @@ class Main implements Runnable {
                     // Old format: items have Slot; still prefix with parent slot (if known) for uniqueness.
                     Integer parentSlot = slotOverride
                     if (parentSlot == null && (item.containsKey('Slot') || item.containsKey('slot'))) {
-                        def parentSlotTag = item.get('Slot') ?: item.get('slot')
+                        Object parentSlotTag = item.get('Slot') ?: item.get('slot')
                         if (parentSlotTag instanceof NumberTag) {
                             parentSlot = ((NumberTag) parentSlotTag).asInt()
                         }
@@ -2996,7 +2987,7 @@ class Main implements Runnable {
 
                     Integer innerSlot = null
                     if (chestItem.containsKey('Slot') || chestItem.containsKey('slot')) {
-                        def innerSlotTag = chestItem.get('Slot') ?: chestItem.get('slot')
+                        Object innerSlotTag = chestItem.get('Slot') ?: chestItem.get('slot')
                         if (innerSlotTag instanceof NumberTag) {
                             innerSlot = ((NumberTag) innerSlotTag).asInt()
                         }
@@ -3035,7 +3026,7 @@ class Main implements Runnable {
      * - Defaults to 0 if not present
      * - Used for original-prioritization in duplicates folder
      */
-    public static void readWrittenBook(CompoundTag item, String bookInfo) {
+    static void readWrittenBook(CompoundTag item, String bookInfo) {
         CompoundTag tag = null
         ListTag<?> pages = null
         String format = null
@@ -3278,7 +3269,7 @@ class Main implements Runnable {
      * - Changed book data location to "minecraft:writable_book_content"
      * - Pages changed from string list to compound list with "raw"/"filtered" fields containing plain strings
      */
-    public static void readWritableBook(CompoundTag item, String bookInfo) {
+    static void readWritableBook(CompoundTag item, String bookInfo) {
         ListTag<?> pages = null
         String format = null
 
@@ -3507,7 +3498,7 @@ class Main implements Runnable {
      * - Pre-1.20.5: Pages are string list
      * - 1.20.5+: Pages are compound list with "raw"/"filtered" fields
      */
-    public static String extractPageText(ListTag<?> pages, int index) {
+    static String extractPageText(ListTag<?> pages, int index) {
         return TextUtils.extractPageText(pages, index)
     }
 
@@ -3542,7 +3533,7 @@ class Main implements Runnable {
     /**
      * Parse sign in old format (Text1-Text4 fields, used before 1.20)
      */
-    public static void parseSign(CompoundTag tileEntity, BufferedWriter signWriter, String signInfo) {
+    static void parseSign(CompoundTag tileEntity, BufferedWriter signWriter, String signInfo) {
         LOGGER.debug('parseSign() - Extracting text from old format sign')
 
         // Get the StringTag objects and extract their values
@@ -3564,7 +3555,7 @@ class Main implements Runnable {
         String line4 = extractSignLineText(text4)
 
         // Check if sign is completely empty
-        if (line1.isEmpty() && line2.isEmpty() && line3.isEmpty() && line4.isEmpty()) {
+        if (line1.empty && line2.empty && line3.empty && line4.empty) {
             emptySignsRemoved++
             List<Object> coords = extractSignCoordinates(signInfo)
             LOGGER.debug("Removed empty sign at coordinates: ${coords[0]}, ${coords[1]}, ${coords[2]}")
@@ -3613,7 +3604,7 @@ class Main implements Runnable {
      * Parse sign in new format (front_text/back_text fields, introduced in 1.20)
      * The front_text/back_text compounds contain a "messages" array of 4 text component JSON strings
      */
-    public static void parseSignNew(CompoundTag tileEntity, BufferedWriter signWriter, String signInfo) {
+    static void parseSignNew(CompoundTag tileEntity, BufferedWriter signWriter, String signInfo) {
         LOGGER.debug('parseSignNew() - Extracting text from new format sign')
 
         CompoundTag frontText = getCompoundTag(tileEntity, 'front_text')
@@ -3647,7 +3638,7 @@ class Main implements Runnable {
         List<String> extractedBackLines = backSignLines ? backSignLines.collect { String line -> extractSignLineText(line) } : null
 
         // Check if sign is completely empty
-        if (extractedFrontLines.every { it.isEmpty() }) {
+        if (extractedFrontLines.every { String line -> line.empty }) {
             emptySignsRemoved++
             List<Object> coords = extractSignCoordinates(signInfo)
             LOGGER.debug("Removed empty sign at coordinates: ${coords[0]}, ${coords[1]}, ${coords[2]}")
@@ -3682,7 +3673,7 @@ class Main implements Runnable {
             line3: paddedLines.size() > 2 ? paddedLines[2] : '',
             line4: paddedLines.size() > 3 ? paddedLines[3] : ''
         ])
-    }
+        }
 
     static String extractSignLineText(String line) {
         return TextUtils.extractSignLineText(line)
@@ -3745,4 +3736,4 @@ class Main implements Runnable {
         return NbtUtils.isCompoundList(list)
     }
 
-        }
+    }

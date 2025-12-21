@@ -25,6 +25,7 @@ class PortalDetector {
     /**
      * Data class representing a detected portal structure
      */
+    @SuppressWarnings('ParameterCount')
     static class Portal {
 
         String dimension
@@ -48,7 +49,7 @@ class PortalDetector {
             this.centerX = centerX
             this.centerY = centerY
             this.centerZ = centerZ
-               }
+        }
 
         String toCsvRow() {
             return "${dimension},${anchorX},${anchorY},${anchorZ}," +
@@ -216,21 +217,14 @@ class PortalDetector {
         int y = block.y
         int z = block.z
 
-        if (axis == 'z') {
+        // North-south (Z axis) or East-west (X axis) alignment
+        return (axis == 'z') ?
             // Portal aligned north-south: varies on Z (width) and Y (height), X is constant
-            return [
-                "${x},${y},${z - 1}".toString(),  // left (north)
-                "${x},${y},${z + 1}".toString(),  // right (south)
-                "${x},${y - 1},${z}".toString(),  // down
-                "${x},${y + 1},${z}".toString()   // up
-            ]
-        }
-        // Portal aligned east-west: varies on X (width) and Y (height), Z is constant
-        return [
-            "${x - 1},${y},${z}".toString(),  // left (west)
-            "${x + 1},${y},${z}".toString(),  // right (east)
-            "${x},${y - 1},${z}".toString(),  // down
-            "${x},${y + 1},${z}".toString()   // up
+            ["${x},${y},${z - 1}".toString(), "${x},${y},${z + 1}".toString(),
+             "${x},${y - 1},${z}".toString(), "${x},${y + 1},${z}".toString()] :
+            // Portal aligned east-west: varies on X (width) and Y (height), Z is constant
+            ["${x - 1},${y},${z}".toString(), "${x + 1},${y},${z}".toString(),
+             "${x},${y - 1},${z}".toString(), "${x},${y + 1},${z}".toString()
         ]
     }
 
@@ -300,7 +294,7 @@ class PortalDetector {
             cluster.size(),
             centerX, centerY, centerZ
         )
-                                           }
+                                     }
 
     /**
      * Find all portals in a world (convenience method)

@@ -31,9 +31,7 @@ import javafx.stage.DirectoryChooser
 import javafx.stage.Stage
 import javafx.util.Duration
 import java.awt.Desktop
-import java.net.URI
 import java.text.SimpleDateFormat
-import java.util.Locale
 
 /**
  * Modern GUI for ReadSignsAndBooks using pure JavaFX
@@ -66,7 +64,7 @@ class GUI extends Application {
 
         // Set application icon (using 512px for best quality - JavaFX will scale as needed)
         try {
-            def iconStream = getClass().getResourceAsStream('/icons/icon-512.png')
+            InputStream iconStream = getClass().getResourceAsStream('/icons/icon-512.png')
             if (iconStream) {
                 stage.icons.add(new javafx.scene.image.Image(iconStream))
             }
@@ -79,13 +77,13 @@ class GUI extends Application {
         // (GitHub issue #12: TextArea.appendText() has O(n) performance, causing UI freeze with large logs)
         final int maxLogChars = 80000  // ~80KB of log text (prevents exponential slowdown)
 
-        GuiLogAppender.logHandler = { message ->
-            def currentLength = logArea.text.length()
-            def newLength = currentLength + message.length()
+        GuiLogAppender.logHandler = { String message ->
+            int currentLength = logArea.text.length()
+            int newLength = currentLength + message.length()
 
             if (newLength > maxLogChars) {
                 // Remove oldest ~20% of text to make room (avoids frequent trimming)
-                def trimAmount = (int)(maxLogChars * 0.2) + message.length()
+                int trimAmount = (int)(maxLogChars * 0.2) + message.length()
                 logArea.deleteText(0, Math.min(trimAmount, currentLength))
             }
             logArea.appendText(message)
@@ -97,70 +95,70 @@ class GUI extends Application {
         }
 
         // Create menu bar
-        def menuBar = setupMenuBar()
+        MenuBar menuBar = setupMenuBar()
 
         // Main content layout
-        def contentRoot = new VBox(15)
+        VBox contentRoot = new VBox(15)
         contentRoot.padding = new Insets(20)
 
         // Title
-        def title = new Label('Minecraft Book & Sign Extractor')
+        Label title = new Label('Minecraft Book & Sign Extractor')
         title.style = '-fx-font-size: 20px; -fx-font-weight: bold;'
 
         // World directory selection
-        def worldBox = new HBox(10)
+        HBox worldBox = new HBox(10)
         worldBox.alignment = Pos.CENTER_LEFT
         worldPathField = new TextField()
         worldPathField.promptText = 'Select Minecraft world folder or drag & drop here...'
         worldPathField.editable = false
         HBox.setHgrow(worldPathField, Priority.ALWAYS)  // Make it grow horizontally
         setupDragAndDrop(worldPathField, true)  // Enable drag-and-drop for world folder
-        def worldBtn = new Button('Browse...')
+        Button worldBtn = new Button('Browse...')
         worldBtn.onAction = { event -> selectWorldDirectory(stage) }
-        worldBox.children.addAll(new Label('World Directory:').with { label -> label.minWidth = 120; label }, worldPathField, worldBtn)
+        worldBox.children.addAll(new Label('World Directory:').with { Label label -> label.minWidth = 120; label }, worldPathField, worldBtn)
 
         // Output folder selection (optional)
-        def outputBox = new HBox(10)
+        HBox outputBox = new HBox(10)
         outputBox.alignment = Pos.CENTER_LEFT
         outputPathField = new TextField()
         outputPathField.editable = false
         HBox.setHgrow(outputPathField, Priority.ALWAYS)  // Make it grow horizontally
         updateOutputFolderPrompt()  // Set initial prompt text
         setupDragAndDrop(outputPathField, false)  // Enable drag-and-drop for output folder
-        def outputBtn = new Button('Browse...')
+        Button outputBtn = new Button('Browse...')
         outputBtn.onAction = { event -> selectOutputFolder(stage) }
-        outputBox.children.addAll(new Label('Output Folder:').with { label -> label.minWidth = 120; label }, outputPathField, outputBtn)
+        outputBox.children.addAll(new Label('Output Folder:').with { Label label -> label.minWidth = 120; label }, outputPathField, outputBtn)
 
         // Remove formatting checkbox
-        def formattingBox = new HBox(10)
+        HBox formattingBox = new HBox(10)
         formattingBox.alignment = Pos.CENTER_LEFT
         removeFormattingCheckBox = new CheckBox('Remove Minecraft formatting codes (§ codes)')
         removeFormattingCheckBox.selected = false
-        formattingBox.children.addAll(new Label('Options:').with { label -> label.minWidth = 120; label }, removeFormattingCheckBox)
+        formattingBox.children.addAll(new Label('Options:').with { Label label -> label.minWidth = 120; label }, removeFormattingCheckBox)
 
         // Extract custom names checkbox
-        def customNamesBox = new HBox(10)
+        HBox customNamesBox = new HBox(10)
         customNamesBox.alignment = Pos.CENTER_LEFT
         extractCustomNamesCheckBox = new CheckBox('Extract custom names from items and entities')
         extractCustomNamesCheckBox.selected = false
-        customNamesBox.children.addAll(new Label('').with { label -> label.minWidth = 120; label }, extractCustomNamesCheckBox)
+        customNamesBox.children.addAll(new Label('').with { Label label -> label.minWidth = 120; label }, extractCustomNamesCheckBox)
 
         // Block Search section with visual grouping
-        def blockSearchSection = new VBox(8)
+        VBox blockSearchSection = new VBox(8)
         blockSearchSection.style = '-fx-padding: 10; -fx-background-color: #f5f5f5; -fx-background-radius: 5;'
 
-        def blockSearchHeader = new Label('Block Search Options')
+        Label blockSearchHeader = new Label('Block Search Options')
         blockSearchHeader.style = '-fx-font-weight: bold; -fx-font-size: 12px;'
 
         // Find portals checkbox
-        def findPortalsBox = new HBox(10)
+        HBox findPortalsBox = new HBox(10)
         findPortalsBox.alignment = Pos.CENTER_LEFT
         findPortalsCheckBox = new CheckBox('Find nether portals (with intelligent clustering)')
         findPortalsCheckBox.selected = false
         findPortalsBox.children.addAll(findPortalsCheckBox)
 
         // Dimension selection checkboxes
-        def dimensionsBox = new HBox(10)
+        HBox dimensionsBox = new HBox(10)
         dimensionsBox.alignment = Pos.CENTER_LEFT
         overworldCheckBox = new CheckBox('Overworld')
         overworldCheckBox.selected = true
@@ -168,25 +166,25 @@ class GUI extends Application {
         netherCheckBox.selected = true
         endCheckBox = new CheckBox('The End')
         endCheckBox.selected = true
-        def dimensionsLabel = new Label('Search dimensions:')
+        Label dimensionsLabel = new Label('Search dimensions:')
         dimensionsBox.children.addAll(dimensionsLabel, overworldCheckBox, netherCheckBox, endCheckBox)
 
         blockSearchSection.children.addAll(blockSearchHeader, findPortalsBox, dimensionsBox)
 
         // Action buttons (left-aligned)
-        def btnBox = new HBox(15)
+        HBox btnBox = new HBox(15)
         btnBox.alignment = Pos.CENTER_LEFT
         extractBtn = new Button('Extract')
         extractBtn.minWidth = 150
         extractBtn.style = '-fx-font-size: 14px; -fx-background-color: #4CAF50; -fx-text-fill: white;'
         extractBtn.onAction = { event -> runExtraction() }
-        def openFolderBtn = new Button('Open Output Folder')
+        Button openFolderBtn = new Button('Open Output Folder')
         openFolderBtn.minWidth = 130
         openFolderBtn.onAction = { event -> openOutputFolder() }
-        def clearBtn = new Button('Clear Log')
+        Button clearBtn = new Button('Clear Log')
         clearBtn.minWidth = 100
         clearBtn.onAction = { event -> logArea.text = '' }
-        def exitBtn = new Button('Exit')
+        Button exitBtn = new Button('Exit')
         exitBtn.minWidth = 100
         exitBtn.onAction = { event -> Platform.exit() }
         btnBox.children.addAll(extractBtn, openFolderBtn, clearBtn, exitBtn)
@@ -215,12 +213,12 @@ class GUI extends Application {
             btnBox,
             new Separator(),
             statusLabel,
-            new Label('Extraction Log:').with { label -> label.style = '-fx-font-weight: bold;'; label },
+            new Label('Extraction Log:').with { Label label -> label.style = '-fx-font-weight: bold;'; label },
             logArea
         )
 
         // Main layout with menu bar
-        def root = new BorderPane()
+        BorderPane root = new BorderPane()
         root.top = menuBar
         root.center = contentRoot
 
@@ -244,12 +242,12 @@ class GUI extends Application {
      */
     void parseGuiArguments() {
         // Skip when not launched via Application.launch() (e.g., TestFX tests)
-        def params = parameters
+        Application.Parameters params = parameters
         if (params == null) {
             return
         }
 
-        def args = params.raw as String[]
+        String[] args = params.raw as String[]
 
         // Use Picocli to parse args into Main's static fields
         // parseArgs doesn't execute run(), just populates the @Option fields
@@ -257,7 +255,7 @@ class GUI extends Application {
 
         // Apply parsed values to GUI controls
         if (Main.customWorldDirectory) {
-            def dir = new File(Main.customWorldDirectory)
+            File dir = new File(Main.customWorldDirectory)
             if (dir.exists() && dir.directory) {
                 worldDir = dir
                 worldPathField.text = dir.absolutePath
@@ -300,12 +298,12 @@ class GUI extends Application {
      * Shows 3-second countdown in status label, then begins extraction.
      */
     void handleAutoStart() {
-        logArea.appendText("Auto-start enabled. Beginning extraction in 3 seconds...\n")
+        logArea.appendText('Auto-start enabled. Beginning extraction in 3 seconds...\n')
 
         // Countdown timeline: 3... 2... 1... Extract!
         int[] countdown = [3]  // Use array to allow modification in closure
 
-        def countdownTimer = new Timeline(new KeyFrame(Duration.seconds(1), { event ->
+        Timeline countdownTimer = new Timeline(new KeyFrame(Duration.seconds(1), { event ->
             countdown[0]--
             if (countdown[0] > 0) {
                 statusLabel.text = "Auto-starting in ${countdown[0]}..."
@@ -324,15 +322,15 @@ class GUI extends Application {
     }
 
     MenuBar setupMenuBar() {
-        def menuBar = new MenuBar()
+        MenuBar menuBar = new MenuBar()
 
         // Help menu
-        def helpMenu = new Menu('Help')
+        Menu helpMenu = new Menu('Help')
 
-        def githubItem = new MenuItem('View on GitHub')
+        MenuItem githubItem = new MenuItem('View on GitHub')
         githubItem.onAction = { event ->
             try {
-                def desktop = Desktop.desktop
+                Desktop desktop = Desktop.desktop
                 if (desktop && desktop.isSupported(Desktop.Action.BROWSE)) {
                     desktop.browse(new URI('https://github.com/Vibed/ReadSignsAndBooks.jar'))
                 } else {
@@ -344,7 +342,7 @@ class GUI extends Application {
             }
         }
 
-        def aboutItem = new MenuItem('About')
+        MenuItem aboutItem = new MenuItem('About')
         aboutItem.onAction = { event ->
             showAlert('About',
                 'ReadSignsAndBooks v1.0.0\n\n' +
@@ -365,9 +363,9 @@ class GUI extends Application {
                 Alert.AlertType.INFORMATION)
         }
 
-        def separator = new SeparatorMenuItem()
+        SeparatorMenuItem separator = new SeparatorMenuItem()
 
-        def licensesItem = new MenuItem('Third-Party Licenses')
+        MenuItem licensesItem = new MenuItem('Third-Party Licenses')
         licensesItem.onAction = { event ->
             showLicensesDialog()
         }
@@ -379,7 +377,7 @@ class GUI extends Application {
     }
 
     void selectWorldDirectory(Stage stage) {
-        def chooser = new DirectoryChooser(title: 'Select Minecraft World Directory')
+        DirectoryChooser chooser = new DirectoryChooser(title: 'Select Minecraft World Directory')
         worldDir = chooser.showDialog(stage)
         if (worldDir) {
             worldPathField.text = worldDir.absolutePath
@@ -388,7 +386,7 @@ class GUI extends Application {
     }
 
     void selectOutputFolder(Stage stage) {
-        def chooser = new DirectoryChooser(title: 'Select Output Folder')
+        DirectoryChooser chooser = new DirectoryChooser(title: 'Select Output Folder')
         outputFolder = chooser.showDialog(stage)
         if (outputFolder) {
             outputPathField.text = outputFolder.absolutePath
@@ -397,8 +395,8 @@ class GUI extends Application {
     }
 
     void updateOutputFolderPrompt() {
-        def dateStamp = new SimpleDateFormat('yyyy-MM-dd', Locale.US).format(new Date())
-        def defaultPath
+        String dateStamp = new SimpleDateFormat('yyyy-MM-dd', Locale.US).format(new Date())
+        String defaultPath
 
         if (worldDir) {
             defaultPath = new File(worldDir, "ReadBooks${File.separator}${dateStamp}").absolutePath
@@ -423,7 +421,7 @@ class GUI extends Application {
         }
 
         try {
-            def desktop = Desktop.desktop
+            Desktop desktop = Desktop.desktop
             if (desktop && desktop.isSupported(Desktop.Action.OPEN)) {
                 desktop.open(actualOutputFolder)
             } else {
@@ -444,9 +442,9 @@ class GUI extends Application {
         // Note: Timeline KeyFrame handlers already run on the JavaFX Application Thread,
         // so no Platform.runLater is needed (see GitHub issue #12)
         elapsedTimeTimer = new Timeline(new KeyFrame(Duration.seconds(1), { event ->
-            def elapsed = (System.currentTimeMillis() - extractionStartTime) / 1000
-            def minutes = (elapsed / 60) as int
-            def seconds = (elapsed % 60) as int
+            long elapsed = (System.currentTimeMillis() - extractionStartTime) / 1000
+            int minutes = (elapsed / 60) as int
+            int seconds = (elapsed % 60) as int
             extractBtn.text = String.format('Extracting... %02d:%02d', minutes, seconds)
         }))
         elapsedTimeTimer.cycleCount = Timeline.INDEFINITE
@@ -456,7 +454,7 @@ class GUI extends Application {
         Thread.start {
             try {
                 // Prepare arguments - let CLI handle defaults if not set
-                def args = []
+                List<String> args = []
                 if (worldDir) {
                     args += ['-w', worldDir.absolutePath]
                 }
@@ -474,7 +472,7 @@ class GUI extends Application {
                 }
 
                 // Build dimensions list from checkboxes
-                def selectedDimensions = []
+                List<String> selectedDimensions = []
                 if (overworldCheckBox.selected) {
                     selectedDimensions += 'overworld'
                 }
@@ -498,17 +496,17 @@ class GUI extends Application {
                     extractBtn.disable = false
                     extractBtn.text = 'Extract'
 
-                    def totalElapsed = (System.currentTimeMillis() - extractionStartTime) / 1000
-                    def minutes = (totalElapsed / 60) as int
-                    def seconds = (totalElapsed % 60) as int
+                    long totalElapsed = (System.currentTimeMillis() - extractionStartTime) / 1000
+                    int minutes = (totalElapsed / 60) as int
+                    int seconds = (totalElapsed % 60) as int
 
                     // Build summary message
-                    def portalCount = Main.portalResults?.size() ?: 0
-                    def portalStr = portalCount > 0 ? ", ${portalCount} portals" : ''
+                    int portalCount = Main.portalResults?.size() ?: 0
+                    String portalStr = portalCount > 0 ? ", ${portalCount} portals" : ''
                     statusLabel.text = String.format('Complete! %d books, %d signs%s (took %02d:%02d)',
                         Main.bookHashes.size(), Main.signHashes.size(), portalStr, minutes, seconds)
 
-                    def alertMsg = "Extraction complete!\n\nBooks: ${Main.bookHashes.size()}\nSigns: ${Main.signHashes.size()}"
+                    String alertMsg = "Extraction complete!\n\nBooks: ${Main.bookHashes.size()}\nSigns: ${Main.signHashes.size()}"
                     if (portalCount > 0) {
                         alertMsg += "\nPortals: ${portalCount}"
                     }
@@ -559,9 +557,9 @@ class GUI extends Application {
             boolean success = false
 
             if (db.hasFiles()) {
-                def files = db.files
+                List<File> files = db.files
                 if (files && !files.empty) {
-                    def droppedFile = files[0]  // Take first file/folder
+                    File droppedFile = files[0]  // Take first file/folder
 
                     if (droppedFile.directory) {
                         if (isWorldFolder) {
@@ -594,8 +592,8 @@ class GUI extends Application {
     void applyTheme() {
         // Use jSystemThemeDetector to detect system theme
         try {
-            def detector = OsThemeDetector.detector
-            def isDark = detector.dark
+            OsThemeDetector detector = OsThemeDetector.detector
+            boolean isDark = detector.dark
 
             // Apply AtlantaFX theme based on system preference
             if (isDark) {
@@ -611,19 +609,19 @@ class GUI extends Application {
 
     void showLicensesDialog() {
         // Create a new stage for the licenses dialog
-        def dialog = new Stage()
+        Stage dialog = new Stage()
         dialog.title = 'Third-Party Licenses'
         dialog.initOwner(statusLabel.scene.window)
 
         // Create TextArea to display license content
-        def licenseText = new TextArea()
+        TextArea licenseText = new TextArea()
         licenseText.editable = false
         licenseText.wrapText = true
         licenseText.style = '-fx-font-family: "Courier New"; -fx-font-size: 11px; -fx-font-style: italic;'
 
         // Try to load the license file from resources
         try {
-            def licenseStream = getClass().getResourceAsStream('/licenses/THIRD-PARTY-LICENSES.txt')
+            InputStream licenseStream = getClass().getResourceAsStream('/licenses/THIRD-PARTY-LICENSES.txt')
             if (licenseStream) {
                 licenseText.text = licenseStream.text
             } else {
@@ -646,16 +644,16 @@ class GUI extends Application {
         }
 
         // Create close button
-        def closeBtn = new Button('Close')
+        Button closeBtn = new Button('Close')
         closeBtn.onAction = { dialog.close() }
         closeBtn.minWidth = 100
 
         // Layout
-        def btnBox = new HBox(closeBtn)
+        HBox btnBox = new HBox(closeBtn)
         btnBox.alignment = Pos.CENTER
         btnBox.padding = new Insets(10)
 
-        def root = new BorderPane()
+        BorderPane root = new BorderPane()
         root.center = licenseText
         root.bottom = btnBox
         BorderPane.setMargin(licenseText, new Insets(10))
@@ -666,7 +664,7 @@ class GUI extends Application {
 
     static void showAlert(String title, String message, Alert.AlertType type) {
         Platform.runLater {
-            def alert = new Alert(type)
+            Alert alert = new Alert(type)
             alert.title = title
             alert.headerText = null
             alert.contentText = message
