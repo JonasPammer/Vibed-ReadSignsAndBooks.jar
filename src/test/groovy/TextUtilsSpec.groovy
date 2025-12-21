@@ -1,7 +1,6 @@
 import net.querz.nbt.tag.CompoundTag
 import net.querz.nbt.tag.ListTag
 import net.querz.nbt.tag.StringTag
-import org.json.JSONArray
 import org.json.JSONObject
 import spock.lang.Specification
 import spock.lang.Unroll
@@ -500,4 +499,5 @@ class TextUtilsSpec extends Specification {
         where:
         code << TextUtils.COLOR_CODES
     }
+
 }

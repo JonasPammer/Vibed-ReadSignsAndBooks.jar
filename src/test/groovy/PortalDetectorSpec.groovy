@@ -59,7 +59,7 @@ class PortalDetectorSpec extends Specification {
         )
 
         when:
-        String str = portal.toString()
+        String str = portal
 
         then:
         str.contains('overworld')
@@ -78,9 +78,9 @@ class PortalDetectorSpec extends Specification {
     def "groupByDimensionAndAxis should group blocks by dimension"() {
         given:
         List<BlockSearcher.BlockLocation> blocks = [
-            createBlockLocation('overworld', 'z', 0, 0, 0),
-            createBlockLocation('nether', 'z', 0, 0, 0),
-            createBlockLocation('overworld', 'z', 10, 0, 10)
+            makeBlockLocation('overworld', 'z', 0, 0, 0),
+            makeBlockLocation('nether', 'z', 0, 0, 0),
+            makeBlockLocation('overworld', 'z', 10, 0, 10)
         ]
 
         when:
@@ -98,9 +98,9 @@ class PortalDetectorSpec extends Specification {
     def "groupByDimensionAndAxis should group blocks by axis"() {
         given:
         List<BlockSearcher.BlockLocation> blocks = [
-            createBlockLocation('overworld', 'z', 0, 0, 0),
-            createBlockLocation('overworld', 'x', 0, 0, 0),
-            createBlockLocation('overworld', 'z', 10, 0, 10)
+            makeBlockLocation('overworld', 'z', 0, 0, 0),
+            makeBlockLocation('overworld', 'x', 0, 0, 0),
+            makeBlockLocation('overworld', 'z', 10, 0, 10)
         ]
 
         when:
@@ -136,7 +136,7 @@ class PortalDetectorSpec extends Specification {
 
     def "getAdjacentCoords should return correct coords for axis z"() {
         given:
-        BlockSearcher.BlockLocation block = createBlockLocation('overworld', 'z', 100, 64, 200)
+        BlockSearcher.BlockLocation block = makeBlockLocation('overworld', 'z', 100, 64, 200)
 
         when:
         List<String> adjacent = PortalDetector.getAdjacentCoords(block, 'z')
@@ -151,7 +151,7 @@ class PortalDetectorSpec extends Specification {
 
     def "getAdjacentCoords should return correct coords for axis x"() {
         given:
-        BlockSearcher.BlockLocation block = createBlockLocation('overworld', 'x', 100, 64, 200)
+        BlockSearcher.BlockLocation block = makeBlockLocation('overworld', 'x', 100, 64, 200)
 
         when:
         List<String> adjacent = PortalDetector.getAdjacentCoords(block, 'x')
@@ -170,17 +170,17 @@ class PortalDetectorSpec extends Specification {
 
     def "clusterAdjacentBlocks should return empty list for empty input"() {
         expect:
-        PortalDetector.clusterAdjacentBlocks([], 'z').isEmpty()
+        PortalDetector.clusterAdjacentBlocks([], 'z').empty
     }
 
     def "clusterAdjacentBlocks should cluster adjacent blocks for axis z"() {
         given:
         // Create a 2x2 portal (4 blocks) aligned north-south (axis=z)
         List<BlockSearcher.BlockLocation> blocks = [
-            createBlockLocation('overworld', 'z', 100, 64, 200),  // Bottom-left
-            createBlockLocation('overworld', 'z', 100, 64, 201),  // Bottom-right
-            createBlockLocation('overworld', 'z', 100, 65, 200),  // Top-left
-            createBlockLocation('overworld', 'z', 100, 65, 201)   // Top-right
+            makeBlockLocation('overworld', 'z', 100, 64, 200),  // Bottom-left
+            makeBlockLocation('overworld', 'z', 100, 64, 201),  // Bottom-right
+            makeBlockLocation('overworld', 'z', 100, 65, 200),  // Top-left
+            makeBlockLocation('overworld', 'z', 100, 65, 201)   // Top-right
         ]
 
         when:
@@ -195,10 +195,10 @@ class PortalDetectorSpec extends Specification {
         given:
         // Two separate portals
         List<BlockSearcher.BlockLocation> blocks = [
-            createBlockLocation('overworld', 'z', 100, 64, 200),
-            createBlockLocation('overworld', 'z', 100, 64, 201),
-            createBlockLocation('overworld', 'z', 200, 64, 200),  // Far away
-            createBlockLocation('overworld', 'z', 200, 64, 201)
+            makeBlockLocation('overworld', 'z', 100, 64, 200),
+            makeBlockLocation('overworld', 'z', 100, 64, 201),
+            makeBlockLocation('overworld', 'z', 200, 64, 200),  // Far away
+            makeBlockLocation('overworld', 'z', 200, 64, 201)
         ]
 
         when:
@@ -213,7 +213,7 @@ class PortalDetectorSpec extends Specification {
     def "clusterAdjacentBlocks should handle single block"() {
         given:
         List<BlockSearcher.BlockLocation> blocks = [
-            createBlockLocation('overworld', 'z', 100, 64, 200)
+            makeBlockLocation('overworld', 'z', 100, 64, 200)
         ]
 
         when:
@@ -237,12 +237,12 @@ class PortalDetectorSpec extends Specification {
         given:
         // 3x4 portal aligned north-south (axis=z)
         Set<BlockSearcher.BlockLocation> cluster = [
-            createBlockLocation('overworld', 'z', 100, 64, 200),  // minZ, minY
-            createBlockLocation('overworld', 'z', 100, 64, 201),
-            createBlockLocation('overworld', 'z', 100, 64, 202),  // maxZ
-            createBlockLocation('overworld', 'z', 100, 65, 200),
-            createBlockLocation('overworld', 'z', 100, 66, 200),
-            createBlockLocation('overworld', 'z', 100, 67, 200)  // maxY
+            makeBlockLocation('overworld', 'z', 100, 64, 200),  // minZ, minY
+            makeBlockLocation('overworld', 'z', 100, 64, 201),
+            makeBlockLocation('overworld', 'z', 100, 64, 202),  // maxZ
+            makeBlockLocation('overworld', 'z', 100, 65, 200),
+            makeBlockLocation('overworld', 'z', 100, 66, 200),
+            makeBlockLocation('overworld', 'z', 100, 67, 200)  // maxY
         ] as Set
 
         when:
@@ -267,10 +267,10 @@ class PortalDetectorSpec extends Specification {
         given:
         // 2x3 portal aligned east-west (axis=x)
         Set<BlockSearcher.BlockLocation> cluster = [
-            createBlockLocation('nether', 'x', 100, 64, 200),  // minX, minY, Z constant
-            createBlockLocation('nether', 'x', 101, 64, 200),  // maxX
-            createBlockLocation('nether', 'x', 100, 65, 200),
-            createBlockLocation('nether', 'x', 100, 66, 200)  // maxY
+            makeBlockLocation('nether', 'x', 100, 64, 200),  // minX, minY, Z constant
+            makeBlockLocation('nether', 'x', 101, 64, 200),  // maxX
+            makeBlockLocation('nether', 'x', 100, 65, 200),
+            makeBlockLocation('nether', 'x', 100, 66, 200)  // maxY
         ] as Set
 
         when:
@@ -288,7 +288,7 @@ class PortalDetectorSpec extends Specification {
     def "portalFromCluster should handle single block portal"() {
         given:
         Set<BlockSearcher.BlockLocation> cluster = [
-            createBlockLocation('overworld', 'z', 100, 64, 200)
+            makeBlockLocation('overworld', 'z', 100, 64, 200)
         ] as Set
 
         when:
@@ -307,21 +307,21 @@ class PortalDetectorSpec extends Specification {
 
     def "detectPortals should return empty list for empty input"() {
         expect:
-        PortalDetector.detectPortals([]).isEmpty()
+        PortalDetector.detectPortals([]).empty
     }
 
     def "detectPortals should return empty list for null input"() {
         expect:
-        PortalDetector.detectPortals(null).isEmpty()
+        PortalDetector.detectPortals(null).empty
     }
 
     def "detectPortals should detect single portal"() {
         given:
         List<BlockSearcher.BlockLocation> blocks = [
-            createBlockLocation('overworld', 'z', 100, 64, 200),
-            createBlockLocation('overworld', 'z', 100, 64, 201),
-            createBlockLocation('overworld', 'z', 100, 65, 200),
-            createBlockLocation('overworld', 'z', 100, 65, 201)
+            makeBlockLocation('overworld', 'z', 100, 64, 200),
+            makeBlockLocation('overworld', 'z', 100, 64, 201),
+            makeBlockLocation('overworld', 'z', 100, 65, 200),
+            makeBlockLocation('overworld', 'z', 100, 65, 201)
         ]
 
         when:
@@ -336,11 +336,11 @@ class PortalDetectorSpec extends Specification {
         given:
         List<BlockSearcher.BlockLocation> blocks = [
             // Portal 1
-            createBlockLocation('overworld', 'z', 100, 64, 200),
-            createBlockLocation('overworld', 'z', 100, 64, 201),
+            makeBlockLocation('overworld', 'z', 100, 64, 200),
+            makeBlockLocation('overworld', 'z', 100, 64, 201),
             // Portal 2 (far away)
-            createBlockLocation('overworld', 'z', 200, 64, 200),
-            createBlockLocation('overworld', 'z', 200, 64, 201)
+            makeBlockLocation('overworld', 'z', 200, 64, 200),
+            makeBlockLocation('overworld', 'z', 200, 64, 201)
         ]
 
         when:
@@ -363,7 +363,7 @@ class PortalDetectorSpec extends Specification {
     // Helper Methods
     // =========================================================================
 
-    private BlockSearcher.BlockLocation createBlockLocation(String dimension, String axis, int x, int y, int z) {
+    private BlockSearcher.BlockLocation makeBlockLocation(String dimension, String axis, int x, int y, int z) {
         Map<String, String> properties = ['axis': axis]
         return new BlockSearcher.BlockLocation(
             'minecraft:nether_portal',
@@ -373,4 +373,5 @@ class PortalDetectorSpec extends Specification {
             'test.mca'
         )
     }
+
 }

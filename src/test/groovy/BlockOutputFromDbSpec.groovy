@@ -380,4 +380,5 @@ class BlockOutputFromDbSpec extends Specification {
         cleanup:
         readDb?.close()
     }
+
 }

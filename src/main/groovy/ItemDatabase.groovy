@@ -208,7 +208,7 @@ class ItemDatabase implements AutoCloseable {
         }
 
         boolean hasEnchantments() {
-            return !enchantments.isEmpty() || !storedEnchantments.isEmpty()
+            return !enchantments.empty || !storedEnchantments.empty
         }
 
         boolean hasCustomName() {
@@ -252,9 +252,9 @@ class ItemDatabase implements AutoCloseable {
         }
 
         // Convert collections to JSON
-        String enchantmentsJson = metadata.enchantments.isEmpty() ? null : new JsonBuilder(metadata.enchantments).toString()
-        String storedEnchJson = metadata.storedEnchantments.isEmpty() ? null : new JsonBuilder(metadata.storedEnchantments).toString()
-        String loreJson = metadata.lore.isEmpty() ? null : new JsonBuilder(metadata.lore).toString()
+        String enchantmentsJson = metadata.enchantments.empty ? null : new JsonBuilder(metadata.enchantments).toString()
+        String storedEnchJson = metadata.storedEnchantments.empty ? null : new JsonBuilder(metadata.storedEnchantments).toString()
+        String loreJson = metadata.lore.empty ? null : new JsonBuilder(metadata.lore).toString()
 
         try {
             int inserted = sql.executeUpdate('''

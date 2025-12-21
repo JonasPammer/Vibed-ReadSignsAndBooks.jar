@@ -1,11 +1,8 @@
 import javafx.application.Platform
 import javafx.embed.swing.JFXPanel
-import javafx.stage.Stage
-import org.testfx.framework.spock.ApplicationSpec
 import spock.lang.IgnoreIf
 import spock.lang.Shared
 import spock.lang.Specification
-import spock.lang.Timeout
 import spock.lang.Unroll
 
 import java.awt.GraphicsEnvironment
@@ -30,23 +27,20 @@ import java.util.concurrent.atomic.AtomicInteger
  * automatically in headless environments (CI without xvfb, etc.) because
  * GuiLogAppender uses Platform.runLater() which requires JavaFX initialization.
  */
-@IgnoreIf({ GraphicsEnvironment.isHeadless() })
+@IgnoreIf({ GraphicsEnvironment.headless })
 class GuiIntegrationSpec extends Specification {
 
     @Shared
     static boolean jfxInitialized = false
 
-    def setupSpec() {
+    static {
         // Initialize JavaFX toolkit once for all tests
         // JFXPanel triggers JavaFX initialization in a headless-compatible way
+        // This runs only when not headless (guarded by @IgnoreIf above)
         if (!jfxInitialized) {
-            try {
-                new JFXPanel()
-                jfxInitialized = true
-                println "JavaFX toolkit initialized successfully"
-            } catch (Exception e) {
-                println "Warning: Could not initialize JavaFX toolkit: ${e.message}"
-            }
+            new JFXPanel()
+            jfxInitialized = true
+            println 'JavaFX toolkit initialized successfully'
         }
     }
 
@@ -65,22 +59,22 @@ class GuiIntegrationSpec extends Specification {
     // =========================================================================
 
     def "GuiLogAppender should deliver all messages to handler"() {
-        given: "A counter to track received messages"
+        given: 'A counter to track received messages'
         def receivedMessages = new StringBuilder()
         def latch = new CountDownLatch(10)
 
-        and: "A log handler that collects messages"
-        GuiLogAppender.setLogHandler { message ->
+        and: 'A log handler that collects messages'
+        GuiLogAppender.logHandler = { message ->
             receivedMessages.append(message)
             latch.countDown()
         }
 
-        and: "A mock logging event creator"
+        and: 'A mock logging event creator'
         def createEvent = { String msg ->
             [getFormattedMessage: { msg }] as ch.qos.logback.classic.spi.ILoggingEvent
         }
 
-        when: "We send 10 messages"
+        when: 'We send 10 messages'
         def appender = new GuiLogAppender()
         appender.start()
 
@@ -88,35 +82,35 @@ class GuiIntegrationSpec extends Specification {
             appender.append(createEvent("Message ${i + 1}"))
         }
 
-        and: "Wait for messages to be delivered via Platform.runLater"
+        and: 'Wait for messages to be delivered via Platform.runLater'
         latch.await(5, TimeUnit.SECONDS)
 
-        then: "All messages should be received"
-        receivedMessages.toString().contains("Message 1")
-        receivedMessages.toString().contains("Message 10")
+        then: 'All messages should be received'
+        receivedMessages.toString().contains('Message 1')
+        receivedMessages.toString().contains('Message 10')
 
         cleanup:
         appender.stop()
     }
 
     def "GuiLogAppender should handle many messages without losing them"() {
-        given: "A counter to track received messages"
+        given: 'A counter to track received messages'
         def messageCount = new AtomicInteger(0)
         def targetMessages = 50
         def latch = new CountDownLatch(targetMessages)
 
-        and: "A log handler that counts messages"
-        GuiLogAppender.setLogHandler { message ->
+        and: 'A log handler that counts messages'
+        GuiLogAppender.logHandler = { message ->
             messageCount.incrementAndGet()
             latch.countDown()
         }
 
-        and: "A mock logging event creator"
+        and: 'A mock logging event creator'
         def createEvent = { String msg ->
             [getFormattedMessage: { msg }] as ch.qos.logback.classic.spi.ILoggingEvent
         }
 
-        when: "We send many messages quickly"
+        when: 'We send many messages quickly'
         def appender = new GuiLogAppender()
         appender.start()
 
@@ -124,10 +118,10 @@ class GuiIntegrationSpec extends Specification {
             appender.append(createEvent("Test message ${i + 1}"))
         }
 
-        and: "Wait for all messages to be processed"
+        and: 'Wait for all messages to be processed'
         def completed = latch.await(10, TimeUnit.SECONDS)
 
-        then: "All messages should be delivered"
+        then: 'All messages should be delivered'
         completed
         messageCount.get() == targetMessages
 
@@ -136,18 +130,18 @@ class GuiIntegrationSpec extends Specification {
     }
 
     def "GuiLogAppender should handle null handler gracefully"() {
-        given: "No log handler set"
+        given: 'No log handler set'
         GuiLogAppender.clearLogHandler()
 
-        and: "A mock logging event"
-        def event = [getFormattedMessage: { "Test message" }] as ch.qos.logback.classic.spi.ILoggingEvent
+        and: 'A mock logging event'
+        def event = [getFormattedMessage: { 'Test message' }] as ch.qos.logback.classic.spi.ILoggingEvent
 
-        when: "We append a message with no handler"
+        when: 'We append a message with no handler'
         def appender = new GuiLogAppender()
         appender.start()
         appender.append(event)
 
-        then: "No exception should be thrown"
+        then: 'No exception should be thrown'
         noExceptionThrown()
 
         cleanup:
@@ -155,9 +149,9 @@ class GuiIntegrationSpec extends Specification {
     }
 
     def "GuiLogAppender clearLogHandler should reset all state"() {
-        given: "A log handler and some buffered messages"
+        given: 'A log handler and some buffered messages'
         def received = new StringBuilder()
-        GuiLogAppender.setLogHandler { message ->
+        GuiLogAppender.logHandler = { message ->
             received.append(message)
         }
 
@@ -167,17 +161,17 @@ class GuiIntegrationSpec extends Specification {
 
         def appender = new GuiLogAppender()
         appender.start()
-        appender.append(createEvent("Message before clear"))
+        appender.append(createEvent('Message before clear'))
 
-        when: "We clear the handler"
+        when: 'We clear the handler'
         GuiLogAppender.clearLogHandler()
 
-        and: "Send more messages"
-        appender.append(createEvent("Message after clear"))
+        and: 'Send more messages'
+        appender.append(createEvent('Message after clear'))
         Thread.sleep(200)
 
-        then: "Messages after clear should not be received"
-        !received.toString().contains("Message after clear")
+        then: 'Messages after clear should not be received'
+        !received.toString().contains('Message after clear')
 
         cleanup:
         appender.stop()
@@ -235,21 +229,21 @@ class GuiIntegrationSpec extends Specification {
     // =========================================================================
 
     def "GuiLogAppender should batch messages within FLUSH_INTERVAL"() {
-        given: "A log handler that collects messages"
+        given: 'A log handler that collects messages'
         def receivedMessages = []
         def messageCount = new AtomicInteger(0)
 
-        GuiLogAppender.setLogHandler { message ->
+        GuiLogAppender.logHandler = { message ->
             receivedMessages.add(message)
             messageCount.incrementAndGet()
         }
 
-        and: "A mock logging event creator"
+        and: 'A mock logging event creator'
         def createEvent = { String msg ->
             [getFormattedMessage: { msg }] as ch.qos.logback.classic.spi.ILoggingEvent
         }
 
-        when: "We send multiple messages quickly (within 100ms)"
+        when: 'We send multiple messages quickly (within 100ms)'
         def appender = new GuiLogAppender()
         appender.start()
 
@@ -258,10 +252,10 @@ class GuiIntegrationSpec extends Specification {
             appender.append(createEvent("Message ${i + 1}"))
         }
 
-        and: "Wait a short time (less than FLUSH_INTERVAL)"
+        and: 'Wait a short time (less than FLUSH_INTERVAL)'
         Thread.sleep(50)  // Less than 100ms FLUSH_INTERVAL
 
-        then: "Messages should be batched (may not have flushed yet)"
+        then: 'Messages should be batched (may not have flushed yet)'
         // Messages may or may not have flushed depending on timing
         // But we verify no crash and handler is called eventually
         messageCount.get() >= 0  // At least 0 (may not have flushed yet)
@@ -273,31 +267,31 @@ class GuiIntegrationSpec extends Specification {
     }
 
     def "GuiLogAppender should flush immediately after FLUSH_INTERVAL"() {
-        given: "A log handler that tracks flush timing"
+        given: 'A log handler that tracks flush timing'
         def receivedMessages = []
         def flushTimes = []
 
-        GuiLogAppender.setLogHandler { message ->
+        GuiLogAppender.logHandler = { message ->
             receivedMessages.add(message)
             flushTimes.add(System.currentTimeMillis())
         }
 
-        and: "A mock logging event creator"
+        and: 'A mock logging event creator'
         def createEvent = { String msg ->
             [getFormattedMessage: { msg }] as ch.qos.logback.classic.spi.ILoggingEvent
         }
 
-        when: "We send a message and wait for FLUSH_INTERVAL"
+        when: 'We send a message and wait for FLUSH_INTERVAL'
         def appender = new GuiLogAppender()
         appender.start()
         long startTime = System.currentTimeMillis()
 
-        appender.append(createEvent("First message"))
+        appender.append(createEvent('First message'))
 
-        and: "Wait for FLUSH_INTERVAL to pass"
+        and: 'Wait for FLUSH_INTERVAL to pass'
         Thread.sleep(150)  // More than 100ms FLUSH_INTERVAL
 
-        then: "Message should be flushed"
+        then: 'Message should be flushed'
         receivedMessages.size() >= 1
         // NOTE: GuiLogAppender delivers messages via Platform.runLater() and does not guarantee any minimum delay.
         // This assertion was flaky (especially on fast machines / different schedulers) and also didn't match the
@@ -310,18 +304,18 @@ class GuiIntegrationSpec extends Specification {
     }
 
     def "GuiLogAppender append should handle concurrent access safely"() {
-        given: "A log handler"
+        given: 'A log handler'
         def receivedCount = new AtomicInteger(0)
-        GuiLogAppender.setLogHandler { message ->
+        GuiLogAppender.logHandler = { message ->
             receivedCount.incrementAndGet()
         }
 
-        and: "A mock logging event creator"
+        and: 'A mock logging event creator'
         def createEvent = { String msg ->
             [getFormattedMessage: { msg }] as ch.qos.logback.classic.spi.ILoggingEvent
         }
 
-        when: "Multiple threads append messages concurrently"
+        when: 'Multiple threads append messages concurrently'
         def appender = new GuiLogAppender()
         appender.start()
 
@@ -337,10 +331,10 @@ class GuiIntegrationSpec extends Specification {
         // Wait for all threads to complete
         threads.each { it.join() }
 
-        and: "Wait for all messages to flush"
+        and: 'Wait for all messages to flush'
         Thread.sleep(200)
 
-        then: "All messages should be received without errors"
+        then: 'All messages should be received without errors'
         receivedCount.get() >= 1  // At least some messages received
         noExceptionThrown()
 
@@ -350,18 +344,18 @@ class GuiIntegrationSpec extends Specification {
     }
 
     def "GuiLogAppender should accumulate messages in buffer before flush"() {
-        given: "A log handler"
+        given: 'A log handler'
         def receivedMessages = []
-        GuiLogAppender.setLogHandler { message ->
+        GuiLogAppender.logHandler = { message ->
             receivedMessages.add(message)
         }
 
-        and: "A mock logging event creator"
+        and: 'A mock logging event creator'
         def createEvent = { String msg ->
             [getFormattedMessage: { msg }] as ch.qos.logback.classic.spi.ILoggingEvent
         }
 
-        when: "We send multiple messages quickly"
+        when: 'We send multiple messages quickly'
         def appender = new GuiLogAppender()
         appender.start()
 
@@ -369,20 +363,21 @@ class GuiIntegrationSpec extends Specification {
             appender.append(createEvent("Message ${i + 1}"))
         }
 
-        and: "Wait for flush"
+        and: 'Wait for flush'
         Thread.sleep(150)
 
-        then: "Messages should be batched together in single flush"
+        then: 'Messages should be batched together in single flush'
         receivedMessages.size() >= 1
         // All messages should be in the first received message (batched)
         if (receivedMessages.size() > 0) {
-            receivedMessages[0].contains("Message 1")
-            receivedMessages[0].contains("Message 2")
-            receivedMessages[0].contains("Message 3")
+            receivedMessages[0].contains('Message 1')
+            receivedMessages[0].contains('Message 2')
+            receivedMessages[0].contains('Message 3')
         }
 
         cleanup:
         appender.stop()
         GuiLogAppender.clearLogHandler()
     }
+
 }

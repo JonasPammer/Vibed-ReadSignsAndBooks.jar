@@ -34,7 +34,7 @@ class MainCliParsingSpec extends Specification {
 
         then:
         Main.searchBlocks != null
-        Main.searchBlocks.isEmpty()
+        Main.searchBlocks.empty
         Main.searchBlocksSpecified == true
     }
 
@@ -83,7 +83,7 @@ class MainCliParsingSpec extends Specification {
 
         then:
         // --search-blocks should have empty list (no value consumed)
-        Main.searchBlocks.isEmpty()
+        Main.searchBlocks.empty
         Main.searchBlocksSpecified == true
         // --index-limit should have its value properly parsed
         Main.indexLimit == 100
@@ -100,7 +100,7 @@ class MainCliParsingSpec extends Specification {
         Main.searchBlocksSpecified = cmd.parseResult.hasMatchedOption('--search-blocks')
 
         then:
-        Main.searchBlocks.isEmpty()
+        Main.searchBlocks.empty
         Main.searchBlocksSpecified == true
         Main.customWorldDirectory == '/path/to/world'
     }
@@ -232,7 +232,7 @@ class MainCliParsingSpec extends Specification {
         Main.searchBlocksSpecified = cmd.parseResult.hasMatchedOption('--search-blocks')
 
         then:
-        Main.searchBlocks.isEmpty()
+        Main.searchBlocks.empty
         Main.searchBlocksSpecified == true
         Main.findPortals == true
     }
@@ -248,7 +248,7 @@ class MainCliParsingSpec extends Specification {
 
         then:
         Main.indexQuery == 'nether_portal'
-        Main.searchBlocks.isEmpty()
+        Main.searchBlocks.empty
         !cmd.parseResult.hasMatchedOption('--search-blocks')
     }
 
@@ -263,7 +263,7 @@ class MainCliParsingSpec extends Specification {
 
         then:
         Main.indexList == true
-        Main.searchBlocks.isEmpty()
+        Main.searchBlocks.empty
     }
 
     def "should parse --index-dimension for filtering"() {
@@ -377,4 +377,5 @@ class MainCliParsingSpec extends Specification {
         then:
         thrown(CommandLine.ParameterException)
     }
+
 }

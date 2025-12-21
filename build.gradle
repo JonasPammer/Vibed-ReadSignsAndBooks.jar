@@ -14,11 +14,15 @@ version = '1.0.0'
 sourceCompatibility = '21'
 targetCompatibility = '21'
 
+// Shared constants to avoid DuplicateListLiteral violations
+List<String> groovySourceDirs = ['src/main/groovy']
+List<String> defaultJvmArgs = ['-Xmx10G', '-XX:+UseG1GC', '-XX:MaxGCPauseMillis=200']
+
 // Specify source directory (now using standard Maven/Gradle layout)
 sourceSets {
     main {
         groovy {
-            srcDirs = ['src/main/groovy']
+            srcDirs = groovySourceDirs
         }
         java {
             srcDirs = ['src/main/java']
@@ -102,18 +106,14 @@ dependencies {
     testImplementation 'org.testfx:testfx-core:4.0.18'
     testImplementation 'org.testfx:testfx-spock:4.0.18'
 
-    // Note: Monocle for headless testing is NOT compatible with JavaFX 21 yet
-    // See: https://github.com/TestFX/Monocle/issues
-    // GUI tests will run in headed mode when a display is available
+// Note: Monocle for headless testing is NOT compatible with JavaFX 21 yet
+// See: https://github.com/TestFX/Monocle/issues
+// GUI tests will run in headed mode when a display is available
 }
 
 application {
     mainClass = 'Main'  // Auto-detects GUI vs CLI mode
-    applicationDefaultJvmArgs = [
-        '-Xmx10G',
-        '-XX:+UseG1GC',
-        '-XX:MaxGCPauseMillis=200'
-    ]
+    applicationDefaultJvmArgs = defaultJvmArgs
 }
 
 tasks.withType(JavaCompile) {
@@ -170,7 +170,7 @@ test {
 
 // JaCoCo configuration
 jacoco {
-    toolVersion = "0.8.11"
+    toolVersion = '0.8.11'
 }
 
 jacocoTestReport {
@@ -179,27 +179,25 @@ jacocoTestReport {
     // To generate report: ./gradlew test (creates coverage data) then ./gradlew jacocoTestReport
     // Or run both: ./gradlew test jacocoTestReport
     dependsOn test // Ensure tests run before generating report
-    
+
     reports {
         xml.required = true // Required for Codecov
         html.required = true // Human-readable HTML report
         csv.required = false
     }
-    
+
     // Explicitly configure for Groovy source files
     afterEvaluate {
         // Include Groovy source directories
-        sourceDirectories.setFrom(files([
-            'src/main/groovy'
-        ]))
-        
+        sourceDirectories.setFrom(files(groovySourceDirs))
+
         // Include Groovy compiled classes
         classDirectories.setFrom(files([
             fileTree(dir: "${buildDir}/classes/groovy/main", exclude: [
                 '**/Main.class',  // Exclude Main class if needed
             ])
         ]))
-        
+
         // Ensure execution data is collected from test task
         executionData.setFrom(fileTree(dir: "${buildDir}/jacoco", include: 'test.exec'))
     }
@@ -216,38 +214,38 @@ task printCoverage {
     dependsOn jacocoTestReport
     group = 'verification'
     description = 'Prints code coverage summary to console'
-    
+
     doLast {
-        def reportFile = file("${buildDir}/reports/jacoco/test/jacocoTestReport.xml")
+        File reportFile = file("${buildDir}/reports/jacoco/test/jacocoTestReport.xml")
         if (reportFile.exists()) {
-            def parser = new XmlParser()
-            parser.setFeature("http://apache.org/xml/features/disallow-doctype-decl", false)
-            parser.setFeature("http://xml.org/sax/features/external-general-entities", false)
-            parser.setFeature("http://xml.org/sax/features/external-parameter-entities", false)
-            def report = parser.parse(reportFile)
-            def counter = report.counter.find { it.'@type' == 'INSTRUCTION' }
+            XmlParser parser = new XmlParser()
+            parser.setFeature('http://apache.org/xml/features/disallow-doctype-decl', false)
+            parser.setFeature('http://xml.org/sax/features/external-general-entities', false)
+            parser.setFeature('http://xml.org/sax/features/external-parameter-entities', false)
+            Node report = parser.parse(reportFile)
+            Object counter = report.counter.find { Object node -> node.'@type' == 'INSTRUCTION' }
             if (counter) {
-                def missed = counter.'@missed' as Integer
-                def covered = counter.'@covered' as Integer
-                def total = missed + covered
-                def percentage = total > 0 ? (covered * 100.0 / total).round(2) : 0
-                
-                println "\n" + "="*60
-                println "CODE COVERAGE SUMMARY"
-                println "="*60
+                Integer missed = counter.'@missed' as Integer
+                Integer covered = counter.'@covered' as Integer
+                Integer total = missed + covered
+                Number percentage = total > 0 ? (covered * 100.0 / total).round(2) : 0
+
+                println '\n' + '=' * 60
+                println 'CODE COVERAGE SUMMARY'
+                println '=' * 60
                 println "Instructions: ${covered}/${total} (${percentage}%)"
-                
-                ['BRANCH', 'LINE', 'METHOD', 'CLASS'].each { type ->
-                    def typeCounter = report.counter.find { it.'@type' == type }
+
+                ['BRANCH', 'LINE', 'METHOD', 'CLASS'].each { String type ->
+                    Object typeCounter = report.counter.find { Object node -> node.'@type' == type }
                     if (typeCounter) {
-                        def tMissed = typeCounter.'@missed' as Integer
-                        def tCovered = typeCounter.'@covered' as Integer
-                        def tTotal = tMissed + tCovered
-                        def tPercentage = tTotal > 0 ? (tCovered * 100.0 / tTotal).round(2) : 0
+                        Integer tMissed = typeCounter.'@missed' as Integer
+                        Integer tCovered = typeCounter.'@covered' as Integer
+                        Integer tTotal = tMissed + tCovered
+                        Number tPercentage = tTotal > 0 ? (tCovered * 100.0 / tTotal).round(2) : 0
                         println "${type.padRight(12)}: ${tCovered}/${tTotal} (${tPercentage}%)"
                     }
                 }
-                println "="*60 + "\n"
+                println '=' * 60 + '\n'
             }
         } else {
             println "Coverage report not found. Run 'gradlew test jacocoTestReport' first."
@@ -256,7 +254,7 @@ task printCoverage {
 }
 
 // License report configuration
-import com.github.jk1.license.render.*
+import com.github.jk1.license.render.TextReportRenderer
 
 licenseReport {
     outputDir = "$projectDir/src/main/resources/licenses"
@@ -283,7 +281,7 @@ tasks.named('processResources') {
 // jpackage configuration for Windows distribution
 runtime {
     options = ['--strip-debug', '--compress', '2', '--no-header-files', '--no-man-pages']
-    
+
     modules = [
         'java.base',
         'java.desktop',
@@ -295,16 +293,12 @@ runtime {
         'java.xml',
         'jdk.unsupported'
     ]
-    
+
     jpackage {
         imageName = 'ReadSignsAndBooks'
         imageOptions = ['--icon', 'src/main/resources/icons/icon.ico']
-        
-        jvmArgs = [
-            '-Xmx10G',
-            '-XX:+UseG1GC',
-            '-XX:MaxGCPauseMillis=200'
-        ]
+
+        jvmArgs = defaultJvmArgs
     }
 }
 
@@ -313,19 +307,19 @@ task createWindowsZip {
     dependsOn 'jpackageImage'
     description = 'Creates Windows distribution ZIP for releases'
     group = 'distribution'
-    
+
     doLast {
-        def jpackageDir = file("$buildDir/jpackage/ReadSignsAndBooks")
-        def zipFile = file("ReadSignsAndBooks-Windows.zip")
-        
+        File jpackageDir = file("$buildDir/jpackage/ReadSignsAndBooks")
+        File zipFile = file('ReadSignsAndBooks-Windows.zip')
+
         if (jpackageDir.exists()) {
             // Create ZIP file
             ant.zip(destfile: zipFile.absolutePath, basedir: jpackageDir.absolutePath)
-            
+
             println "✅ Windows distribution ZIP created: ${zipFile.absolutePath}"
             println "   Size: ${zipFile.length() / 1024 / 1024} MB"
-            println "   Contents: EXE + bundled JRE"
-            println "   • Users extract ZIP and double-click ReadSignsAndBooks.exe"
+            println '   Contents: EXE + bundled JRE'
+            println '   • Users extract ZIP and double-click ReadSignsAndBooks.exe'
         } else {
             println "⚠️  jpackage output not found at: ${jpackageDir.absolutePath}"
         }

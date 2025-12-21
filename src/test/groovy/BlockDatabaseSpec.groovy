@@ -2,7 +2,6 @@ import groovy.json.JsonSlurper
 import spock.lang.Specification
 import spock.lang.TempDir
 
-import java.nio.file.Files
 import java.nio.file.Path
 
 /**
@@ -28,8 +27,8 @@ class BlockDatabaseSpec extends Specification {
         then:
         dbFile.exists()
         // Verify tables exist by querying them
-        db.queryByBlockType('minecraft:stone').isEmpty()  // Should not throw
-        db.getSummary().isEmpty()  // Should not throw
+        db.queryByBlockType('minecraft:stone').empty  // Should not throw
+        db.summary.empty  // Should not throw
         db.getMetadata('test') == null  // Should not throw
 
         cleanup:
@@ -44,7 +43,7 @@ class BlockDatabaseSpec extends Specification {
         when:
         // WAL mode is set in constructor, verify indirectly by checking database works
         db.insertBlock('minecraft:test', 'overworld', 0, 0, 0)
-        def result = db.queryByBlockType('minecraft:test')
+        List<Map> result = db.queryByBlockType('minecraft:test')
 
         then:
         result.size() == 1  // If WAL mode failed, this might not work correctly
@@ -160,7 +159,7 @@ class BlockDatabaseSpec extends Specification {
 
         then:
         inserted == true
-        def result = db.queryByBlockType('minecraft:air')[0]
+        Map result = db.queryByBlockType('minecraft:air')[0]
         result.properties == null
 
         cleanup:
@@ -177,8 +176,8 @@ class BlockDatabaseSpec extends Specification {
         db.insertBlock('minecraft:nether_portal', 'overworld', 100, 64, 200, properties)
 
         then:
-        def result = db.queryByBlockType('minecraft:nether_portal')[0]
-        def props = new JsonSlurper().parseText(result.properties as String)
+        Map result = db.queryByBlockType('minecraft:nether_portal')[0]
+        Object props = new JsonSlurper().parseText(result.properties as String)
         props.axis == 'z'
         props.facing == 'north'
 
@@ -230,7 +229,7 @@ class BlockDatabaseSpec extends Specification {
         db.insertBlock('minecraft:chest', 'overworld', 100, 64, 200, null, 'r.0.0.mca')
 
         then:
-        def result = db.queryByBlockType('minecraft:chest')[0]
+        Map result = db.queryByBlockType('minecraft:chest')[0]
         result.region_file == 'r.0.0.mca'
 
         cleanup:
@@ -288,7 +287,7 @@ class BlockDatabaseSpec extends Specification {
         List<Map> results = db.queryByBlockType('minecraft:nonexistent_block')
 
         then:
-        results.isEmpty()
+        results.empty
 
         cleanup:
         db?.close()
@@ -336,8 +335,8 @@ class BlockDatabaseSpec extends Specification {
 
         then:
         results.size() == 2
-        results.any { it.x == 100 && it.y == 64 && it.z == 200 }
-        results.any { it.x == 105 && it.y == 64 && it.z == 205 }
+        results.any { Map row -> row.x == 100 && row.y == 64 && row.z == 200 }
+        results.any { Map row -> row.x == 105 && row.y == 64 && row.z == 205 }
 
         cleanup:
         db?.close()
@@ -461,7 +460,7 @@ class BlockDatabaseSpec extends Specification {
         BlockDatabase db = new BlockDatabase(dbFile)
 
         when:
-        db.setWorldPath('/path/to/world')
+        db.worldPath = '/path/to/world'
         String value = db.getMetadata('world_path')
 
         then:
@@ -477,7 +476,7 @@ class BlockDatabaseSpec extends Specification {
         BlockDatabase db = new BlockDatabase(dbFile)
 
         when:
-        db.setExtractionDate('2025-12-14')
+        db.extractionDate = '2025-12-14'
         String value = db.getMetadata('extraction_date')
 
         then:
@@ -493,7 +492,7 @@ class BlockDatabaseSpec extends Specification {
         BlockDatabase db = new BlockDatabase(dbFile)
 
         when:
-        db.setMinecraftVersion('1.21.1')
+        db.minecraftVersion = '1.21.1'
         String value = db.getMetadata('minecraft_version')
 
         then:
@@ -532,7 +531,7 @@ class BlockDatabaseSpec extends Specification {
         db.insertBlock('minecraft:dirt', 'overworld', 0, 0, 0)
 
         when:
-        List<Map> summary = db.getSummary()
+        List<Map> summary = db.summary
 
         then:
         summary.size() == 2
@@ -606,7 +605,7 @@ class BlockDatabaseSpec extends Specification {
         db.insertBlock('minecraft:dirt', 'overworld', 0, 0, 0)
 
         when:
-        int count = db.getBlockTypeCount()
+        int count = db.blockTypeCount
 
         then:
         count == 2  // Two unique types
@@ -621,7 +620,7 @@ class BlockDatabaseSpec extends Specification {
         BlockDatabase db = new BlockDatabase(dbFile)
 
         when:
-        int count = db.getBlockTypeCount()
+        int count = db.blockTypeCount
 
         then:
         count == 0
@@ -639,7 +638,7 @@ class BlockDatabaseSpec extends Specification {
         db.insertBlock('minecraft:dirt', 'overworld', 0, 0, 0)
 
         when:
-        int total = db.getTotalBlocksIndexed()
+        int total = db.totalBlocksIndexed
 
         then:
         total == 3
@@ -654,7 +653,7 @@ class BlockDatabaseSpec extends Specification {
         BlockDatabase db = new BlockDatabase(dbFile)
 
         when:
-        int total = db.getTotalBlocksIndexed()
+        int total = db.totalBlocksIndexed
 
         then:
         total == 0
@@ -696,7 +695,7 @@ class BlockDatabaseSpec extends Specification {
         db.rollbackTransaction()
 
         then:
-        db.queryByBlockType('minecraft:stone').isEmpty()  // Rolled back
+        db.queryByBlockType('minecraft:stone').empty  // Rolled back
 
         cleanup:
         db?.close()
@@ -761,7 +760,7 @@ class BlockDatabaseSpec extends Specification {
 
         then:
         noExceptionThrown()
-        // After close, operations should fail (but we can't easily test this without catching exceptions)
+    // After close, operations should fail (but we can't easily test this without catching exceptions)
     }
 
     // =========================================================================
@@ -780,7 +779,7 @@ class BlockDatabaseSpec extends Specification {
         when:
         List<Map> queryResults = db.queryAllBlocks()
         List<Map> streamResults = []
-        db.streamBlocks({ blockType, dimension, x, y, z, properties, regionFile ->
+        db.streamBlocks { blockType, dimension, x, y, z, properties, regionFile ->
             streamResults << [
                 block_type: blockType,
                 dimension: dimension,
@@ -790,7 +789,7 @@ class BlockDatabaseSpec extends Specification {
                 properties: properties,
                 region_file: regionFile
             ]
-        })
+        }
 
         then:
         queryResults.size() == streamResults.size()
@@ -830,9 +829,9 @@ class BlockDatabaseSpec extends Specification {
         }, 'nether')
 
         then:
-        overworldDimensions.every { it == 'overworld' }
+        overworldDimensions.every { String dim -> dim == 'overworld' }
         overworldDimensions.size() == 2  // stone + dirt in overworld
-        netherDimensions.every { it == 'nether' }
+        netherDimensions.every { String dim -> dim == 'nether' }
         netherDimensions.size() == 1  // Only stone in nether
 
         cleanup:
@@ -853,9 +852,9 @@ class BlockDatabaseSpec extends Specification {
         when:
         List<Map> queryResults = db.queryAllBlocks()
         List<String> streamOrder = []
-        db.streamBlocks({ blockType, dimension, x, y, z, properties, regionFile ->
+        db.streamBlocks { blockType, dimension, x, y, z, properties, regionFile ->
             streamOrder << "${blockType}|${dimension}|${x}|${y}|${z}"
-        })
+        }
 
         then:
         // Verify same ordering for both
@@ -886,7 +885,7 @@ class BlockDatabaseSpec extends Specification {
         }
 
         when:
-        int totalIndexed = db.getTotalBlocksIndexed()
+        int totalIndexed = db.totalBlocksIndexed
         List<Map> allBlocks = db.queryAllBlocks()
 
         then:
@@ -907,7 +906,7 @@ class BlockDatabaseSpec extends Specification {
         }
 
         when:
-        int totalIndexed = db.getTotalBlocksIndexed()
+        int totalIndexed = db.totalBlocksIndexed
         Map count = db.getBlockCount('minecraft:stone')
 
         then:
@@ -938,7 +937,7 @@ class BlockDatabaseSpec extends Specification {
         then:
         queryOverworld.size() == streamOverworld.size()
         queryOverworld.size() == 2
-        queryOverworld.every { it.dimension == 'overworld' }
+        queryOverworld.every { Map row -> row.dimension == 'overworld' }
 
         cleanup:
         db?.close()
@@ -953,7 +952,7 @@ class BlockDatabaseSpec extends Specification {
 
         when:
         def capturedParams = [:]
-        db.streamBlocks({ blockType, dimension, x, y, z, properties, regionFile ->
+        db.streamBlocks { blockType, dimension, x, y, z, properties, regionFile ->
             capturedParams.blockType = blockType
             capturedParams.dimension = dimension
             capturedParams.x = x
@@ -961,7 +960,7 @@ class BlockDatabaseSpec extends Specification {
             capturedParams.z = z
             capturedParams.properties = properties
             capturedParams.regionFile = regionFile
-        })
+        }
 
         then:
         capturedParams.blockType instanceof String
@@ -990,9 +989,9 @@ class BlockDatabaseSpec extends Specification {
         int callCount = 0
 
         when:
-        db.streamBlocks({ blockType, dimension, x, y, z, properties, regionFile ->
+        db.streamBlocks { blockType, dimension, x, y, z, properties, regionFile ->
             callCount++
-        })
+        }
 
         then:
         callCount == 0
@@ -1010,9 +1009,10 @@ class BlockDatabaseSpec extends Specification {
         List<Map> results = db.queryAllBlocks()
 
         then:
-        results.isEmpty()
+        results.empty
 
         cleanup:
         db?.close()
     }
+
 }

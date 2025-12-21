@@ -696,4 +696,5 @@ class NbtUtilsSpec extends Specification {
         value instanceof byte[]
         ((byte[]) value).length == 0
     }
+
 }

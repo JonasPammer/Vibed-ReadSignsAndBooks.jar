@@ -7,6 +7,7 @@
         "CompileStatic": "off",
         "DuplicateNumberLiteral": "off",
         "DuplicateStringLiteral": "off",
+        "ImplicitClosureParameter": "off",
         "Instanceof": "off",
         "JUnitPublicField": "off",
         "JUnitPublicNonTestMethod": "off",
@@ -22,12 +23,15 @@
         },
         "MethodSize": "off",
         "NestedBlockDepth": "off",
+        "NoDef": "off",
         "NoDouble": "off",
         "NoTabCharacter": "off",
         "PublicMethodsBeforeNonPublicMethods": "off",
         "StaticMethodsBeforeInstanceMethods": "off",
         "ThrowRuntimeException": "off",
-        "UnnecessaryObjectReferences": "off"
+        "UnnecessaryGString": "off",
+        "UnnecessaryObjectReferences": "off",
+        "VariableTypeRequired": "off"
     },
     "excludes": [
         "**/test/**",

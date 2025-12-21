@@ -59,7 +59,7 @@ class BlockSearcher {
             this.z = z
             this.properties = properties ?: [:]
             this.regionFile = regionFile
-        }
+                      }
 
         @Override
         boolean equals(Object obj) {

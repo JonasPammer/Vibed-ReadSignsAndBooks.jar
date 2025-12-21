@@ -1,9 +1,12 @@
 import javafx.application.Platform
-import javafx.scene.control.*
-import javafx.scene.input.KeyCode
-import javafx.scene.input.MouseButton
+import javafx.scene.control.Button
+import javafx.scene.control.CheckBox
+import javafx.scene.control.Label
+import javafx.scene.control.Menu
+import javafx.scene.control.MenuBar
+import javafx.scene.control.TextArea
+import javafx.scene.control.TextField
 import javafx.stage.Stage
-import org.testfx.api.FxToolkit
 import org.testfx.framework.spock.ApplicationSpec
 import org.testfx.util.WaitForAsyncUtils
 import spock.lang.IgnoreIf
@@ -13,7 +16,6 @@ import spock.lang.Timeout
 
 import java.awt.GraphicsEnvironment
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.TimeoutException
 
 /**
  * Full GUI Integration Tests for ReadSignsAndBooks
@@ -32,7 +34,7 @@ import java.util.concurrent.TimeoutException
  */
 @Stepwise
 @Timeout(value = 60, unit = TimeUnit.SECONDS)
-@IgnoreIf({ GraphicsEnvironment.isHeadless() })
+@IgnoreIf({ GraphicsEnvironment.headless })
 class GuiFullIntegrationSpec extends ApplicationSpec {
 
     @Shared
@@ -71,7 +73,7 @@ class GuiFullIntegrationSpec extends ApplicationSpec {
     // =========================================================================
 
     def "GUI should launch successfully"() {
-        expect: "The primary stage should be showing"
+        expect: 'The primary stage should be showing'
         primaryStage != null
         primaryStage.showing
     }
@@ -93,8 +95,8 @@ class GuiFullIntegrationSpec extends ApplicationSpec {
 
     def "GUI should contain title label"() {
         when:
-        def titleLabel = lookup('.label').queryAll().find {
-            it instanceof Label && ((Label) it).text == 'Minecraft Book & Sign Extractor'
+        Object titleLabel = lookup('.label').queryAll().find { Object node ->
+            node instanceof Label && ((Label) node).text == 'Minecraft Book & Sign Extractor'
         }
 
         then:
@@ -216,17 +218,17 @@ class GuiFullIntegrationSpec extends ApplicationSpec {
     // =========================================================================
 
     def "Clear Log button should clear the log area"() {
-        given: "The log TextArea"
+        given: 'The log TextArea'
         TextArea logArea = lookup('.text-area').query() as TextArea
 
-        and: "Add some text to the log"
+        and: 'Add some text to the log'
         Platform.runLater {
             logArea.text = "Test log content\nLine 2\nLine 3"
         }
         WaitForAsyncUtils.waitForFxEvents()
         Thread.sleep(100)  // Allow UI to update
 
-        when: "Click the Clear Log button"
+        when: 'Click the Clear Log button'
         Button clearButton = lookup('.button').queryAll().find {
             it instanceof Button && ((Button) it).text == 'Clear Log'
         } as Button
@@ -238,7 +240,7 @@ class GuiFullIntegrationSpec extends ApplicationSpec {
         WaitForAsyncUtils.waitForFxEvents()
         Thread.sleep(100)  // Allow UI to update
 
-        then: "The log should be empty"
+        then: 'The log should be empty'
         logArea.text == ''
     }
 
@@ -248,40 +250,40 @@ class GuiFullIntegrationSpec extends ApplicationSpec {
             it instanceof CheckBox && ((CheckBox) it).text?.contains('formatting')
         } as CheckBox
 
-        expect: "Initially unchecked"
+        expect: 'Initially unchecked'
         !checkbox.selected
 
-        when: "Toggle the checkbox"
+        when: 'Toggle the checkbox'
         Platform.runLater {
             checkbox.fire()
         }
         WaitForAsyncUtils.waitForFxEvents()
         Thread.sleep(100)
 
-        then: "Should be checked"
+        then: 'Should be checked'
         checkbox.selected
 
-        when: "Toggle again"
+        when: 'Toggle again'
         Platform.runLater {
             checkbox.fire()
         }
         WaitForAsyncUtils.waitForFxEvents()
         Thread.sleep(100)
 
-        then: "Should be unchecked again"
+        then: 'Should be unchecked again'
         !checkbox.selected
     }
 
     def "Help menu should contain expected items"() {
-        when: "Get the Help menu"
+        when: 'Get the Help menu'
         MenuBar menuBar = lookup('.menu-bar').query() as MenuBar
         Menu helpMenu = menuBar?.menus?.find { it.text == 'Help' }
 
-        then: "Help menu should exist and contain expected items"
+        then: 'Help menu should exist and contain expected items'
         helpMenu != null
         helpMenu.items.size() >= 2  // At least "View on GitHub" and "About"
 
-        and: "Check for expected menu items"
+        and: 'Check for expected menu items'
         def menuItemTexts = helpMenu.items*.text
         menuItemTexts.any { it?.contains('GitHub') || it?.contains('About') || it?.contains('Licenses') }
     }
@@ -311,7 +313,7 @@ class GuiFullIntegrationSpec extends ApplicationSpec {
     }
 
     def "GUI should respect minimum dimensions when resized"() {
-        when: "Try to resize below minimum"
+        when: 'Try to resize below minimum'
         Platform.runLater {
             primaryStage.width = 500  // Below 700 minimum
             primaryStage.height = 400  // Below 500 minimum
@@ -319,7 +321,7 @@ class GuiFullIntegrationSpec extends ApplicationSpec {
         WaitForAsyncUtils.waitForFxEvents()
         Thread.sleep(100)
 
-        then: "Should stay at minimum dimensions"
+        then: 'Should stay at minimum dimensions'
         primaryStage.width >= 700
         primaryStage.height >= 500
     }
@@ -334,7 +336,7 @@ class GuiFullIntegrationSpec extends ApplicationSpec {
             it instanceof Button && ((Button) it).text == 'Browse...'
         }
 
-        then: "Should have at least 2 browse buttons (world and output)"
+        then: 'Should have at least 2 browse buttons (world and output)'
         browseButtons.size() >= 2
     }
 
@@ -357,7 +359,7 @@ class GuiFullIntegrationSpec extends ApplicationSpec {
     // =========================================================================
 
     def "Extract with test world should work and update UI"() {
-        given: "Path to test world"
+        given: 'Path to test world'
         def testWorldPath = new File('src/test/resources/1_21_10-44-3')
 
         and: "Skip if test world doesn't exist"
@@ -366,7 +368,7 @@ class GuiFullIntegrationSpec extends ApplicationSpec {
             return
         }
 
-        and: "Get UI components"
+        and: 'Get UI components'
         TextField worldPathField = lookup('.text-field').queryAll().find {
             it instanceof TextField && ((TextField) it).promptText?.contains('Select Minecraft world')
         } as TextField
@@ -377,7 +379,7 @@ class GuiFullIntegrationSpec extends ApplicationSpec {
 
         TextArea logArea = lookup('.text-area').query() as TextArea
 
-        when: "Set the world path programmatically and trigger extraction"
+        when: 'Set the world path programmatically and trigger extraction'
         Platform.runLater {
             worldPathField.text = testWorldPath.absolutePath
             guiInstance.worldDir = testWorldPath
@@ -391,7 +393,7 @@ class GuiFullIntegrationSpec extends ApplicationSpec {
         }
         WaitForAsyncUtils.waitForFxEvents()
 
-        and: "Wait for extraction to complete (up to 60 seconds)"
+        and: 'Wait for extraction to complete (up to 60 seconds)'
         def startTime = System.currentTimeMillis()
         def extractionComplete = false
         while (System.currentTimeMillis() - startTime < 60000) {
@@ -408,14 +410,15 @@ class GuiFullIntegrationSpec extends ApplicationSpec {
             }
         }
 
-        then: "Extraction should have completed"
+        then: 'Extraction should have completed'
         extractionComplete
 
-        and: "Log area should have content"
+        and: 'Log area should have content'
         logArea.text?.length() > 0
 
-        and: "Extract button should be re-enabled"
+        and: 'Extract button should be re-enabled'
         !extractButton.disabled
         extractButton.text == 'Extract'
     }
+
 }

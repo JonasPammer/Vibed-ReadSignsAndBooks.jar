@@ -3,7 +3,6 @@ import spock.lang.Specification
 import spock.lang.TempDir
 import spock.lang.Unroll
 
-import java.nio.file.Files
 import java.nio.file.Path
 
 /**
@@ -21,7 +20,7 @@ class DatapackGeneratorSpec extends Specification {
 
     def "setupDatapackStructure should create functions directory for pre-1.21"() {
         given:
-        String baseDir = tempDir.toString()
+        String baseDir = tempDir
         String outputFolder = 'output'
 
         when:
@@ -37,7 +36,7 @@ class DatapackGeneratorSpec extends Specification {
 
     def "setupDatapackStructure should create function directory for 1.21"() {
         given:
-        String baseDir = tempDir.toString()
+        String baseDir = tempDir
         String outputFolder = 'output'
 
         when:
@@ -52,7 +51,7 @@ class DatapackGeneratorSpec extends Specification {
 
     def "setupDatapackStructure should create correct datapack name"() {
         given:
-        String baseDir = tempDir.toString()
+        String baseDir = tempDir
         String outputFolder = 'output'
 
         when:
@@ -68,7 +67,7 @@ class DatapackGeneratorSpec extends Specification {
 
     def "writePackMcmeta should create pack.mcmeta file"() {
         given:
-        String baseDir = tempDir.toString()
+        String baseDir = tempDir
         String outputFolder = 'output'
         DatapackGenerator.setupDatapackStructure(baseDir, outputFolder, '1_13')
 
@@ -85,7 +84,7 @@ class DatapackGeneratorSpec extends Specification {
 
     def "writePackMcmeta should create valid JSON"() {
         given:
-        String baseDir = tempDir.toString()
+        String baseDir = tempDir
         String outputFolder = 'output'
         DatapackGenerator.setupDatapackStructure(baseDir, outputFolder, '1_21')
 
@@ -159,7 +158,7 @@ class DatapackGeneratorSpec extends Specification {
 
     def "getSupportedVersions should return list of supported versions"() {
         when:
-        List<String> versions = DatapackGenerator.getSupportedVersions()
+        List<String> versions = DatapackGenerator.supportedVersions
 
         then:
         versions.size() == 4
@@ -169,4 +168,5 @@ class DatapackGeneratorSpec extends Specification {
         versions.contains('1_21')
         !versions.contains('1_20')  // 1_20 is not in the list
     }
+
 }

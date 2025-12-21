@@ -37,8 +37,8 @@ class BlockSearcherSpec extends Specification {
         )
 
         expect:
-        !loc.equals('not a BlockLocation')
-        !loc.equals(null)
+        loc != 'not a BlockLocation'
+        loc != null
     }
 
     def "BlockLocation hashCode should be consistent"() {
@@ -101,7 +101,7 @@ class BlockSearcherSpec extends Specification {
         )
 
         when:
-        String str = loc.toString()
+        String str = loc
 
         then:
         str.contains('minecraft:stone')
@@ -119,7 +119,7 @@ class BlockSearcherSpec extends Specification {
 
         then:
         loc.properties != null
-        loc.properties.isEmpty()
+        loc.properties.empty
     }
 
     // =========================================================================
@@ -183,7 +183,7 @@ class BlockSearcherSpec extends Specification {
         Set<String> result = BlockSearcher.parseBlockIds('')
 
         then:
-        result.isEmpty()
+        result.empty
     }
 
     def "parseBlockIds should handle null input"() {
@@ -191,7 +191,7 @@ class BlockSearcherSpec extends Specification {
         Set<String> result = BlockSearcher.parseBlockIds(null)
 
         then:
-        result.isEmpty()
+        result.empty
     }
 
     def "parseBlockIds should trim whitespace"() {
@@ -291,7 +291,7 @@ class BlockSearcherSpec extends Specification {
         Set<String> names = BlockSearcher.extractPaletteBlockNames(palette)
 
         then:
-        names.isEmpty()
+        names.empty
     }
 
     def "extractPaletteBlockNames should skip entries without Name field"() {
@@ -368,7 +368,7 @@ class BlockSearcherSpec extends Specification {
         Map<Integer, CompoundTag> map = BlockSearcher.assemblePaletteMap(palette, targetBlocks)
 
         then:
-        map.isEmpty()
+        map.empty
     }
 
     def "assemblePaletteMap should handle empty palette"() {
@@ -380,7 +380,7 @@ class BlockSearcherSpec extends Specification {
         Map<Integer, CompoundTag> map = BlockSearcher.assemblePaletteMap(palette, targetBlocks)
 
         then:
-        map.isEmpty()
+        map.empty
     }
 
     def "assemblePaletteMap should use blockMatchesTarget for matching"() {
@@ -430,7 +430,7 @@ class BlockSearcherSpec extends Specification {
         Map<String, String> props = BlockSearcher.extractBlockProperties(blockTag)
 
         then:
-        props.isEmpty()
+        props.empty
     }
 
     def "extractBlockProperties should skip non-StringTag values"() {
@@ -498,7 +498,7 @@ class BlockSearcherSpec extends Specification {
 
         then:
         loc.blockType == 'minecraft:stone'
-        loc.properties.isEmpty()
+        loc.properties.empty
         loc.regionFile == null
     }
 
@@ -520,4 +520,5 @@ class BlockSearcherSpec extends Specification {
         expect:
         BlockSearcher.DIMENSION_FOLDERS.size() == 3
     }
+
 }

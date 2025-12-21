@@ -1,7 +1,6 @@
 import net.querz.nbt.tag.ListTag
 import net.querz.nbt.tag.StringTag
 import spock.lang.Specification
-import spock.lang.Unroll
 
 /**
  * Unit tests for ShulkerBoxGenerator utility class.
@@ -83,7 +82,7 @@ class ShulkerBoxGeneratorSpec extends Specification {
 
     def "generateShulkerBoxCommand should generate 1.13 format"() {
         given:
-        List<Map<String, Object>> books = createTestBooks(1)
+        List<Map<String, Object>> books = makeTestBooks(1)
 
         when:
         String command = ShulkerBoxGenerator.generateShulkerBoxCommand('TestAuthor', books, 0, '1_13')
@@ -98,7 +97,7 @@ class ShulkerBoxGeneratorSpec extends Specification {
 
     def "generateShulkerBoxCommand should generate 1.14 format"() {
         given:
-        List<Map<String, Object>> books = createTestBooks(1)
+        List<Map<String, Object>> books = makeTestBooks(1)
 
         when:
         String command = ShulkerBoxGenerator.generateShulkerBoxCommand('TestAuthor', books, 0, '1_14')
@@ -112,7 +111,7 @@ class ShulkerBoxGeneratorSpec extends Specification {
 
     def "generateShulkerBoxCommand should generate 1.20 format (uses 1.14)"() {
         given:
-        List<Map<String, Object>> books = createTestBooks(1)
+        List<Map<String, Object>> books = makeTestBooks(1)
 
         when:
         String command = ShulkerBoxGenerator.generateShulkerBoxCommand('TestAuthor', books, 0, '1_20')
@@ -125,7 +124,7 @@ class ShulkerBoxGeneratorSpec extends Specification {
 
     def "generateShulkerBoxCommand should generate 1.20.5 format"() {
         given:
-        List<Map<String, Object>> books = createTestBooks(1)
+        List<Map<String, Object>> books = makeTestBooks(1)
 
         when:
         String command = ShulkerBoxGenerator.generateShulkerBoxCommand('TestAuthor', books, 0, '1_20_5')
@@ -140,7 +139,7 @@ class ShulkerBoxGeneratorSpec extends Specification {
 
     def "generateShulkerBoxCommand should generate 1.21 format"() {
         given:
-        List<Map<String, Object>> books = createTestBooks(1)
+        List<Map<String, Object>> books = makeTestBooks(1)
 
         when:
         String command = ShulkerBoxGenerator.generateShulkerBoxCommand('TestAuthor', books, 0, '1_21')
@@ -154,7 +153,7 @@ class ShulkerBoxGeneratorSpec extends Specification {
 
     def "generateShulkerBoxCommand should include box index in display name for overflow boxes"() {
         given:
-        List<Map<String, Object>> books = createTestBooks(30)  // Need enough books for second box
+        List<Map<String, Object>> books = makeTestBooks(30)  // Need enough books for second box
 
         when:
         String command = ShulkerBoxGenerator.generateShulkerBoxCommand('Author', books, 1, '1_13')
@@ -165,7 +164,7 @@ class ShulkerBoxGeneratorSpec extends Specification {
 
     def "generateShulkerBoxCommand should limit to 27 books per box"() {
         given:
-        List<Map<String, Object>> books = createTestBooks(30)  // More than 27
+        List<Map<String, Object>> books = makeTestBooks(30)  // More than 27
 
         when:
         String command = ShulkerBoxGenerator.generateShulkerBoxCommand('Author', books, 0, '1_13')
@@ -178,7 +177,7 @@ class ShulkerBoxGeneratorSpec extends Specification {
 
     def "generateShulkerBoxCommand should handle multiple boxes with boxIndex"() {
         given:
-        List<Map<String, Object>> books = createTestBooks(30)  // More than 27
+        List<Map<String, Object>> books = makeTestBooks(30)  // More than 27
 
         when:
         String command1 = ShulkerBoxGenerator.generateShulkerBoxCommand('Author', books, 0, '1_13')
@@ -193,7 +192,7 @@ class ShulkerBoxGeneratorSpec extends Specification {
 
     def "generateShulkerBoxCommand should return empty string for unknown version"() {
         given:
-        List<Map<String, Object>> books = createTestBooks(1)
+        List<Map<String, Object>> books = makeTestBooks(1)
 
         expect:
         ShulkerBoxGenerator.generateShulkerBoxCommand('Author', books, 0, 'unknown') == ''
@@ -203,7 +202,7 @@ class ShulkerBoxGeneratorSpec extends Specification {
     // Helper Methods
     // =========================================================================
 
-    private List<Map<String, Object>> createTestBooks(int count) {
+    private List<Map<String, Object>> makeTestBooks(int count) {
         List<Map<String, Object>> books = []
         count.times { int i ->
             ListTag<StringTag> pages = new ListTag<>(StringTag)
@@ -217,4 +216,5 @@ class ShulkerBoxGeneratorSpec extends Specification {
         }
         return books
     }
+
 }

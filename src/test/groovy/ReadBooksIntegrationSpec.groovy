@@ -47,28 +47,28 @@ class ReadBooksIntegrationSpec extends Specification {
         Path projectRoot = Paths.get(System.getProperty('user.dir'))
         Path testWorldsDir = projectRoot.resolve('build').resolve('test-worlds')
         File testWorldsDirFile = testWorldsDir.toFile()
-        
+
         if (testWorldsDirFile.exists()) {
             // Force delete everything with retry logic
             testWorldsDirFile.deleteDir()
             // Wait to ensure Windows releases file handles
             Thread.sleep(200)
         }
-        
-        println "setupSpec: Cleaned build/test-worlds directory"
+
+        println 'setupSpec: Cleaned build/test-worlds directory'
     }
-    
+
     void setup() {
         // Reset Main's static state to ensure test isolation
         Main.resetState()
-        
+
         // Create date stamp for expected output folder
         dateStamp = LocalDate.now().format(DateTimeFormatter.ofPattern('yyyy-MM-dd'))
 
         // Create temp directory in build/test-worlds (gitignored)
         Path projectRoot = Paths.get(System.getProperty('user.dir'))
         tempDir = projectRoot.resolve('build').resolve('test-worlds')
-        
+
         // Clean up entire test-worlds directory before each test to prevent file accumulation
         // This is necessary because deleteDir() can fail silently on Windows if files are locked
         File tempDirFile = tempDir.toFile()
@@ -81,18 +81,18 @@ class ReadBooksIntegrationSpec extends Specification {
                 }
             }
         }
-        
+
         Files.createDirectories(tempDir)
 
         println "Test output directory: ${tempDir.toAbsolutePath()}"
     }
-    
+
     /**
      * Recursively delete a directory with multiple attempts for Windows file locking issues
      */
     private void deleteRecursively(File file) {
-        if (file.isDirectory()) {
-            file.listFiles()?.each { deleteRecursively(it) }
+        if (file.directory) {
+            file.listFiles()?.each { File child -> deleteRecursively(child) }
         }
         // Try multiple times to handle Windows file locking
         // AGGRESSIVELY increased retries and longer pauses for Windows file handle release
@@ -100,11 +100,7 @@ class ReadBooksIntegrationSpec extends Specification {
             if (file.delete()) {
                 return
             }
-            // Force garbage collection between attempts to release file handles
-            if (i % 3 == 0) {
-                System.gc()
-            }
-            // Much longer pause to allow file handles to be released
+            // Pause to allow file handles to be released
             Thread.sleep(200)
         }
         // If still exists after retries, log but don't fail
@@ -438,7 +434,7 @@ class ReadBooksIntegrationSpec extends Specification {
 
                 String content = packMcmeta.text
                 // Parse JSON and verify pack_format
-                def json = new groovy.json.JsonSlurper().parseText(content)
+                Object json = new groovy.json.JsonSlurper().parseText(content)
                 assert json.pack.pack_format == expectedPackFormat,
                     "Version ${version}: Expected pack_format ${expectedPackFormat} but found ${json.pack.pack_format}"
                 assert json.pack.description != null,
@@ -521,46 +517,46 @@ class ReadBooksIntegrationSpec extends Specification {
             runReadBooksProgram()
 
             // Test 1.13 format: give @p written_book{title:"...",author:"...",pages:[...]}
-            Path mcfunction13 = outputDir.resolve("readbooks_datapack_1_13")
+            Path mcfunction13 = outputDir.resolve('readbooks_datapack_1_13')
                 .resolve('data').resolve('readbooks').resolve(getFunctionDirName('1_13')).resolve('books.mcfunction')
             String firstCommand13 = mcfunction13.text.readLines().find { it.startsWith('give @p') }
-            assert firstCommand13 != null, "No commands found in 1.13 file"
-            assert firstCommand13.contains('written_book{title:'), "1.13 command missing title field"
-            assert firstCommand13.contains('author:'), "1.13 command missing author field"
-            assert firstCommand13.contains('pages:['), "1.13 command missing pages array"
-            assert firstCommand13.contains('\'{"text":"'), "1.13 command pages not in correct format"
+            assert firstCommand13 != null, 'No commands found in 1.13 file'
+            assert firstCommand13.contains('written_book{title:'), '1.13 command missing title field'
+            assert firstCommand13.contains('author:'), '1.13 command missing author field'
+            assert firstCommand13.contains('pages:['), '1.13 command missing pages array'
+            assert firstCommand13.contains('\'{"text":"'), '1.13 command pages not in correct format'
 
             // Test 1.14 format: give @p written_book{title:"...",author:"...",pages:[...]}
-            Path mcfunction14 = outputDir.resolve("readbooks_datapack_1_14")
+            Path mcfunction14 = outputDir.resolve('readbooks_datapack_1_14')
                 .resolve('data').resolve('readbooks').resolve(getFunctionDirName('1_14')).resolve('books.mcfunction')
             String firstCommand14 = mcfunction14.text.readLines().find { it.startsWith('give @p') }
-            assert firstCommand14 != null, "No commands found in 1.14 file"
-            assert firstCommand14.contains('written_book{title:'), "1.14 command missing title field"
-            assert firstCommand14.contains('author:'), "1.14 command missing author field"
-            assert firstCommand14.contains('pages:['), "1.14 command missing pages array"
-            assert firstCommand14.contains('\'["'), "1.14 command pages not in correct format"
+            assert firstCommand14 != null, 'No commands found in 1.14 file'
+            assert firstCommand14.contains('written_book{title:'), '1.14 command missing title field'
+            assert firstCommand14.contains('author:'), '1.14 command missing author field'
+            assert firstCommand14.contains('pages:['), '1.14 command missing pages array'
+            assert firstCommand14.contains('\'["'), '1.14 command pages not in correct format'
 
             // Test 1.20.5 format: give @p written_book[minecraft:written_book_content={title:"...",author:"...",pages:[...]}]
-            Path mcfunction205 = outputDir.resolve("readbooks_datapack_1_20_5")
+            Path mcfunction205 = outputDir.resolve('readbooks_datapack_1_20_5')
                 .resolve('data').resolve('readbooks').resolve(getFunctionDirName('1_20_5')).resolve('books.mcfunction')
             String firstCommand205 = mcfunction205.text.readLines().find { it.startsWith('give @p') }
-            assert firstCommand205 != null, "No commands found in 1.20.5 file"
-            assert firstCommand205.contains('written_book[minecraft:written_book_content={'), "1.20.5 command missing written_book_content"
-            assert firstCommand205.contains('title:'), "1.20.5 command missing title field"
-            assert firstCommand205.contains('author:'), "1.20.5 command missing author field"
-            assert firstCommand205.contains('pages:['), "1.20.5 command missing pages array"
-            assert firstCommand205.endsWith('}]'), "1.20.5 command not properly closed"
+            assert firstCommand205 != null, 'No commands found in 1.20.5 file'
+            assert firstCommand205.contains('written_book[minecraft:written_book_content={'), '1.20.5 command missing written_book_content'
+            assert firstCommand205.contains('title:'), '1.20.5 command missing title field'
+            assert firstCommand205.contains('author:'), '1.20.5 command missing author field'
+            assert firstCommand205.contains('pages:['), '1.20.5 command missing pages array'
+            assert firstCommand205.endsWith('}]'), '1.20.5 command not properly closed'
 
             // Test 1.21 format: give @p written_book[written_book_content={title:"...",author:"...",pages:[...]}]
-            Path mcfunction21 = outputDir.resolve("readbooks_datapack_1_21")
+            Path mcfunction21 = outputDir.resolve('readbooks_datapack_1_21')
                 .resolve('data').resolve('readbooks').resolve(getFunctionDirName('1_21')).resolve('books.mcfunction')
             String firstCommand21 = mcfunction21.text.readLines().find { it.startsWith('give @p') }
-            assert firstCommand21 != null, "No commands found in 1.21 file"
-            assert firstCommand21.contains('written_book[written_book_content={'), "1.21 command missing written_book_content"
-            assert firstCommand21.contains('title:'), "1.21 command missing title field"
-            assert firstCommand21.contains('author:'), "1.21 command missing author field"
-            assert firstCommand21.contains('pages:['), "1.21 command missing pages array"
-            assert firstCommand21.endsWith('}]'), "1.21 command not properly closed"
+            assert firstCommand21 != null, 'No commands found in 1.21 file'
+            assert firstCommand21.contains('written_book[written_book_content={'), '1.21 command missing written_book_content'
+            assert firstCommand21.contains('title:'), '1.21 command missing title field'
+            assert firstCommand21.contains('author:'), '1.21 command missing author field'
+            assert firstCommand21.contains('pages:['), '1.21 command missing pages array'
+            assert firstCommand21.endsWith('}]'), '1.21 command not properly closed'
             assert !firstCommand21.contains('minecraft:written_book_content'), "1.21 should not have 'minecraft:' prefix"
 
             true
@@ -592,7 +588,7 @@ class ReadBooksIntegrationSpec extends Specification {
                     shulkerCommands.each { String command ->
                         // Verify basic structure
                         assert command.contains('give @a'), "Shulker command missing 'give @a': ${command.take(100)}"
-                        assert command.contains('shulker_box'), "Command missing shulker_box"
+                        assert command.contains('shulker_box'), 'Command missing shulker_box'
 
                         // Version-specific JSON validation
                         if (version in ['1_20_5', '1_21']) {
@@ -607,11 +603,7 @@ class ReadBooksIntegrationSpec extends Specification {
                             assert command.contains('"text":"') || command.contains('{"text":"'), "Missing text field in display for ${version}"
                         }
 
-                        // Verify quotes are properly escaped
-                        // Count unescaped quotes at the command level (escaped ones are \")
-                        String unescapedQuotePattern = version in ['1_13', '1_14'] ? /(?<!\\)"/ : /(?<!\\)"(?!\\)/
-                        // This is a heuristic check - properly formed commands should have matching quotes
-
+                        // Verify quotes are properly escaped (heuristic check)
                         // Validate no double-escaped sequences that would break parsing
                         assert !command.contains('\\\\\\\\'), "Excessive escaping detected in ${version}: ${command.take(100)}"
                     }
@@ -749,14 +741,14 @@ class ReadBooksIntegrationSpec extends Specification {
         // Note: Due to hash collisions, we might not get all 16 unique colors with these specific names,
         // so we just verify that we get a reasonable distribution and no invalid colors
         println "  ✓ Test authors map to ${mappedColors.size()} distinct colors out of 16 available"
-        assert mappedColors.size() >= 1, "Authors should map to at least 1 color"
-        assert mappedColors.size() <= 16, "Authors should not map to more than 16 colors"
+        assert mappedColors.size() >= 1, 'Authors should map to at least 1 color'
+        assert mappedColors.size() <= 16, 'Authors should not map to more than 16 colors'
 
         and: 'edge cases are handled correctly'
         // Empty/null author should default to 'Unknown'
         int unknownColorIndex = Math.abs('Unknown'.hashCode() % allColors.size())
         String unknownColor = allColors[unknownColorIndex]
-        assert allColors.contains(unknownColor), "Unknown author should map to valid color"
+        assert allColors.contains(unknownColor), 'Unknown author should map to valid color'
         println "  ✓ Unknown author maps to color '${unknownColor}'"
 
         true
@@ -812,7 +804,7 @@ class ReadBooksIntegrationSpec extends Specification {
             runReadBooksProgram()
 
             // Extract X coordinates from a version file to verify incrementing pattern
-            Path mcfunction21 = outputDir.resolve("readbooks_datapack_1_21")
+            Path mcfunction21 = outputDir.resolve('readbooks_datapack_1_21')
                 .resolve('data').resolve('readbooks').resolve(getFunctionDirName('1_21')).resolve('signs.mcfunction')
             assert Files.exists(mcfunction21)
 
@@ -834,7 +826,7 @@ class ReadBooksIntegrationSpec extends Specification {
                 // Verify X coordinates are incrementing (at least monotonically increasing)
                 if (xCoordinates.size() > 1) {
                     for (int i = 1; i < xCoordinates.size(); i++) {
-                        assert xCoordinates[i] >= xCoordinates[i-1],
+                        assert xCoordinates[i] >= xCoordinates[i - 1],
                             "X coordinates not monotonically increasing: ${xCoordinates}"
                     }
                 }
@@ -864,7 +856,7 @@ class ReadBooksIntegrationSpec extends Specification {
             runReadBooksProgram()
 
             // Check Z coordinate offset pattern for duplicates
-            Path mcfunction21 = outputDir.resolve("readbooks_datapack_1_21")
+            Path mcfunction21 = outputDir.resolve('readbooks_datapack_1_21')
                 .resolve('data').resolve('readbooks').resolve(getFunctionDirName('1_21')).resolve('signs.mcfunction')
             assert Files.exists(mcfunction21)
 
@@ -898,9 +890,9 @@ class ReadBooksIntegrationSpec extends Specification {
                 xToZCoordinates.each { int x, List<Integer> zValues ->
                     if (zValues.size() > 1) {
                         // If multiple signs at same X, verify Z offsets are monotonically increasing
-                        List<Integer> sortedZ = zValues.sort()
+                        List<Integer> sortedZ = zValues.toSorted()
                         for (int i = 1; i < sortedZ.size(); i++) {
-                            assert sortedZ[i] > sortedZ[i-1],
+                            assert sortedZ[i] > sortedZ[i - 1],
                                 "Z offsets not properly incrementing for X=${x}: ${sortedZ}"
                         }
                         println "  ✓ X coordinate ${x} has ${zValues.size()} signs offset at Z: ${sortedZ}"
@@ -926,7 +918,7 @@ class ReadBooksIntegrationSpec extends Specification {
     private void setupTestWorld(Map worldInfo) {
         // Reset Main's static state before each test world to prevent accumulation
         Main.resetState()
-        
+
         currentTestWorldName = worldInfo.name
         currentExpectedBookCount = worldInfo.bookCount
         currentExpectedSignCount = worldInfo.signCount
@@ -987,36 +979,36 @@ class ReadBooksIntegrationSpec extends Specification {
             runReadBooksProgram()
 
             // Verify 1.13 format IN DATAPACK
-            Path mcfunction13 = outputDir.resolve("readbooks_datapack_1_13")
+            Path mcfunction13 = outputDir.resolve('readbooks_datapack_1_13')
                 .resolve('data').resolve('readbooks').resolve(getFunctionDirName('1_13')).resolve('signs.mcfunction')
             String firstCommand13 = mcfunction13.text.readLines().find { it.startsWith('setblock') }
-            assert firstCommand13 != null, "No setblock command found in 1_13"
-            assert firstCommand13.contains('clickEvent'), "1.13 sign command missing clickEvent"
-            assert firstCommand13.contains('action') && firstCommand13.contains('run_command'), "1.13 clickEvent missing action"
-            assert firstCommand13.contains('tellraw'), "1.13 clickEvent missing tellraw command"
+            assert firstCommand13 != null, 'No setblock command found in 1_13'
+            assert firstCommand13.contains('clickEvent'), '1.13 sign command missing clickEvent'
+            assert firstCommand13.contains('action') && firstCommand13.contains('run_command'), '1.13 clickEvent missing action'
+            assert firstCommand13.contains('tellraw'), '1.13 clickEvent missing tellraw command'
 
             // Verify 1.14 format IN DATAPACK
-            Path mcfunction14 = outputDir.resolve("readbooks_datapack_1_14")
+            Path mcfunction14 = outputDir.resolve('readbooks_datapack_1_14')
                 .resolve('data').resolve('readbooks').resolve(getFunctionDirName('1_14')).resolve('signs.mcfunction')
             String firstCommand14 = mcfunction14.text.readLines().find { it.startsWith('setblock') }
-            assert firstCommand14 != null, "No setblock command found in 1_14"
-            assert firstCommand14.contains('clickEvent'), "1.14 sign command missing clickEvent"
-            assert firstCommand14.contains('action') && firstCommand14.contains('run_command'), "1.14 clickEvent missing action"
+            assert firstCommand14 != null, 'No setblock command found in 1_14'
+            assert firstCommand14.contains('clickEvent'), '1.14 sign command missing clickEvent'
+            assert firstCommand14.contains('action') && firstCommand14.contains('run_command'), '1.14 clickEvent missing action'
 
             // Verify 1.20.5 format IN DATAPACK
-            Path mcfunction205 = outputDir.resolve("readbooks_datapack_1_20_5")
+            Path mcfunction205 = outputDir.resolve('readbooks_datapack_1_20_5')
                 .resolve('data').resolve('readbooks').resolve(getFunctionDirName('1_20_5')).resolve('signs.mcfunction')
             String firstCommand205 = mcfunction205.text.readLines().find { it.startsWith('setblock') }
-            assert firstCommand205 != null, "No setblock command found in 1_20_5"
-            assert firstCommand205.contains('clickEvent'), "1.20.5 sign command missing clickEvent"
-            assert firstCommand205.contains('action') && firstCommand205.contains('run_command'), "1.20.5 clickEvent missing action"
+            assert firstCommand205 != null, 'No setblock command found in 1_20_5'
+            assert firstCommand205.contains('clickEvent'), '1.20.5 sign command missing clickEvent'
+            assert firstCommand205.contains('action') && firstCommand205.contains('run_command'), '1.20.5 clickEvent missing action'
 
             // Verify 1.21 format IN DATAPACK
-            Path mcfunction21 = outputDir.resolve("readbooks_datapack_1_21")
+            Path mcfunction21 = outputDir.resolve('readbooks_datapack_1_21')
                 .resolve('data').resolve('readbooks').resolve(getFunctionDirName('1_21')).resolve('signs.mcfunction')
             String firstCommand21 = mcfunction21.text.readLines().find { it.startsWith('setblock') }
-            assert firstCommand21 != null, "No setblock command found in 1_21"
-            assert firstCommand21.contains('clickEvent'), "1.21 sign command missing clickEvent"
+            assert firstCommand21 != null, 'No setblock command found in 1_21'
+            assert firstCommand21.contains('clickEvent'), '1.21 sign command missing clickEvent'
 
             true
         }
@@ -1035,16 +1027,16 @@ class ReadBooksIntegrationSpec extends Specification {
             runReadBooksProgram()
 
             // Check 1.20.5 format (easiest to parse) IN DATAPACK
-            Path mcfunction205 = outputDir.resolve("readbooks_datapack_1_20_5")
+            Path mcfunction205 = outputDir.resolve('readbooks_datapack_1_20_5')
                 .resolve('data').resolve('readbooks').resolve(getFunctionDirName('1_20_5')).resolve('signs.mcfunction')
             String firstCommand = mcfunction205.text.readLines().find { it.startsWith('setblock') }
             assert firstCommand != null
 
             // Should contain "Sign from (X Y Z)" in the tellraw
-            assert firstCommand.contains('Sign from ('), "Missing coordinate display in tellraw"
+            assert firstCommand.contains('Sign from ('), 'Missing coordinate display in tellraw'
 
             // Should contain "/tp @s" teleport command
-            assert firstCommand.contains('/tp @s'), "Missing teleport command in clickEvent"
+            assert firstCommand.contains('/tp @s'), 'Missing teleport command in clickEvent'
 
             // Extract coordinates from tellraw message
             def signFromMatch = (firstCommand =~ /Sign from \((-?\d+) (-?\d+) (-?\d+)\)/)
@@ -1055,9 +1047,9 @@ class ReadBooksIntegrationSpec extends Specification {
             assert tpMatch.find(), "Could not find '/tp @s X Y Z' pattern"
 
             // Coordinates in tellraw and tp should match
-            assert signFromMatch.group(1) == tpMatch.group(1), "X coordinate mismatch"
-            assert signFromMatch.group(2) == tpMatch.group(2), "Y coordinate mismatch"
-            assert signFromMatch.group(3) == tpMatch.group(3), "Z coordinate mismatch"
+            assert signFromMatch.group(1) == tpMatch.group(1), 'X coordinate mismatch'
+            assert signFromMatch.group(2) == tpMatch.group(2), 'Y coordinate mismatch'
+            assert signFromMatch.group(3) == tpMatch.group(3), 'Z coordinate mismatch'
 
             true
         }
@@ -1076,7 +1068,7 @@ class ReadBooksIntegrationSpec extends Specification {
             runReadBooksProgram()
 
             // Test 1.20.5 format for clarity IN DATAPACK
-            Path mcfunction205 = outputDir.resolve("readbooks_datapack_1_20_5")
+            Path mcfunction205 = outputDir.resolve('readbooks_datapack_1_20_5')
                 .resolve('data').resolve('readbooks').resolve(getFunctionDirName('1_20_5')).resolve('signs.mcfunction')
             String firstCommand = mcfunction205.text.readLines().find { it.startsWith('setblock') }
             assert firstCommand != null
@@ -1090,15 +1082,15 @@ class ReadBooksIntegrationSpec extends Specification {
             // Verify sign has clickEvent that runs tellraw
             assert firstCommand.contains('clickEvent') && firstCommand.contains('action') &&
                    firstCommand.contains('run_command') && firstCommand.contains('/tellraw'),
-                "Sign clickEvent should run tellraw command"
+                'Sign clickEvent should run tellraw command'
 
             // Verify tellraw message contains its own clickEvent for teleport
             assert firstCommand =~ /tellraw.*clickEvent.*\/tp/,
-                "tellraw message should contain clickEvent for teleport"
+                'tellraw message should contain clickEvent for teleport'
 
             // Verify gray color for coordinate text
             assert firstCommand.contains('gray'),
-                "tellraw coordinate message should be gray"
+                'tellraw coordinate message should be gray'
 
             true
         }
@@ -1117,34 +1109,34 @@ class ReadBooksIntegrationSpec extends Specification {
             runReadBooksProgram()
 
             // Check 1.13 format (Text1, Text2, Text3, Text4) IN DATAPACK
-            Path mcfunction13 = outputDir.resolve("readbooks_datapack_1_13")
+            Path mcfunction13 = outputDir.resolve('readbooks_datapack_1_13')
                 .resolve('data').resolve('readbooks').resolve(getFunctionDirName('1_13')).resolve('signs.mcfunction')
             String firstCommand = mcfunction13.text.readLines().find { it.startsWith('setblock') }
             assert firstCommand != null
 
             // Text1 should have clickEvent
             def text1Match = (firstCommand =~ /Text1:'([^']+)'/)
-            assert text1Match.find(), "Could not find Text1 field"
+            assert text1Match.find(), 'Could not find Text1 field'
             String text1Content = text1Match.group(1)
-            assert text1Content.contains('clickEvent'), "Text1 should have clickEvent"
+            assert text1Content.contains('clickEvent'), 'Text1 should have clickEvent'
 
             // Text2, Text3, Text4 should NOT have clickEvent (if they exist)
             def text2Match = (firstCommand =~ /Text2:'([^']+)'/)
             if (text2Match.find()) {
                 String text2Content = text2Match.group(1)
-                assert !text2Content.contains('clickEvent'), "Text2 should not have clickEvent"
+                assert !text2Content.contains('clickEvent'), 'Text2 should not have clickEvent'
             }
 
             def text3Match = (firstCommand =~ /Text3:'([^']+)'/)
             if (text3Match.find()) {
                 String text3Content = text3Match.group(1)
-                assert !text3Content.contains('clickEvent'), "Text3 should not have clickEvent"
+                assert !text3Content.contains('clickEvent'), 'Text3 should not have clickEvent'
             }
 
             def text4Match = (firstCommand =~ /Text4:'([^']+)'/)
             if (text4Match.find()) {
                 String text4Content = text4Match.group(1)
-                assert !text4Content.contains('clickEvent'), "Text4 should not have clickEvent"
+                assert !text4Content.contains('clickEvent'), 'Text4 should not have clickEvent'
             }
 
             true
@@ -1165,7 +1157,7 @@ class ReadBooksIntegrationSpec extends Specification {
 
             // Find CSV file in output directory
             Path csvFile = outputDir.resolve('all_books.csv')
-            assert Files.exists(csvFile), "CSV file should exist"
+            assert Files.exists(csvFile), 'CSV file should exist'
 
             String csvContent = csvFile.text
             List<String> lines = csvContent.readLines()
@@ -1179,8 +1171,8 @@ class ReadBooksIntegrationSpec extends Specification {
             int generationIndex = headers.findIndexOf { it == 'Generation' }
             int pageCountIndex = headers.findIndexOf { it == 'PageCount' }
             int pagesIndex = headers.findIndexOf { it == 'Pages' }
-            assert generationIndex > pageCountIndex, "Generation column should come after PageCount"
-            assert generationIndex < pagesIndex, "Generation column should come before Pages"
+            assert generationIndex > pageCountIndex, 'Generation column should come after PageCount'
+            assert generationIndex < pagesIndex, 'Generation column should come before Pages'
 
             // Verify data rows have valid generation values
             List<String> validGenerations = ['Original', 'Copy of Original', 'Copy of Copy', 'Tattered']
@@ -1192,7 +1184,7 @@ class ReadBooksIntegrationSpec extends Specification {
                     if (parts.length > generationIndex) {
                         String generation = parts[generationIndex].trim()
                         // Generation value should be one of the valid values or empty for writable books
-                        assert generation.isEmpty() || validGenerations.any { generation.contains(it) },
+                        assert generation.empty || validGenerations.any { generation.contains(it) },
                             "Invalid generation value: ${generation}"
                     }
                 }
@@ -1216,7 +1208,7 @@ class ReadBooksIntegrationSpec extends Specification {
             runReadBooksProgram()
 
             // Check 1.13/1.14 format (NBT with generation tag)
-            Path mcfunction13 = outputDir.resolve("readbooks_datapack_1_13")
+            Path mcfunction13 = outputDir.resolve('readbooks_datapack_1_13')
                 .resolve('data').resolve('readbooks').resolve(getFunctionDirName('1_13')).resolve('books.mcfunction')
             String content13 = mcfunction13.text
             List<String> giveCommands13 = content13.readLines().findAll { it.startsWith('give @p written_book') }
@@ -1227,7 +1219,7 @@ class ReadBooksIntegrationSpec extends Specification {
                     assert command.contains('generation:'), "1.13 command missing generation tag: ${command.take(100)}"
                     // Verify generation value is 0, 1, 2, or 3
                     def genMatch = (command =~ /generation:(\d)/)
-                    assert genMatch.find(), "Could not parse generation value in 1.13 command"
+                    assert genMatch.find(), 'Could not parse generation value in 1.13 command'
                     int genValue = genMatch.group(1).toInteger()
                     assert genValue >= 0 && genValue <= 3, "Invalid generation value ${genValue} in 1.13 command"
                 }
@@ -1235,7 +1227,7 @@ class ReadBooksIntegrationSpec extends Specification {
             }
 
             // Check 1.20.5/1.21 format (component syntax with generation)
-            Path mcfunction205 = outputDir.resolve("readbooks_datapack_1_20_5")
+            Path mcfunction205 = outputDir.resolve('readbooks_datapack_1_20_5')
                 .resolve('data').resolve('readbooks').resolve(getFunctionDirName('1_20_5')).resolve('books.mcfunction')
             String content205 = mcfunction205.text
             List<String> giveCommands205 = content205.readLines().findAll { it.startsWith('give @p written_book') }
@@ -1246,7 +1238,7 @@ class ReadBooksIntegrationSpec extends Specification {
                     assert command.contains('generation:'), "1.20.5 command missing generation: ${command.take(100)}"
                     // Verify generation value is 0, 1, 2, or 3
                     def genMatch = (command =~ /generation:(\d)/)
-                    assert genMatch.find(), "Could not parse generation value in 1.20.5 command"
+                    assert genMatch.find(), 'Could not parse generation value in 1.20.5 command'
                     int genValue = genMatch.group(1).toInteger()
                     assert genValue >= 0 && genValue <= 3, "Invalid generation value ${genValue} in 1.20.5 command"
                 }
@@ -1279,24 +1271,13 @@ class ReadBooksIntegrationSpec extends Specification {
                 String csvContent = csvFile.text
                 List<String> csvLines = csvContent.readLines()
 
-                // Get header to find generation column index
-                String header = csvLines[0]
-                List<String> headers = header.split(',')
-                int generationIndex = headers.findIndexOf { it == 'Generation' }
+                // Verify CSV has content (header + data rows)
+                assert csvLines.size() > 1, 'CSV should have header and data rows'
 
-                // Collect generation values from CSV
-                Map<String, Integer> generationPriority = [
-                    'Original': 0,
-                    'Copy of Original': 1,
-                    'Copy of Copy': 2,
-                    'Tattered': 3
-                ]
-
-                // For each file in duplicates, check that it's not an Original if
-                // a copy of the same content exists in the main folder
-                // (This is a heuristic check - full validation would require content comparison)
+                // Duplicates folder validation - heuristic check
+                // Full validation would require content comparison with generation priority
                 println "  ✓ Duplicates folder exists with ${duplicatesDir.listFiles()?.length} files"
-                println "    Original-prioritization is implemented (swap occurs when more original found)"
+                println '    Original-prioritization is implemented (swap occurs when more original found)'
             }
 
             true
@@ -1332,9 +1313,9 @@ class ReadBooksIntegrationSpec extends Specification {
                 // Files are only created if custom names are found
                 // So we check if any were found and verify files accordingly
                 if (Main.customNameData.size() > 0) {
-                    assert Files.exists(csvFile), "Custom names CSV should exist when custom names found"
-                    assert Files.exists(txtFile), "Custom names TXT should exist when custom names found"
-                    assert Files.exists(jsonFile), "Custom names JSON should exist when custom names found"
+                    assert Files.exists(csvFile), 'Custom names CSV should exist when custom names found'
+                    assert Files.exists(txtFile), 'Custom names TXT should exist when custom names found'
+                    assert Files.exists(jsonFile), 'Custom names JSON should exist when custom names found'
                     println "  ✓ Custom names output files created (${Main.customNameData.size()} custom names found)"
                 } else {
                     println "  ✓ No custom names found in test world (files not created as expected)"
@@ -1369,9 +1350,9 @@ class ReadBooksIntegrationSpec extends Specification {
             Path txtFile = outputDir.resolve('all_custom_names.txt')
             Path jsonFile = outputDir.resolve('all_custom_names.json')
 
-            assert !Files.exists(csvFile), "Custom names CSV should not exist when flag disabled"
-            assert !Files.exists(txtFile), "Custom names TXT should not exist when flag disabled"
-            assert !Files.exists(jsonFile), "Custom names JSON should not exist when flag disabled"
+            assert !Files.exists(csvFile), 'Custom names CSV should not exist when flag disabled'
+            assert !Files.exists(txtFile), 'Custom names TXT should not exist when flag disabled'
+            assert !Files.exists(jsonFile), 'Custom names JSON should not exist when flag disabled'
 
             println "  ✓ Custom names files correctly not created when flag disabled"
             true
@@ -1435,7 +1416,7 @@ class ReadBooksIntegrationSpec extends Specification {
 
                     // Parse JSON to verify validity
                     def parsed = new groovy.json.JsonSlurper().parseText(jsonContent)
-                    assert parsed instanceof List, "JSON should be an array"
+                    assert parsed instanceof List, 'JSON should be an array'
 
                     // Verify each entry has required fields
                     parsed.each { entry ->
@@ -1762,9 +1743,6 @@ class ReadBooksIntegrationSpec extends Specification {
                 runReadBooksProgram()
                 println "  ✓ Portal detection completed for ${worldInfo.name}"
                 true
-            } catch (Exception e) {
-                println "  ✗ Portal detection failed: ${e.message}"
-                false
             } finally {
                 Main.findPortals = false
             }
@@ -1794,7 +1772,7 @@ class ReadBooksIntegrationSpec extends Specification {
 
                 if (portalCount > 0) {
                     Path csvFile = outputDir.resolve('portals.csv')
-                    assert Files.exists(csvFile), "Portal CSV should exist when portals found"
+                    assert Files.exists(csvFile), 'Portal CSV should exist when portals found'
                     println "  ✓ Portal output files created (${portalCount} portals found)"
                 } else {
                     println "  ✓ No portals found in ${worldInfo.name} (expected for current test world)"
@@ -1834,7 +1812,7 @@ class ReadBooksIntegrationSpec extends Specification {
                 // For now, we expect 0 portals (user confirmed current test world has no portals)
                 // Once test worlds with portals are added, this assertion will fail
                 // and prompt updating the test to handle both cases
-                assert portalCount >= 0, "Portal count should be non-negative"
+                assert portalCount >= 0, 'Portal count should be non-negative'
 
                 true
             } finally {
@@ -1861,9 +1839,6 @@ class ReadBooksIntegrationSpec extends Specification {
                 int blockCount = Main.blockSearchResults?.size() ?: 0
                 println "  ✓ Block search completed for ${worldInfo.name}: found ${blockCount} matching blocks"
                 true
-            } catch (Exception e) {
-                println "  ✗ Block search failed: ${e.message}"
-                false
             } finally {
                 Main.searchBlocks = []
             }
@@ -1892,12 +1867,12 @@ class ReadBooksIntegrationSpec extends Specification {
 
                 if (blockCount > 0) {
                     Path csvFile = outputDir.resolve('blocks.csv')
-                    assert Files.exists(csvFile), "Block search CSV should exist when blocks found"
+                    assert Files.exists(csvFile), 'Block search CSV should exist when blocks found'
 
                     String csvContent = csvFile.text
-                    assert csvContent.contains('block_type'), "CSV should have block_type header"
-                    assert csvContent.contains('dimension'), "CSV should have dimension header"
-                    assert csvContent.contains('x,y,z') || csvContent.contains('x'), "CSV should have coordinate headers"
+                    assert csvContent.contains('block_type'), 'CSV should have block_type header'
+                    assert csvContent.contains('dimension'), 'CSV should have dimension header'
+                    assert csvContent.contains('x,y,z') || csvContent.contains('x'), 'CSV should have coordinate headers'
 
                     println "  ✓ Block search CSV created with ${blockCount} blocks"
                 } else {
@@ -1933,22 +1908,22 @@ class ReadBooksIntegrationSpec extends Specification {
 
                 if (blockCount > 0) {
                     Path jsonFile = outputDir.resolve('blocks.json')
-                    assert Files.exists(jsonFile), "Block search JSON should exist when blocks found"
+                    assert Files.exists(jsonFile), 'Block search JSON should exist when blocks found'
 
                     String jsonContent = jsonFile.text
                     def parsed = new groovy.json.JsonSlurper().parseText(jsonContent)
-                    assert parsed instanceof Map, "JSON should be an object with blocks array"
-                    assert parsed.containsKey('blocks'), "JSON should have blocks key"
-                    assert parsed.blocks instanceof List, "blocks should be an array"
+                    assert parsed instanceof Map, 'JSON should be an object with blocks array'
+                    assert parsed.containsKey('blocks'), 'JSON should have blocks key'
+                    assert parsed.blocks instanceof List, 'blocks should be an array'
 
                     if (parsed.blocks.size() > 0) {
                         def firstEntry = parsed.blocks[0]
-                        assert firstEntry.containsKey('type'), "Entry should have type"
-                        assert firstEntry.containsKey('dimension'), "Entry should have dimension"
-                        assert firstEntry.containsKey('coordinates'), "Entry should have coordinates"
-                        assert firstEntry.coordinates.containsKey('x'), "Coordinates should have x"
-                        assert firstEntry.coordinates.containsKey('y'), "Coordinates should have y"
-                        assert firstEntry.coordinates.containsKey('z'), "Coordinates should have z"
+                        assert firstEntry.containsKey('type'), 'Entry should have type'
+                        assert firstEntry.containsKey('dimension'), 'Entry should have dimension'
+                        assert firstEntry.containsKey('coordinates'), 'Entry should have coordinates'
+                        assert firstEntry.coordinates.containsKey('x'), 'Coordinates should have x'
+                        assert firstEntry.coordinates.containsKey('y'), 'Coordinates should have y'
+                        assert firstEntry.coordinates.containsKey('z'), 'Coordinates should have z'
                     }
 
                     println "  ✓ Block search JSON created with ${blockCount} blocks"
@@ -1985,10 +1960,10 @@ class ReadBooksIntegrationSpec extends Specification {
 
                 if (blockCount > 0) {
                     Path txtFile = outputDir.resolve('blocks.txt')
-                    assert Files.exists(txtFile), "Block search TXT should exist when blocks found"
+                    assert Files.exists(txtFile), 'Block search TXT should exist when blocks found'
 
                     String txtContent = txtFile.text
-                    assert txtContent.length() > 0, "TXT file should not be empty"
+                    assert txtContent.length() > 0, 'TXT file should not be empty'
 
                     println "  ✓ Block search TXT created with ${blockCount} blocks"
                 } else {
@@ -2021,7 +1996,7 @@ class ReadBooksIntegrationSpec extends Specification {
 
                 // Verify that all dimensions were searched (check log output or verify no errors)
                 println "  ✓ Multi-dimension search completed for ${worldInfo.name}"
-                println "    Dimensions searched: overworld, nether, end"
+                println '    Dimensions searched: overworld, nether, end'
 
                 true
             } finally {
@@ -2049,16 +2024,16 @@ class ReadBooksIntegrationSpec extends Specification {
 
                 // Portal results should be null or empty when not searching
                 int portalCount = Main.portalResults?.size() ?: 0
-                assert portalCount == 0, "No portals should be detected when flag disabled"
+                assert portalCount == 0, 'No portals should be detected when flag disabled'
 
                 // No portal output files should exist
                 Path csvFile = outputDir.resolve('portals.csv')
                 Path jsonFile = outputDir.resolve('portals.json')
                 Path txtFile = outputDir.resolve('portals.txt')
 
-                assert !Files.exists(csvFile), "Portal CSV should not exist when flag disabled"
-                assert !Files.exists(jsonFile), "Portal JSON should not exist when flag disabled"
-                assert !Files.exists(txtFile), "Portal TXT should not exist when flag disabled"
+                assert !Files.exists(csvFile), 'Portal CSV should not exist when flag disabled'
+                assert !Files.exists(jsonFile), 'Portal JSON should not exist when flag disabled'
+                assert !Files.exists(txtFile), 'Portal TXT should not exist when flag disabled'
 
                 println "  ✓ Portal detection correctly skipped when flag disabled"
                 true
@@ -2093,12 +2068,12 @@ class ReadBooksIntegrationSpec extends Specification {
                     String header = csvContent.readLines()[0]
 
                     // Verify required columns exist
-                    assert header.contains('portal_id'), "CSV should have portal_id"
-                    assert header.contains('dimension'), "CSV should have dimension"
-                    assert header.contains('width'), "CSV should have width"
-                    assert header.contains('height'), "CSV should have height"
-                    assert header.contains('axis'), "CSV should have axis"
-                    assert header.contains('center_x') || header.contains('centerX'), "CSV should have center coordinates"
+                    assert header.contains('portal_id'), 'CSV should have portal_id'
+                    assert header.contains('dimension'), 'CSV should have dimension'
+                    assert header.contains('width'), 'CSV should have width'
+                    assert header.contains('height'), 'CSV should have height'
+                    assert header.contains('axis'), 'CSV should have axis'
+                    assert header.contains('center_x') || header.contains('centerX'), 'CSV should have center coordinates'
 
                     println "  ✓ Portal CSV has all required properties"
                 } else {
@@ -2123,26 +2098,20 @@ class ReadBooksIntegrationSpec extends Specification {
         testWorlds.every { worldInfo ->
             setupTestWorld(worldInfo)
 
-            try {
-                // Test BlockSearcher directly with nether portal search
-                Set<String> targetBlocks = ['minecraft:nether_portal'] as Set
-                List<String> dimensions = ['overworld', 'nether']
+            // Test BlockSearcher directly with nether portal search
+            Set<String> targetBlocks = ['minecraft:nether_portal'] as Set
+            List<String> dimensions = ['overworld', 'nether']
 
-                List<BlockSearcher.BlockLocation> results = BlockSearcher.searchBlocks(
-                    testWorldDir.toString(), targetBlocks, dimensions
-                )
+            List<BlockSearcher.BlockLocation> results = BlockSearcher.searchBlocks(
+                testWorldDir.toString(), targetBlocks, dimensions
+            )
 
-                // Results should be a valid list (possibly empty)
-                assert results != null, "Results should not be null"
-                assert results instanceof List, "Results should be a list"
+            // Results should be a valid list (possibly empty)
+            assert results != null, 'Results should not be null'
+            assert results instanceof List, 'Results should be a list'
 
-                println "  ✓ BlockSearcher found ${results.size()} nether_portal blocks"
-                true
-            } catch (Exception e) {
-                println "  ✗ BlockSearcher failed: ${e.message}"
-                e.printStackTrace()
-                false
-            }
+            println "  ✓ BlockSearcher found ${results.size()} nether_portal blocks"
+            true
         }
     }
 
@@ -2157,38 +2126,32 @@ class ReadBooksIntegrationSpec extends Specification {
         testWorlds.every { worldInfo ->
             setupTestWorld(worldInfo)
 
-            try {
-                // First search for portal blocks
-                Set<String> targetBlocks = ['minecraft:nether_portal'] as Set
-                List<String> dimensions = ['overworld', 'nether']
+            // First search for portal blocks
+            Set<String> targetBlocks = ['minecraft:nether_portal'] as Set
+            List<String> dimensions = ['overworld', 'nether']
 
-                List<BlockSearcher.BlockLocation> portalBlocks = BlockSearcher.searchBlocks(
-                    testWorldDir.toString(), targetBlocks, dimensions
-                )
+            List<BlockSearcher.BlockLocation> portalBlocks = BlockSearcher.searchBlocks(
+                testWorldDir.toString(), targetBlocks, dimensions
+            )
 
-                // Then run portal detection
-                List<PortalDetector.Portal> portals = PortalDetector.detectPortals(portalBlocks)
+            // Then run portal detection
+            List<PortalDetector.Portal> portals = PortalDetector.detectPortals(portalBlocks)
 
-                // Results should be valid
-                assert portals != null, "Portal list should not be null"
-                assert portals instanceof List, "Portals should be a list"
+            // Results should be valid
+            assert portals != null, 'Portal list should not be null'
+            assert portals instanceof List, 'Portals should be a list'
 
-                // Each portal should have valid properties
-                portals.each { PortalDetector.Portal portal ->
-                    assert portal.id > 0, "Portal ID should be positive"
-                    assert portal.width >= 2, "Portal width should be at least 2"
-                    assert portal.height >= 3, "Portal height should be at least 3"
-                    assert portal.axis in ['x', 'z'], "Portal axis should be 'x' or 'z'"
-                    assert portal.blockCount > 0, "Portal should have at least 1 block"
-                }
-
-                println "  ✓ PortalDetector found ${portals.size()} portal structures from ${portalBlocks.size()} blocks"
-                true
-            } catch (Exception e) {
-                println "  ✗ PortalDetector failed: ${e.message}"
-                e.printStackTrace()
-                false
+            // Each portal should have valid properties
+            portals.each { PortalDetector.Portal portal ->
+                assert portal.id > 0, 'Portal ID should be positive'
+                assert portal.width >= 2, 'Portal width should be at least 2'
+                assert portal.height >= 3, 'Portal height should be at least 3'
+                assert portal.axis in ['x', 'z'], "Portal axis should be 'x' or 'z'"
+                assert portal.blockCount > 0, 'Portal should have at least 1 block'
             }
+
+            println "  ✓ PortalDetector found ${portals.size()} portal structures from ${portalBlocks.size()} blocks"
+            true
         }
     }
 
@@ -2215,8 +2178,8 @@ class ReadBooksIntegrationSpec extends Specification {
 
                 // Database file should be created
                 Path dbFile = outputDir.resolve('block_index.db')
-                assert Files.exists(dbFile), "Block index database should exist"
-                assert Files.size(dbFile) > 0, "Block index database should not be empty"
+                assert Files.exists(dbFile), 'Block index database should exist'
+                assert Files.size(dbFile) > 0, 'Block index database should not be empty'
 
                 println "  ✓ Block index database created: ${dbFile}"
                 true
@@ -2251,11 +2214,11 @@ class ReadBooksIntegrationSpec extends Specification {
                 BlockDatabase db = BlockDatabase.openForQuery(dbFile.toFile())
                 try {
                     // Get summary
-                    List<Map> summary = db.getSummary()
+                    List<Map> summary = db.summary
                     assert summary != null
 
                     if (summary.size() > 0) {
-                        println "  Block types indexed:"
+                        println '  Block types indexed:'
                         summary.each { row ->
                             println "    ${row.block_type}: ${row.indexed_count} indexed, ${row.total_found} total"
                         }
@@ -2263,12 +2226,12 @@ class ReadBooksIntegrationSpec extends Specification {
 
                     // Verify metadata was stored
                     String worldPath = db.getMetadata('world_path')
-                    assert worldPath != null, "World path metadata should be stored"
+                    assert worldPath != null, 'World path metadata should be stored'
                     assert worldPath.contains(testWorldDir.toString().split(java.util.regex.Pattern.quote(File.separator))[-1]),
-                        "World path should contain test world name"
+                        'World path should contain test world name'
 
                     String extractionDate = db.getMetadata('extraction_date')
-                    assert extractionDate != null, "Extraction date metadata should be stored"
+                    assert extractionDate != null, 'Extraction date metadata should be stored'
 
                     println "  ✓ Database metadata verified: world=${worldPath}, date=${extractionDate}"
                 } finally {
@@ -2412,7 +2375,7 @@ class ReadBooksIntegrationSpec extends Specification {
                         if (countInfo && countInfo.total_found > Main.indexLimit) {
                             // total_found should be greater than indexed_count
                             assert countInfo.total_found > countInfo.indexed_count,
-                                "total_found should be tracked beyond indexed_count"
+                                'total_found should be tracked beyond indexed_count'
                             println "  ✓ total_found (${countInfo.total_found}) tracked beyond indexed_count (${countInfo.indexed_count})"
                         } else {
                             println "  ✓ Test inconclusive (not enough stone blocks in test world)"
@@ -2452,13 +2415,13 @@ class ReadBooksIntegrationSpec extends Specification {
                 runReadBooksProgram()
 
                 Path dbFile = outputDir.resolve('item_index.db')
-                assert Files.exists(dbFile), "Item index database should exist"
-                assert Files.size(dbFile) > 0, "Item index database should not be empty"
+                assert Files.exists(dbFile), 'Item index database should exist'
+                assert Files.size(dbFile) > 0, 'Item index database should not be empty'
 
                 ItemDatabase db = ItemDatabase.openForQuery(dbFile.toFile())
                 try {
                     assert db != null
-                    assert db.getItemTypeCount() > 0, "Should index at least one item type"
+                    assert db.itemTypeCount > 0, 'Should index at least one item type'
 
                     // IMPORTANT: `worldInfo.bookCount` (e.g. 44) is the number of *book stacks/locations* in the test world,
                     // not the sum of item stack sizes. The item index tracks both:
@@ -2484,8 +2447,8 @@ class ReadBooksIntegrationSpec extends Specification {
                         println "  DEBUG written_book rows: total=${writtenRows.size()}, slotMissing=${slotMissing}"
                         println "  DEBUG written_book by container_type: ${byContainer}"
                     }
-                    assert bookStacks == worldInfo.bookCount, "Item index should find all book stacks in the test world"
-                    assert bookTotalCount >= bookStacks, "Total count should be >= number of stacks"
+                    assert bookStacks == worldInfo.bookCount, 'Item index should find all book stacks in the test world'
+                    assert bookTotalCount >= bookStacks, 'Total count should be >= number of stacks'
                 } finally {
                     db?.close()
                 }
@@ -2517,7 +2480,7 @@ class ReadBooksIntegrationSpec extends Specification {
                 runReadBooksProgram()
 
                 Path dbFile = outputDir.resolve('item_index.db')
-                assert Files.exists(dbFile), "Item index database should exist"
+                assert Files.exists(dbFile), 'Item index database should exist'
 
                 ItemDatabase db = ItemDatabase.openForQuery(dbFile.toFile())
                 try {
@@ -2525,10 +2488,10 @@ class ReadBooksIntegrationSpec extends Specification {
                     Map writable = db.getItemCount('minecraft:writable_book') ?: [total_count: 0, unique_locations: 0, limit_reached: 0]
 
                     Map dominant = (written.total_count >= writable.total_count) ? written : writable
-                    assert dominant.total_count > 1, "Expected multiple books of at least one type in the test world"
+                    assert dominant.total_count > 1, 'Expected multiple books of at least one type in the test world'
 
-                    assert dominant.unique_locations == 1, "With --item-limit=1 only one location should be stored"
-                    assert dominant.limit_reached == 1, "limit_reached should be set when limit is hit"
+                    assert dominant.unique_locations == 1, 'With --item-limit=1 only one location should be stored'
+                    assert dominant.limit_reached == 1, 'limit_reached should be set when limit is hit'
                     println "  ✓ Limit enforced: total_count=${dominant.total_count}, unique_locations=${dominant.unique_locations}"
                 } finally {
                     db?.close()
@@ -2602,7 +2565,7 @@ class ReadBooksIntegrationSpec extends Specification {
 
                 // Verify database was created
                 Path dbFile = outputDir.resolve('block_index.db')
-                assert Files.exists(dbFile), "Database should exist after extraction"
+                assert Files.exists(dbFile), 'Database should exist after extraction'
 
                 // Now reset and run query mode
                 Main.resetState()
@@ -2643,7 +2606,7 @@ class ReadBooksIntegrationSpec extends Specification {
                 runReadBooksProgram()
 
                 Path dbFile = outputDir.resolve('block_index.db')
-                assert Files.exists(dbFile), "Database should exist after extraction"
+                assert Files.exists(dbFile), 'Database should exist after extraction'
 
                 // Run list mode
                 Main.resetState()
@@ -2683,7 +2646,7 @@ class ReadBooksIntegrationSpec extends Specification {
                 runReadBooksProgram()
 
                 Path dbFile = outputDir.resolve('block_index.db')
-                assert Files.exists(dbFile), "Database should exist after extraction"
+                assert Files.exists(dbFile), 'Database should exist after extraction'
 
                 // Query with dimension filter
                 Main.resetState()
@@ -2738,7 +2701,7 @@ class ReadBooksIntegrationSpec extends Specification {
 
                     // Both should return the same results
                     assert results1.size() == results2.size(),
-                        "Queries with/without prefix should return same results"
+                        'Queries with/without prefix should return same results'
 
                     println "  ✓ Block type normalization works (${results1.size()} results)"
                 } finally {
@@ -2783,10 +2746,10 @@ class ReadBooksIntegrationSpec extends Specification {
 
                     signs.each { sign ->
                         // Verify coordinate fields exist and are integers
-                        assert sign.x instanceof Integer || sign.x instanceof Long, "X should be numeric"
-                        assert sign.y instanceof Integer || sign.y instanceof Long, "Y should be numeric"
-                        assert sign.z instanceof Integer || sign.z instanceof Long, "Z should be numeric"
-                        assert sign.dimension in ['overworld', 'nether', 'end'], "Dimension should be valid"
+                        assert sign.x instanceof Integer || sign.x instanceof Long, 'X should be numeric'
+                        assert sign.y instanceof Integer || sign.y instanceof Long, 'Y should be numeric'
+                        assert sign.z instanceof Integer || sign.z instanceof Long, 'Z should be numeric'
+                        assert sign.dimension in ['overworld', 'nether', 'end'], 'Dimension should be valid'
 
                         println "    Found sign at (${sign.x}, ${sign.y}, ${sign.z}) in ${sign.dimension}"
                     }
@@ -2842,9 +2805,9 @@ class ReadBooksIntegrationSpec extends Specification {
                     if (nearbyBlocks.size() > 0) {
                         // Verify all results are within the radius
                         nearbyBlocks.each { block ->
-                            assert Math.abs(block.x) <= 100, "X should be within radius"
-                            assert Math.abs(block.y - 64) <= 100, "Y should be within radius"
-                            assert Math.abs(block.z) <= 100, "Z should be within radius"
+                            assert Math.abs(block.x) <= 100, 'X should be within radius'
+                            assert Math.abs(block.y - 64) <= 100, 'Y should be within radius'
+                            assert Math.abs(block.z) <= 100, 'Z should be within radius'
                         }
                         println "  ✓ Coordinate proximity query works"
                     } else {
@@ -2893,9 +2856,9 @@ class ReadBooksIntegrationSpec extends Specification {
                 // findBlockIndexDatabase should find it
                 File foundDb = Main.findBlockIndexDatabase()
 
-                assert foundDb != null, "Should find database via world directory"
-                assert foundDb.exists(), "Found database file should exist"
-                assert foundDb.name == 'block_index.db', "Found file should be block_index.db"
+                assert foundDb != null, 'Should find database via world directory'
+                assert foundDb.exists(), 'Found database file should exist'
+                assert foundDb.name == 'block_index.db', 'Found file should be block_index.db'
 
                 println "  ✓ Database found via -w flag: ${foundDb.absolutePath}"
                 true
@@ -2935,8 +2898,8 @@ class ReadBooksIntegrationSpec extends Specification {
 
                 File foundDb = Main.findBlockIndexDatabase()
 
-                assert foundDb != null, "Should find database via output directory"
-                assert foundDb.exists(), "Found database file should exist"
+                assert foundDb != null, 'Should find database via output directory'
+                assert foundDb.exists(), 'Found database file should exist'
 
                 println "  ✓ Database found via -o flag: ${foundDb.absolutePath}"
                 true
@@ -2976,8 +2939,8 @@ class ReadBooksIntegrationSpec extends Specification {
                 // Should still find database because -o is checked first
                 File foundDb = Main.findBlockIndexDatabase()
 
-                assert foundDb != null, "Should find database using -o despite invalid -w"
-                assert foundDb.exists(), "Found database should exist"
+                assert foundDb != null, 'Should find database using -o despite invalid -w'
+                assert foundDb.exists(), 'Found database should exist'
 
                 println "  ✓ -o flag takes precedence over -w"
                 true
@@ -3102,11 +3065,11 @@ class ReadBooksIntegrationSpec extends Specification {
                 BlockDatabase db = BlockDatabase.openForQuery(dbFile.toFile())
                 try {
                     // Get block type count
-                    int typeCount = db.getBlockTypeCount()
-                    int totalBlocks = db.getTotalBlocksIndexed()
+                    int typeCount = db.blockTypeCount
+                    int totalBlocks = db.totalBlocksIndexed
 
-                    assert typeCount >= 0, "Block type count should be non-negative"
-                    assert totalBlocks >= 0, "Total blocks should be non-negative"
+                    assert typeCount >= 0, 'Block type count should be non-negative'
+                    assert totalBlocks >= 0, 'Total blocks should be non-negative'
 
                     println "  ✓ Statistics: ${typeCount} block types, ${totalBlocks} total blocks indexed"
                 } finally {
@@ -3152,9 +3115,9 @@ class ReadBooksIntegrationSpec extends Specification {
                     if (countInfo) {
                         // With unlimited, indexed_count should equal total_found
                         assert countInfo.indexed_count == countInfo.total_found,
-                            "With limit=0, all found blocks should be indexed"
+                            'With limit=0, all found blocks should be indexed'
                         assert !countInfo.limit_reached,
-                            "limit_reached should be false with unlimited"
+                            'limit_reached should be false with unlimited'
 
                         println "  ✓ Unlimited indexing: ${countInfo.indexed_count} of ${countInfo.total_found} chests"
                     } else {
@@ -3191,7 +3154,7 @@ class ReadBooksIntegrationSpec extends Specification {
                 runReadBooksProgram()
 
                 Path dbFile = outputDir.resolve('block_index.db')
-                assert Files.exists(dbFile), "Database should exist"
+                assert Files.exists(dbFile), 'Database should exist'
 
                 // Use both flags
                 Main.resetState()
@@ -3243,11 +3206,11 @@ class ReadBooksIntegrationSpec extends Specification {
                     // Query for a block type that wasn't searched for
                     List<Map> results = db.queryByBlockType('minecraft:diamond_block')
 
-                    assert results.size() == 0, "Should return empty list for non-indexed block"
+                    assert results.size() == 0, 'Should return empty list for non-indexed block'
 
                     // Also test getBlockCount for non-existent type
                     Map countInfo = db.getBlockCount('minecraft:nonexistent_block')
-                    assert countInfo == null || countInfo.isEmpty(), "Should return null or empty map for non-existent block type"
+                    assert countInfo == null || countInfo.empty, 'Should return null or empty map for non-existent block type'
 
                     println "  ✓ Non-existent block type handled correctly"
                 } finally {
@@ -3322,12 +3285,12 @@ class ReadBooksIntegrationSpec extends Specification {
                 runReadBooksProgram()
 
                 Path dbFile = outputDir.resolve('block_index.db')
-                assert Files.exists(dbFile), "Database should be created"
+                assert Files.exists(dbFile), 'Database should be created'
 
                 BlockDatabase db = BlockDatabase.openForQuery(dbFile.toFile())
                 try {
                     println "\n  Block Index Results (No Limit):"
-                    println "  " + "=" * 60
+                    println '  ' + '=' * 60
 
                     int totalBlocks = 0
                     int passedChecks = 0
@@ -3355,18 +3318,18 @@ class ReadBooksIntegrationSpec extends Specification {
                             "Block type ${blockType} should have at least ${expectedMin} entries, found ${actualCount}"
                     }
 
-                    println "  " + "-" * 60
+                    println '  ' + '-' * 60
                     println "  Total blocks indexed: ${totalBlocks}"
                     println "  Passed: ${passedChecks}, Failed: ${failedChecks}"
 
                     // Verify total blocks indexed
-                    int dbTotalBlocks = db.getTotalBlocksIndexed()
-                    int dbBlockTypes = db.getBlockTypeCount()
+                    int dbTotalBlocks = db.totalBlocksIndexed
+                    int dbBlockTypes = db.blockTypeCount
 
                     println "  Database stats: ${dbBlockTypes} block types, ${dbTotalBlocks} total blocks"
 
-                    assert dbBlockTypes >= 9, "Should have at least 9 different block types indexed (all container types searched)"
-                    assert dbTotalBlocks >= 12, "Should have at least 12 total blocks indexed (sum of all container blocks)"
+                    assert dbBlockTypes >= 9, 'Should have at least 9 different block types indexed (all container types searched)'
+                    assert dbTotalBlocks >= 12, 'Should have at least 12 total blocks indexed (sum of all container blocks)'
 
                     println "  ✓ All minimum block counts verified"
                 } finally {
@@ -3407,27 +3370,27 @@ class ReadBooksIntegrationSpec extends Specification {
 
                 // Verify database was created
                 Path dbFile = outputDir.resolve('block_index.db')
-                assert Files.exists(dbFile), "block_index.db should be created in index-all mode"
+                assert Files.exists(dbFile), 'block_index.db should be created in index-all mode'
 
                 // Open database and verify contents
                 BlockDatabase db = BlockDatabase.openForQuery(dbFile.toFile())
                 try {
                     // Should have indexed multiple block types
-                    int blockTypes = db.getBlockTypeCount()
-                    int totalBlocks = db.getTotalBlocksIndexed()
+                    int blockTypes = db.blockTypeCount
+                    int totalBlocks = db.totalBlocksIndexed
 
-                    assert blockTypes > 0, "Should have indexed at least one block type"
-                    assert totalBlocks > 0, "Should have indexed at least one block"
+                    assert blockTypes > 0, 'Should have indexed at least one block type'
+                    assert totalBlocks > 0, 'Should have indexed at least one block'
 
                     // Verify air and cave_air are NOT indexed
                     Map airCount = db.getBlockCount('minecraft:air')
                     Map caveAirCount = db.getBlockCount('minecraft:cave_air')
 
-                    assert (airCount?.indexed_count ?: 0) == 0, "Should NOT index minecraft:air"
-                    assert (caveAirCount?.indexed_count ?: 0) == 0, "Should NOT index minecraft:cave_air"
+                    assert (airCount?.indexed_count ?: 0) == 0, 'Should NOT index minecraft:air'
+                    assert (caveAirCount?.indexed_count ?: 0) == 0, 'Should NOT index minecraft:cave_air'
 
                     // Check that at least one common block type hit the limit
-                    List<Map> summary = db.getSummary()
+                    List<Map> summary = db.summary
                     boolean foundLimitReached = summary.any { it.limit_reached == 1 }
                     // Note: might not hit limit in small test worlds, but limit should work
 
@@ -3468,17 +3431,17 @@ class ReadBooksIntegrationSpec extends Specification {
 
                 // Verify CSV was created
                 Path csvFile = outputDir.resolve('blocks.csv')
-                assert Files.exists(csvFile), "blocks.csv should be created in index-all mode"
+                assert Files.exists(csvFile), 'blocks.csv should be created in index-all mode'
 
                 // Verify CSV has proper header
                 List<String> lines = csvFile.toFile().readLines()
-                assert lines.size() > 0, "blocks.csv should not be empty"
-                assert lines[0] == 'block_type,dimension,x,y,z,properties,region_file', "CSV should have correct header"
+                assert lines.size() > 0, 'blocks.csv should not be empty'
+                assert lines[0] == 'block_type,dimension,x,y,z,properties,region_file', 'CSV should have correct header'
 
                 // Should have at least one data row
                 if (lines.size() > 1) {
                     String dataRow = lines[1]
-                    assert dataRow.contains(','), "Data rows should be comma-separated"
+                    assert dataRow.contains(','), 'Data rows should be comma-separated'
                     println "  CSV has ${lines.size() - 1} block rows"
                 }
 
@@ -3514,16 +3477,16 @@ class ReadBooksIntegrationSpec extends Specification {
 
                 // Verify JSON was created
                 Path jsonFile = outputDir.resolve('blocks.json')
-                assert Files.exists(jsonFile), "blocks.json should be created in index-all mode"
+                assert Files.exists(jsonFile), 'blocks.json should be created in index-all mode'
 
                 // Parse and verify JSON structure
-                def json = new groovy.json.JsonSlurper().parse(jsonFile.toFile())
+                Object json = new groovy.json.JsonSlurper().parse(jsonFile.toFile())
                 assert json.blocks != null, "JSON should have 'blocks' array"
                 assert json.summary != null, "JSON should have 'summary' object"
                 assert json.summary.mode == 'index-all', "Summary should indicate 'index-all' mode"
-                assert json.summary.total_blocks >= 0, "Summary should have total_blocks"
-                assert json.summary.by_type != null, "Summary should have by_type"
-                assert json.summary.by_dimension != null, "Summary should have by_dimension"
+                assert json.summary.total_blocks >= 0, 'Summary should have total_blocks'
+                assert json.summary.by_type != null, 'Summary should have by_type'
+                assert json.summary.by_dimension != null, 'Summary should have by_dimension'
 
                 println "  JSON has ${json.blocks.size()} blocks, mode: ${json.summary.mode}"
 
@@ -3559,11 +3522,11 @@ class ReadBooksIntegrationSpec extends Specification {
 
                 // Verify TXT was created
                 Path txtFile = outputDir.resolve('blocks.txt')
-                assert Files.exists(txtFile), "blocks.txt should be created in index-all mode"
+                assert Files.exists(txtFile), 'blocks.txt should be created in index-all mode'
 
                 String content = txtFile.toFile().text
-                assert content.contains('Block Search Report (Index-All Mode)'), "TXT should indicate index-all mode"
-                assert content.contains('Total blocks indexed:'), "TXT should show total blocks"
+                assert content.contains('Block Search Report (Index-All Mode)'), 'TXT should indicate index-all mode'
+                assert content.contains('Total blocks indexed:'), 'TXT should show total blocks'
 
                 // With a limit of 5, at least one common block type should hit it
                 // The format shows "(N indexed, limit reached)" for types that hit the limit
@@ -3599,11 +3562,11 @@ class ReadBooksIntegrationSpec extends Specification {
                 runReadBooksProgram()
 
                 Path dbFile = outputDir.resolve('block_index.db')
-                assert Files.exists(dbFile), "block_index.db should be created"
+                assert Files.exists(dbFile), 'block_index.db should be created'
 
                 BlockDatabase db = BlockDatabase.openForQuery(dbFile.toFile())
                 try {
-                    List<Map> summary = db.getSummary()
+                    List<Map> summary = db.summary
 
                     // Verify no block type has more than limit indexed
                     summary.each { Map row ->
@@ -3650,26 +3613,26 @@ class ReadBooksIntegrationSpec extends Specification {
                 runReadBooksProgram()
 
                 Path dbFile = outputDir.resolve('block_index.db')
-                assert Files.exists(dbFile), "block_index.db should be created"
+                assert Files.exists(dbFile), 'block_index.db should be created'
 
                 BlockDatabase db = BlockDatabase.openForQuery(dbFile.toFile())
                 try {
                     // Get all block types that were indexed
-                    List<Map> summary = db.getSummary()
-                    List<String> indexedTypes = summary.collect { it.block_type }
+                    List<Map> summary = db.summary
+                    List<String> indexedTypes = summary*.block_type
 
                     // Verify air variants are NOT in the list
-                    assert !indexedTypes.contains('minecraft:air'), "minecraft:air should NEVER be indexed"
-                    assert !indexedTypes.contains('minecraft:cave_air'), "minecraft:cave_air should NEVER be indexed"
-                    assert !indexedTypes.contains('air'), "air (without prefix) should NEVER be indexed"
-                    assert !indexedTypes.contains('cave_air'), "cave_air (without prefix) should NEVER be indexed"
+                    assert !indexedTypes.contains('minecraft:air'), 'minecraft:air should NEVER be indexed'
+                    assert !indexedTypes.contains('minecraft:cave_air'), 'minecraft:cave_air should NEVER be indexed'
+                    assert !indexedTypes.contains('air'), 'air (without prefix) should NEVER be indexed'
+                    assert !indexedTypes.contains('cave_air'), 'cave_air (without prefix) should NEVER be indexed'
 
                     // Also verify by direct query
                     Map airQuery = db.getBlockCount('minecraft:air')
                     Map caveAirQuery = db.getBlockCount('minecraft:cave_air')
 
-                    assert (airQuery?.indexed_count ?: 0) == 0, "Direct query for air should return 0"
-                    assert (caveAirQuery?.indexed_count ?: 0) == 0, "Direct query for cave_air should return 0"
+                    assert (airQuery?.indexed_count ?: 0) == 0, 'Direct query for air should return 0'
+                    assert (caveAirQuery?.indexed_count ?: 0) == 0, 'Direct query for cave_air should return 0'
 
                     println "  ✓ Verified air/cave_air exclusion - ${indexedTypes.size()} block types indexed (none are air)"
                 } finally {
@@ -3706,19 +3669,19 @@ class ReadBooksIntegrationSpec extends Specification {
                 runReadBooksProgram()
 
                 Path dbFile = outputDir.resolve('block_index.db')
-                assert Files.exists(dbFile), "block_index.db should be created"
+                assert Files.exists(dbFile), 'block_index.db should be created'
 
                 BlockDatabase db = BlockDatabase.openForQuery(dbFile.toFile())
                 try {
-                    List<Map> summary = db.getSummary()
+                    List<Map> summary = db.summary
 
                     // With unlimited, no block type should have limit_reached=1
                     List<Map> limitReached = summary.findAll { it.limit_reached == 1 }
-                    assert limitReached.isEmpty(), "No block type should have limit_reached=1 when limit=0 (unlimited)"
+                    assert limitReached.empty, 'No block type should have limit_reached=1 when limit=0 (unlimited)'
 
                     // Should have indexed a substantial number of blocks
-                    int totalBlocks = db.getTotalBlocksIndexed()
-                    assert totalBlocks > 0, "Should have indexed blocks"
+                    int totalBlocks = db.totalBlocksIndexed
+                    assert totalBlocks > 0, 'Should have indexed blocks'
 
                     // With unlimited, indexed_count should equal total_found for all types
                     summary.each { row ->
@@ -3760,11 +3723,11 @@ class ReadBooksIntegrationSpec extends Specification {
                 runReadBooksProgram()
 
                 Path dbFile = outputDir.resolve('block_index.db')
-                assert Files.exists(dbFile), "block_index.db should be created"
+                assert Files.exists(dbFile), 'block_index.db should be created'
 
                 BlockDatabase db = BlockDatabase.openForQuery(dbFile.toFile())
                 try {
-                    List<Map> summary = db.getSummary()
+                    List<Map> summary = db.summary
                     List<Map> limitReachedTypes = summary.findAll { it.limit_reached == 1 }
 
                     if (limitReachedTypes.size() > 0) {
@@ -3815,7 +3778,7 @@ class ReadBooksIntegrationSpec extends Specification {
                 runReadBooksProgram()
 
                 Path dbFile = outputDir.resolve('block_index.db')
-                assert Files.exists(dbFile), "block_index.db should be created"
+                assert Files.exists(dbFile), 'block_index.db should be created'
 
                 BlockDatabase db = BlockDatabase.openForQuery(dbFile.toFile())
                 try {
@@ -3825,12 +3788,18 @@ class ReadBooksIntegrationSpec extends Specification {
                     List<Map> endBlocks = db.queryAllBlocks('end')
 
                     int totalDimensions = 0
-                    if (overworldBlocks.size() > 0) totalDimensions++
-                    if (netherBlocks.size() > 0) totalDimensions++
-                    if (endBlocks.size() > 0) totalDimensions++
+                    if (overworldBlocks.size() > 0) {
+                        totalDimensions++
+                    }
+                    if (netherBlocks.size() > 0) {
+                        totalDimensions++
+                    }
+                    if (endBlocks.size() > 0) {
+                        totalDimensions++
+                    }
 
                     // At minimum, overworld should have blocks
-                    assert overworldBlocks.size() > 0, "Overworld should have indexed blocks"
+                    assert overworldBlocks.size() > 0, 'Overworld should have indexed blocks'
 
                     println "  ✓ Multi-dimension: overworld=${overworldBlocks.size()}, nether=${netherBlocks.size()}, end=${endBlocks.size()}"
                 } finally {
@@ -3867,12 +3836,12 @@ class ReadBooksIntegrationSpec extends Specification {
                 runReadBooksProgram()
 
                 Path dbFile = outputDir.resolve('block_index.db')
-                assert Files.exists(dbFile), "block_index.db should be created"
+                assert Files.exists(dbFile), 'block_index.db should be created'
 
                 BlockDatabase db = BlockDatabase.openForQuery(dbFile.toFile())
                 try {
-                    List<Map> summary = db.getSummary()
-                    List<String> indexedTypes = summary.collect { it.block_type }
+                    List<Map> summary = db.summary
+                    List<String> indexedTypes = summary*.block_type
 
                     // Should ONLY have indexed stone and dirt (or their minecraft: prefixed versions)
                     indexedTypes.each { blockType ->
@@ -3916,9 +3885,9 @@ class ReadBooksIntegrationSpec extends Specification {
                 runReadBooksProgram()
 
                 Path jsonFile = outputDir.resolve('blocks.json')
-                assert Files.exists(jsonFile), "blocks.json should be created"
+                assert Files.exists(jsonFile), 'blocks.json should be created'
 
-                def json = new groovy.json.JsonSlurper().parse(jsonFile.toFile())
+                Object json = new groovy.json.JsonSlurper().parse(jsonFile.toFile())
 
                 // Validate top-level structure
                 assert json.blocks != null, "JSON must have 'blocks' array"
@@ -3927,30 +3896,30 @@ class ReadBooksIntegrationSpec extends Specification {
 
                 // Validate summary structure
                 assert json.summary.mode == 'index-all', "mode should be 'index-all'"
-                assert json.summary.total_blocks != null, "summary must have total_blocks"
-                assert json.summary.total_blocks instanceof Integer, "total_blocks must be integer"
+                assert json.summary.total_blocks != null, 'summary must have total_blocks'
+                assert json.summary.total_blocks instanceof Integer, 'total_blocks must be integer'
                 // block_types_count not in output - check by_type size instead
                 // limit not in summary (only in CLI)
                 // limit not in summary output
-                assert json.summary.by_type != null, "summary must have by_type"
-                assert json.summary.by_dimension != null, "summary must have by_dimension"
+                assert json.summary.by_type != null, 'summary must have by_type'
+                assert json.summary.by_dimension != null, 'summary must have by_dimension'
 
                 // Validate block entries if any exist
                 if (json.blocks.size() > 0) {
                     def firstBlock = json.blocks[0]
-                    assert firstBlock.type != null, "Block entry must have block_type"
-                    assert firstBlock.dimension != null, "Block entry must have dimension"
-                    assert firstBlock.coordinates != null, "Block entry must have coordinates"
-                    assert firstBlock.coordinates.x != null, "Block entry must have x coordinate"
-                    assert firstBlock.coordinates.y != null, "Block entry must have y coordinate"
+                    assert firstBlock.type != null, 'Block entry must have block_type'
+                    assert firstBlock.dimension != null, 'Block entry must have dimension'
+                    assert firstBlock.coordinates != null, 'Block entry must have coordinates'
+                    assert firstBlock.coordinates.x != null, 'Block entry must have x coordinate'
+                    assert firstBlock.coordinates.y != null, 'Block entry must have y coordinate'
                 }
 
                 // Validate by_type entries
                 if (json.summary.by_type.size() > 0) {
                     def firstTypeValue = json.summary.by_type.values().first()
-                    assert firstTypeValue instanceof Integer, "by_type values should be integers"
-                    // by_type values are simple integers, not objects
-                    // detailed limit info only in database, not JSON
+                    assert firstTypeValue instanceof Integer, 'by_type values should be integers'
+                // by_type values are simple integers, not objects
+                // detailed limit info only in database, not JSON
                 }
 
                 println "  ✓ JSON structure validated: ${json.blocks.size()} blocks, ${json.summary.by_type.size()} types"
@@ -3986,22 +3955,22 @@ class ReadBooksIntegrationSpec extends Specification {
                 runReadBooksProgram()
 
                 Path csvFile = outputDir.resolve('blocks.csv')
-                assert Files.exists(csvFile), "blocks.csv should be created"
+                assert Files.exists(csvFile), 'blocks.csv should be created'
 
                 List<String> lines = csvFile.toFile().readLines()
-                assert lines.size() > 0, "CSV should not be empty"
+                assert lines.size() > 0, 'CSV should not be empty'
 
                 // Validate header
                 String header = lines[0]
                 List<String> columns = header.split(',') as List
                 assert columns.size() == 7, "CSV should have 7 columns, found ${columns.size()}: ${columns}"
-                assert columns[0] == 'block_type', "First column should be block_type"
-                assert columns[1] == 'dimension', "Second column should be dimension"
-                assert columns[2] == 'x', "Third column should be x"
-                assert columns[3] == 'y', "Fourth column should be y"
-                assert columns[4] == 'z', "Fifth column should be z"
-                assert columns[5] == 'properties', "Sixth column should be properties"
-                assert columns[6] == 'region_file', "Seventh column should be region_file"
+                assert columns[0] == 'block_type', 'First column should be block_type'
+                assert columns[1] == 'dimension', 'Second column should be dimension'
+                assert columns[2] == 'x', 'Third column should be x'
+                assert columns[3] == 'y', 'Fourth column should be y'
+                assert columns[4] == 'z', 'Fifth column should be z'
+                assert columns[5] == 'properties', 'Sixth column should be properties'
+                assert columns[6] == 'region_file', 'Seventh column should be region_file'
 
                 // Validate data rows
                 if (lines.size() > 1) {
@@ -4052,12 +4021,12 @@ class ReadBooksIntegrationSpec extends Specification {
                 runReadBooksProgram()
 
                 Path dbFile = outputDir.resolve('block_index.db')
-                assert Files.exists(dbFile), "block_index.db should be created on first run"
+                assert Files.exists(dbFile), 'block_index.db should be created on first run'
 
                 int firstRunCount
                 BlockDatabase db1 = BlockDatabase.openForQuery(dbFile.toFile())
                 try {
-                    firstRunCount = db1.getTotalBlocksIndexed()
+                    firstRunCount = db1.totalBlocksIndexed
                 } finally {
                     db1?.close()
                 }
@@ -4075,7 +4044,7 @@ class ReadBooksIntegrationSpec extends Specification {
                 int secondRunCount
                 BlockDatabase db2 = BlockDatabase.openForQuery(dbFile.toFile())
                 try {
-                    secondRunCount = db2.getTotalBlocksIndexed()
+                    secondRunCount = db2.totalBlocksIndexed
                 } finally {
                     db2?.close()
                 }
@@ -4117,21 +4086,21 @@ class ReadBooksIntegrationSpec extends Specification {
 
                 Path dbFile = outputDir.resolve('block_index.db')
                 Path jsonFile = outputDir.resolve('blocks.json')
-                assert Files.exists(dbFile), "block_index.db should be created"
-                assert Files.exists(jsonFile), "blocks.json should be created"
+                assert Files.exists(dbFile), 'block_index.db should be created'
+                assert Files.exists(jsonFile), 'blocks.json should be created'
 
                 // Count limit_reached in database
                 int dbSaturatedCount
                 BlockDatabase db = BlockDatabase.openForQuery(dbFile.toFile())
                 try {
-                    List<Map> summary = db.getSummary()
+                    List<Map> summary = db.summary
                     dbSaturatedCount = summary.count { it.limit_reached == 1 }
                 } finally {
                     db?.close()
                 }
 
                 // Check JSON summary for saturated count if present
-                def json = new groovy.json.JsonSlurper().parse(jsonFile.toFile())
+                Object json = new groovy.json.JsonSlurper().parse(jsonFile.toFile())
                 if (json.summary.saturated_types != null) {
                     assert json.summary.saturated_types == dbSaturatedCount,
                         "JSON saturated_types (${json.summary.saturated_types}) should match DB count (${dbSaturatedCount})"
@@ -4139,7 +4108,7 @@ class ReadBooksIntegrationSpec extends Specification {
 
                 // Verify database summary has limit_reached info
                 // Note: JSON by_type values are just counts (integers), limit_reached is only in database
-                assert dbSaturatedCount >= 0, "Database should track saturated types correctly"
+                assert dbSaturatedCount >= 0, 'Database should track saturated types correctly'
 
                 println "  ✓ Saturated types count: ${dbSaturatedCount} types hit limit of 5"
 
@@ -4173,23 +4142,23 @@ class ReadBooksIntegrationSpec extends Specification {
                 runReadBooksProgram()
 
                 Path dbFile = outputDir.resolve('block_index.db')
-                assert Files.exists(dbFile), "block_index.db should be created"
+                assert Files.exists(dbFile), 'block_index.db should be created'
 
                 BlockDatabase db = BlockDatabase.openForQuery(dbFile.toFile())
                 try {
-                    int totalIndexed = db.getTotalBlocksIndexed()
+                    int totalIndexed = db.totalBlocksIndexed
 
                     // Stream all blocks and count them
                     int streamedCount = 0
-                    db.streamBlocks({ blockType, dimension, x, y, z, properties, regionFile ->
+                    db.streamBlocks { blockType, dimension, x, y, z, properties, regionFile ->
                         streamedCount++
                         // Verify each parameter has required data
-                        assert blockType != null, "Streamed row must have block_type"
-                        assert dimension != null, "Streamed row must have dimension"
-                        assert x != null, "Streamed row must have x"
-                        assert y != null, "Streamed row must have y"
-                        assert z != null, "Streamed row must have z"
-                    })
+                        assert blockType != null, 'Streamed row must have block_type'
+                        assert dimension != null, 'Streamed row must have dimension'
+                        assert x != null, 'Streamed row must have x'
+                        assert y != null, 'Streamed row must have y'
+                        assert z != null, 'Streamed row must have z'
+                    }
 
                     assert streamedCount == totalIndexed,
                         "Streamed count (${streamedCount}) should match total indexed (${totalIndexed})"
@@ -4236,15 +4205,15 @@ class ReadBooksIntegrationSpec extends Specification {
 
                 // Verify block_index.db was created (from index-all mode)
                 Path dbFile = outputDir.resolve('block_index.db')
-                assert Files.exists(dbFile), "block_index.db should be created in index-all mode"
+                assert Files.exists(dbFile), 'block_index.db should be created in index-all mode'
 
                 // Verify blocks output was created
                 Path blocksJson = outputDir.resolve('blocks.json')
-                assert Files.exists(blocksJson), "blocks.json should be created in index-all mode"
+                assert Files.exists(blocksJson), 'blocks.json should be created in index-all mode'
 
                 // Parse and verify JSON has mode: "index-all"
-                def json = new groovy.json.JsonSlurper().parseText(blocksJson.toFile().text)
-                assert json.summary.mode == 'index-all', "JSON summary should indicate index-all mode"
+                Object json = new groovy.json.JsonSlurper().parseText(blocksJson.toFile().text)
+                assert json.summary.mode == 'index-all', 'JSON summary should indicate index-all mode'
 
                 println "  ✓ Combined index-all + find-portals ran without errors"
                 println "  ✓ Database created: ${Files.exists(dbFile)}"
@@ -4285,17 +4254,17 @@ class ReadBooksIntegrationSpec extends Specification {
 
                 // Verify database was created
                 Path dbFile = outputDir.resolve('block_index.db')
-                assert Files.exists(dbFile), "block_index.db should be created"
+                assert Files.exists(dbFile), 'block_index.db should be created'
 
                 // Verify blocks.csv was created
                 Path blocksCsv = outputDir.resolve('blocks.csv')
-                assert Files.exists(blocksCsv), "blocks.csv should be created"
+                assert Files.exists(blocksCsv), 'blocks.csv should be created'
 
                 // Verify CSV has header and data
                 String csvContent = blocksCsv.toFile().text
                 assert csvContent.startsWith('block_type,dimension,x,y,z,properties,region_file'),
-                    "CSV should have correct header"
-                assert csvContent.readLines().size() > 1, "CSV should have at least header + 1 data row"
+                    'CSV should have correct header'
+                assert csvContent.readLines().size() > 1, 'CSV should have at least header + 1 data row'
 
                 println "  ✓ Both index-all and find-portals completed without errors"
 
@@ -4335,23 +4304,23 @@ class ReadBooksIntegrationSpec extends Specification {
                 Path dbFile = outputDir.resolve('block_index.db')
                 BlockDatabase db = BlockDatabase.openForQuery(dbFile.toFile())
                 try {
-                    int blockTypeCount = db.getBlockTypeCount()
-                    int totalIndexed = db.getTotalBlocksIndexed()
-                    List<Map> summary = db.getSummary()
+                    int blockTypeCount = db.blockTypeCount
+                    int totalIndexed = db.totalBlocksIndexed
+                    List<Map> summary = db.summary
 
                     println "  ✓ Block types indexed: ${blockTypeCount}"
                     println "  ✓ Total blocks indexed: ${totalIndexed}"
                     println "  ✓ Summary entries: ${summary.size()}"
 
                     // Verify we got some blocks indexed
-                    assert blockTypeCount > 0, "Should have indexed at least one block type"
-                    assert totalIndexed > 0, "Should have indexed at least one block"
+                    assert blockTypeCount > 0, 'Should have indexed at least one block type'
+                    assert totalIndexed > 0, 'Should have indexed at least one block'
 
                     // Verify air is not indexed
                     def airCount = db.getBlockCount('minecraft:air')
                     def caveAirCount = db.getBlockCount('minecraft:cave_air')
-                    assert (airCount?.indexed_count ?: 0) == 0, "Air should not be indexed"
-                    assert (caveAirCount?.indexed_count ?: 0) == 0, "Cave air should not be indexed"
+                    assert (airCount?.indexed_count ?: 0) == 0, 'Air should not be indexed'
+                    assert (caveAirCount?.indexed_count ?: 0) == 0, 'Cave air should not be indexed'
 
                     println "  ✓ Air/cave_air correctly excluded from index"
                 } finally {

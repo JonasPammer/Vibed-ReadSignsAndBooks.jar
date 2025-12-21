@@ -504,6 +504,7 @@ class MinecraftCommandsSpec extends Specification {
 
         then:
         escaped != null
-        // Should preserve or escape appropriately
+    // Should preserve or escape appropriately
     }
+
 }

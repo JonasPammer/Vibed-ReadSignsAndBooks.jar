@@ -126,7 +126,7 @@ class OutputWritersSpec extends Specification {
 
     def "writeBooksCSV should create CSV file with header"() {
         given:
-        String baseDir = tempDir.toString()
+        String baseDir = tempDir
         String outputFolder = 'output'
         new File(baseDir, outputFolder).mkdirs()
         List<Map<String, Object>> books = []
@@ -142,7 +142,7 @@ class OutputWritersSpec extends Specification {
 
     def "writeBooksCSV should write book data correctly"() {
         given:
-        String baseDir = tempDir.toString()
+        String baseDir = tempDir
         String outputFolder = 'output'
         new File(baseDir, outputFolder).mkdirs()
         List<Map<String, Object>> books = [
@@ -170,7 +170,7 @@ class OutputWritersSpec extends Specification {
 
     def "writeBooksCSV should handle null values"() {
         given:
-        String baseDir = tempDir.toString()
+        String baseDir = tempDir
         String outputFolder = 'output'
         new File(baseDir, outputFolder).mkdirs()
         List<Map<String, Object>> books = [
@@ -193,7 +193,7 @@ class OutputWritersSpec extends Specification {
 
     def "writeSignsCSV should create CSV file with header"() {
         given:
-        String baseDir = tempDir.toString()
+        String baseDir = tempDir
         String outputFolder = 'output'
         new File(baseDir, outputFolder).mkdirs()
         List<Map<String, Object>> signs = []
@@ -209,7 +209,7 @@ class OutputWritersSpec extends Specification {
 
     def "writeSignsCSV should write sign data correctly"() {
         given:
-        String baseDir = tempDir.toString()
+        String baseDir = tempDir
         String outputFolder = 'output'
         new File(baseDir, outputFolder).mkdirs()
         List<Map<String, Object>> signs = [
@@ -241,7 +241,7 @@ class OutputWritersSpec extends Specification {
 
     def "printSummaryStatistics should create summary file"() {
         given:
-        String baseDir = tempDir.toString()
+        String baseDir = tempDir
         String outputFolder = 'output'
         new File(baseDir, outputFolder).mkdirs()
         Set<Integer> bookHashes = [1, 2, 3] as Set
@@ -262,7 +262,7 @@ class OutputWritersSpec extends Specification {
 
     def "printSummaryStatistics should format ASCII table correctly"() {
         given:
-        String baseDir = tempDir.toString()
+        String baseDir = tempDir
         String outputFolder = 'output'
         new File(baseDir, outputFolder).mkdirs()
         Set<Integer> bookHashes = [1] as Set
@@ -294,7 +294,7 @@ class OutputWritersSpec extends Specification {
 
     def "printSummaryStatistics should include books by location type"() {
         given:
-        String baseDir = tempDir.toString()
+        String baseDir = tempDir
         String outputFolder = 'output'
         new File(baseDir, outputFolder).mkdirs()
         Map<String, Integer> booksByLocationType = [
@@ -318,7 +318,7 @@ class OutputWritersSpec extends Specification {
 
     def "printSummaryStatistics should include books by container type"() {
         given:
-        String baseDir = tempDir.toString()
+        String baseDir = tempDir
         String outputFolder = 'output'
         new File(baseDir, outputFolder).mkdirs()
         Map<String, Integer> booksByContainerType = [
@@ -342,7 +342,7 @@ class OutputWritersSpec extends Specification {
 
     def "printSummaryStatistics should show empty signs removed count"() {
         given:
-        String baseDir = tempDir.toString()
+        String baseDir = tempDir
         String outputFolder = 'output'
         new File(baseDir, outputFolder).mkdirs()
 
@@ -360,7 +360,7 @@ class OutputWritersSpec extends Specification {
 
     def "printSummaryStatistics should format elapsed time correctly"() {
         given:
-        String baseDir = tempDir.toString()
+        String baseDir = tempDir
         String outputFolder = 'output'
         new File(baseDir, outputFolder).mkdirs()
 
@@ -379,7 +379,7 @@ class OutputWritersSpec extends Specification {
 
     def "printSummaryStatistics should calculate duplicate books correctly"() {
         given:
-        String baseDir = tempDir.toString()
+        String baseDir = tempDir
         String outputFolder = 'output'
         new File(baseDir, outputFolder).mkdirs()
         Set<Integer> bookHashes = [1, 2, 3] as Set  // 3 unique
@@ -399,4 +399,5 @@ class OutputWritersSpec extends Specification {
         content.contains('Total books extracted (including duplicates): 5')
         content.contains('Duplicate books: 2')
     }
+
 }

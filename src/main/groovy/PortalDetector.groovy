@@ -49,7 +49,7 @@ class PortalDetector {
             this.centerX = centerX
             this.centerY = centerY
             this.centerZ = centerZ
-        }
+               }
 
         String toCsvRow() {
             return "${dimension},${anchorX},${anchorY},${anchorZ}," +

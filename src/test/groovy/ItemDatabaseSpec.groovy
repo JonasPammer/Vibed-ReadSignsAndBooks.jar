@@ -27,8 +27,8 @@ class ItemDatabaseSpec extends Specification {
         then:
         dbFile.exists()
         // Verify tables exist by querying them
-        db.queryByItemType('minecraft:diamond_sword').isEmpty()  // Should not throw
-        db.getSummary().isEmpty()  // Should not throw
+        db.queryByItemType('minecraft:diamond_sword').empty  // Should not throw
+        db.summary.empty  // Should not throw
         db.getMetadata('test') == null  // Should not throw
 
         cleanup:
@@ -223,7 +223,7 @@ class ItemDatabaseSpec extends Specification {
         metadata.y = 64
         metadata.z = 200
         metadata.dimension = 'overworld'
-        metadata.customName = "Excalibur"
+        metadata.customName = 'Excalibur'
 
         when:
         db.insertItem(metadata)
@@ -460,7 +460,7 @@ class ItemDatabaseSpec extends Specification {
         List<Map> results = db.queryByItemType('minecraft:nonexistent_item')
 
         then:
-        results.isEmpty()
+        results.empty
 
         cleanup:
         db?.close()
@@ -707,7 +707,7 @@ class ItemDatabaseSpec extends Specification {
         ItemDatabase db = new ItemDatabase(dbFile)
 
         when:
-        db.setWorldPath('/path/to/world')
+        db.worldPath = '/path/to/world'
         String value = db.getMetadata('world_path')
 
         then:
@@ -723,7 +723,7 @@ class ItemDatabaseSpec extends Specification {
         ItemDatabase db = new ItemDatabase(dbFile)
 
         when:
-        db.setExtractionDate('2025-12-17')
+        db.extractionDate = '2025-12-17'
         String value = db.getMetadata('extraction_date')
 
         then:
@@ -780,7 +780,7 @@ class ItemDatabaseSpec extends Specification {
         db.insertItem(metadata3)
 
         when:
-        List<Map> summary = db.getSummary()
+        List<Map> summary = db.summary
 
         then:
         summary.size() == 2
@@ -844,7 +844,7 @@ class ItemDatabaseSpec extends Specification {
         db.insertItem(metadata3)
 
         when:
-        int count = db.getItemTypeCount()
+        int count = db.itemTypeCount
 
         then:
         count == 2  // Two unique types
@@ -872,7 +872,7 @@ class ItemDatabaseSpec extends Specification {
         db.insertItem(metadata3)
 
         when:
-        int total = db.getTotalItemsIndexed()
+        int total = db.totalItemsIndexed
 
         then:
         total == 3
@@ -894,7 +894,7 @@ class ItemDatabaseSpec extends Specification {
         }
 
         when:
-        long total = db.getTotalItemCount()
+        long total = db.totalItemCount
 
         then:
         total == 5  // All 5 counted even though only 2 stored
@@ -945,7 +945,7 @@ class ItemDatabaseSpec extends Specification {
         db.rollbackTransaction()
 
         then:
-        db.queryByItemType('minecraft:diamond_sword').isEmpty()  // Rolled back
+        db.queryByItemType('minecraft:diamond_sword').empty  // Rolled back
 
         cleanup:
         db?.close()
@@ -1057,4 +1057,5 @@ class ItemDatabaseSpec extends Specification {
         expect:
         metadata.hasCustomName() == false
     }
+
 }
