@@ -1184,7 +1184,7 @@ class ReadBooksIntegrationSpec extends Specification {
                     if (parts.length > generationIndex) {
                         String generation = parts[generationIndex].trim()
                         // Generation value should be one of the valid values or empty for writable books
-                        assert generation.empty || validGenerations.any { generation.contains(it) },
+                        assert generation.isEmpty() || validGenerations.any { generation.contains(it) },
                             "Invalid generation value: ${generation}"
                     }
                 }
@@ -1632,7 +1632,7 @@ class ReadBooksIntegrationSpec extends Specification {
             }
         }
 
-        if (testWorlds.empty) {
+        if (testWorlds.isEmpty()) {
             println 'WARNING: No test worlds found. Create folders named WORLDNAME-BOOKCOUNT-SIGNCOUNT in src/test/resources/'
             println "  Resources path: ${testResourcesPath}"
         }
@@ -3210,7 +3210,7 @@ class ReadBooksIntegrationSpec extends Specification {
 
                     // Also test getBlockCount for non-existent type
                     Map countInfo = db.getBlockCount('minecraft:nonexistent_block')
-                    assert countInfo == null || countInfo.empty, 'Should return null or empty map for non-existent block type'
+                    assert countInfo == null || countInfo.isEmpty(), 'Should return null or empty map for non-existent block type'
 
                     println "  ✓ Non-existent block type handled correctly"
                 } finally {
@@ -3677,7 +3677,7 @@ class ReadBooksIntegrationSpec extends Specification {
 
                     // With unlimited, no block type should have limit_reached=1
                     List<Map> limitReached = summary.findAll { it.limit_reached == 1 }
-                    assert limitReached.empty, 'No block type should have limit_reached=1 when limit=0 (unlimited)'
+                    assert limitReached.isEmpty(), 'No block type should have limit_reached=1 when limit=0 (unlimited)'
 
                     // Should have indexed a substantial number of blocks
                     int totalBlocks = db.totalBlocksIndexed

@@ -28,9 +28,9 @@ class MainSpec extends Specification {
         Main.resetState()
 
         then:
-        Main.bookHashes.empty
-        Main.signHashes.empty
-        Main.customNameHashes.empty
+        Main.bookHashes.isEmpty()
+        Main.signHashes.isEmpty()
+        Main.customNameHashes.isEmpty()
     }
 
     def "resetState should reset all counters to zero"() {
@@ -66,17 +66,17 @@ class MainSpec extends Specification {
         Main.resetState()
 
         then:
-        Main.customNameData.empty
-        Main.bookGenerationByHash.empty
-        Main.failedRegionsByWorld.empty
-        Main.recoveredRegions.empty
-        Main.booksByContainerType.empty
-        Main.booksByLocationType.empty
-        Main.bookMetadataList.empty
-        Main.bookCsvData.empty
-        Main.signCsvData.empty
-        Main.signsByHash.empty
-        Main.booksByAuthor.empty
+        Main.customNameData.isEmpty()
+        Main.bookGenerationByHash.isEmpty()
+        Main.failedRegionsByWorld.isEmpty()
+        Main.recoveredRegions.isEmpty()
+        Main.booksByContainerType.isEmpty()
+        Main.booksByLocationType.isEmpty()
+        Main.bookMetadataList.isEmpty()
+        Main.bookCsvData.isEmpty()
+        Main.signCsvData.isEmpty()
+        Main.signsByHash.isEmpty()
+        Main.booksByAuthor.isEmpty()
     }
 
     def "resetState should reset command-line options to defaults"() {
@@ -115,12 +115,12 @@ class MainSpec extends Specification {
         Main.resetState()
 
         then:
-        Main.searchBlocks.empty
+        Main.searchBlocks.isEmpty()
         Main.findPortals == false
         Main.searchDimensions == ['overworld', 'nether', 'end']
         Main.blockOutputFormat == 'csv'
-        Main.blockSearchResults.empty
-        Main.portalResults.empty
+        Main.blockSearchResults.isEmpty()
+        Main.portalResults.isEmpty()
     }
 
     def "resetState should reset block index database options"() {
@@ -173,8 +173,8 @@ class MainSpec extends Specification {
         Main.resetState()
 
         then:
-        Main.mcfunctionWriters.empty
-        Main.signsMcfunctionWriters.empty
+        Main.mcfunctionWriters.isEmpty()
+        Main.signsMcfunctionWriters.isEmpty()
         Main.combinedBooksWriter == null
     }
 

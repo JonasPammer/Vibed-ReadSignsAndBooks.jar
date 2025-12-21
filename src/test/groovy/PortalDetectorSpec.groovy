@@ -170,7 +170,7 @@ class PortalDetectorSpec extends Specification {
 
     def "clusterAdjacentBlocks should return empty list for empty input"() {
         expect:
-        PortalDetector.clusterAdjacentBlocks([], 'z').empty
+        PortalDetector.clusterAdjacentBlocks([], 'z').isEmpty()
     }
 
     def "clusterAdjacentBlocks should cluster adjacent blocks for axis z"() {
@@ -307,12 +307,12 @@ class PortalDetectorSpec extends Specification {
 
     def "detectPortals should return empty list for empty input"() {
         expect:
-        PortalDetector.detectPortals([]).empty
+        PortalDetector.detectPortals([]).isEmpty()
     }
 
     def "detectPortals should return empty list for null input"() {
         expect:
-        PortalDetector.detectPortals(null).empty
+        PortalDetector.detectPortals(null).isEmpty()
     }
 
     def "detectPortals should detect single portal"() {

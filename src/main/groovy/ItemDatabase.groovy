@@ -208,11 +208,11 @@ class ItemDatabase implements AutoCloseable {
         }
 
         boolean hasEnchantments() {
-            return !enchantments.empty || !storedEnchantments.empty
+            return !enchantments.isEmpty() || !storedEnchantments.isEmpty()
         }
 
         boolean hasCustomName() {
-            return customName != null && !customName.trim().empty
+            return customName != null && !customName.trim().isEmpty()
         }
 
     }

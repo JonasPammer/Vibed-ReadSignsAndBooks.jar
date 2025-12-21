@@ -119,7 +119,7 @@ class BlockSearcherSpec extends Specification {
 
         then:
         loc.properties != null
-        loc.properties.empty
+        loc.properties.isEmpty()
     }
 
     // =========================================================================
@@ -183,7 +183,7 @@ class BlockSearcherSpec extends Specification {
         Set<String> result = BlockSearcher.parseBlockIds('')
 
         then:
-        result.empty
+        result.isEmpty()
     }
 
     def "parseBlockIds should handle null input"() {
@@ -191,7 +191,7 @@ class BlockSearcherSpec extends Specification {
         Set<String> result = BlockSearcher.parseBlockIds(null)
 
         then:
-        result.empty
+        result.isEmpty()
     }
 
     def "parseBlockIds should trim whitespace"() {
@@ -291,7 +291,7 @@ class BlockSearcherSpec extends Specification {
         Set<String> names = BlockSearcher.extractPaletteBlockNames(palette)
 
         then:
-        names.empty
+        names.isEmpty()
     }
 
     def "extractPaletteBlockNames should skip entries without Name field"() {
@@ -368,7 +368,7 @@ class BlockSearcherSpec extends Specification {
         Map<Integer, CompoundTag> map = BlockSearcher.assemblePaletteMap(palette, targetBlocks)
 
         then:
-        map.empty
+        map.isEmpty()
     }
 
     def "assemblePaletteMap should handle empty palette"() {
@@ -380,7 +380,7 @@ class BlockSearcherSpec extends Specification {
         Map<Integer, CompoundTag> map = BlockSearcher.assemblePaletteMap(palette, targetBlocks)
 
         then:
-        map.empty
+        map.isEmpty()
     }
 
     def "assemblePaletteMap should use blockMatchesTarget for matching"() {
@@ -430,7 +430,7 @@ class BlockSearcherSpec extends Specification {
         Map<String, String> props = BlockSearcher.extractBlockProperties(blockTag)
 
         then:
-        props.empty
+        props.isEmpty()
     }
 
     def "extractBlockProperties should skip non-StringTag values"() {
@@ -498,7 +498,7 @@ class BlockSearcherSpec extends Specification {
 
         then:
         loc.blockType == 'minecraft:stone'
-        loc.properties.empty
+        loc.properties.isEmpty()
         loc.regionFile == null
     }
 

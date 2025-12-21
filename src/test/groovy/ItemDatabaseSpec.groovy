@@ -27,8 +27,8 @@ class ItemDatabaseSpec extends Specification {
         then:
         dbFile.exists()
         // Verify tables exist by querying them
-        db.queryByItemType('minecraft:diamond_sword').empty  // Should not throw
-        db.summary.empty  // Should not throw
+        db.queryByItemType('minecraft:diamond_sword').isEmpty()  // Should not throw
+        db.summary.isEmpty()  // Should not throw
         db.getMetadata('test') == null  // Should not throw
 
         cleanup:
@@ -460,7 +460,7 @@ class ItemDatabaseSpec extends Specification {
         List<Map> results = db.queryByItemType('minecraft:nonexistent_item')
 
         then:
-        results.empty
+        results.isEmpty()
 
         cleanup:
         db?.close()
@@ -945,7 +945,7 @@ class ItemDatabaseSpec extends Specification {
         db.rollbackTransaction()
 
         then:
-        db.queryByItemType('minecraft:diamond_sword').empty  // Rolled back
+        db.queryByItemType('minecraft:diamond_sword').isEmpty()  // Rolled back
 
         cleanup:
         db?.close()

@@ -27,8 +27,8 @@ class BlockDatabaseSpec extends Specification {
         then:
         dbFile.exists()
         // Verify tables exist by querying them
-        db.queryByBlockType('minecraft:stone').empty  // Should not throw
-        db.summary.empty  // Should not throw
+        db.queryByBlockType('minecraft:stone').isEmpty()  // Should not throw
+        db.summary.isEmpty()  // Should not throw
         db.getMetadata('test') == null  // Should not throw
 
         cleanup:
@@ -287,7 +287,7 @@ class BlockDatabaseSpec extends Specification {
         List<Map> results = db.queryByBlockType('minecraft:nonexistent_block')
 
         then:
-        results.empty
+        results.isEmpty()
 
         cleanup:
         db?.close()
@@ -695,7 +695,7 @@ class BlockDatabaseSpec extends Specification {
         db.rollbackTransaction()
 
         then:
-        db.queryByBlockType('minecraft:stone').empty  // Rolled back
+        db.queryByBlockType('minecraft:stone').isEmpty()  // Rolled back
 
         cleanup:
         db?.close()
@@ -1009,7 +1009,7 @@ class BlockDatabaseSpec extends Specification {
         List<Map> results = db.queryAllBlocks()
 
         then:
-        results.empty
+        results.isEmpty()
 
         cleanup:
         db?.close()
