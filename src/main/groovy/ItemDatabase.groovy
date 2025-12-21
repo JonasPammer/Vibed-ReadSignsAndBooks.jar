@@ -358,7 +358,10 @@ class ItemDatabase implements AutoCloseable {
         StringBuilder query = new StringBuilder('''
             SELECT item_id, count, dimension, x, y, z, container_type,
                    custom_name, damage, enchantments, stored_enchantments, region_file
-            FROM items WHERE (enchantments IS NOT NULL OR stored_enchantments IS NOT NULL)
+            FROM items WHERE (
+                (enchantments IS NOT NULL AND enchantments != '{}' AND enchantments != '[]')
+                OR (stored_enchantments IS NOT NULL AND stored_enchantments != '{}' AND stored_enchantments != '[]')
+            )
         ''')
         List<Object> params = []
 
