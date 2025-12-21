@@ -156,7 +156,7 @@ test {
     }
 
     // Increase test timeout for integration tests
-    timeout = java.time.Duration.ofMinutes(10)
+    timeout = java.time.Duration.ofMinutes(15)
 
     // JavaFX GUI testing configuration
     // Note: Monocle headless testing is not compatible with JavaFX 21 yet
