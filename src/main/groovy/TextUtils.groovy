@@ -58,6 +58,9 @@ class TextUtils {
      * @return The extracted player name or 'unknown'
      */
     static String extractPlayerName(String bookInfo, String prefix) {
+        if (bookInfo == null) {
+            return 'unknown'
+        }
         try {
             int startIndex = bookInfo.indexOf(prefix)
             if (startIndex >= 0) {

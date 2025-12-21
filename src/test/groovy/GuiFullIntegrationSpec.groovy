@@ -38,6 +38,9 @@ class GuiFullIntegrationSpec extends ApplicationSpec {
     @Shared
     Stage primaryStage
 
+    @Shared
+    GUI guiInstance
+
     /**
      * Called by TestFX to start the application under test.
      * This launches the actual GUI class.
@@ -45,8 +48,9 @@ class GuiFullIntegrationSpec extends ApplicationSpec {
     @Override
     void start(Stage stage) throws Exception {
         primaryStage = stage
-        // Launch the actual GUI
-        new GUI().start(stage)
+        // Launch the actual GUI and keep reference
+        guiInstance = new GUI()
+        guiInstance.start(stage)
     }
 
     /**
@@ -376,7 +380,7 @@ class GuiFullIntegrationSpec extends ApplicationSpec {
         when: "Set the world path programmatically and trigger extraction"
         Platform.runLater {
             worldPathField.text = testWorldPath.absolutePath
-            GUI.worldDir = testWorldPath
+            guiInstance.worldDir = testWorldPath
         }
         WaitForAsyncUtils.waitForFxEvents()
         Thread.sleep(100)

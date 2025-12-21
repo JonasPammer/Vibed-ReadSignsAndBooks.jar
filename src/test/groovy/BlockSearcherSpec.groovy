@@ -329,10 +329,10 @@ class BlockSearcherSpec extends Specification {
     }
 
     // =========================================================================
-    // buildPaletteMap() Tests
+    // assemblePaletteMap() Tests
     // =========================================================================
 
-    def "buildPaletteMap should map indices to matching blocks only"() {
+    def "assemblePaletteMap should map indices to matching blocks only"() {
         given:
         ListTag<CompoundTag> palette = new ListTag<>(CompoundTag)
         CompoundTag block1 = new CompoundTag()
@@ -347,7 +347,7 @@ class BlockSearcherSpec extends Specification {
         Set<String> targetBlocks = ['minecraft:stone', 'minecraft:nether_portal'] as Set
 
         when:
-        Map<Integer, CompoundTag> map = BlockSearcher.buildPaletteMap(palette, targetBlocks)
+        Map<Integer, CompoundTag> map = BlockSearcher.assemblePaletteMap(palette, targetBlocks)
 
         then:
         map.size() == 2
@@ -356,7 +356,7 @@ class BlockSearcherSpec extends Specification {
         !map.containsKey(1)  // dirt not in targets
     }
 
-    def "buildPaletteMap should return empty map when no matches"() {
+    def "assemblePaletteMap should return empty map when no matches"() {
         given:
         ListTag<CompoundTag> palette = new ListTag<>(CompoundTag)
         CompoundTag block1 = new CompoundTag()
@@ -365,25 +365,25 @@ class BlockSearcherSpec extends Specification {
         Set<String> targetBlocks = ['minecraft:dirt'] as Set
 
         when:
-        Map<Integer, CompoundTag> map = BlockSearcher.buildPaletteMap(palette, targetBlocks)
+        Map<Integer, CompoundTag> map = BlockSearcher.assemblePaletteMap(palette, targetBlocks)
 
         then:
         map.isEmpty()
     }
 
-    def "buildPaletteMap should handle empty palette"() {
+    def "assemblePaletteMap should handle empty palette"() {
         given:
         ListTag<CompoundTag> palette = new ListTag<>(CompoundTag)
         Set<String> targetBlocks = ['minecraft:stone'] as Set
 
         when:
-        Map<Integer, CompoundTag> map = BlockSearcher.buildPaletteMap(palette, targetBlocks)
+        Map<Integer, CompoundTag> map = BlockSearcher.assemblePaletteMap(palette, targetBlocks)
 
         then:
         map.isEmpty()
     }
 
-    def "buildPaletteMap should use blockMatchesTarget for matching"() {
+    def "assemblePaletteMap should use blockMatchesTarget for matching"() {
         given:
         ListTag<CompoundTag> palette = new ListTag<>(CompoundTag)
         CompoundTag block1 = new CompoundTag()
@@ -392,7 +392,7 @@ class BlockSearcherSpec extends Specification {
         Set<String> targetBlocks = ['stone'] as Set  // Without prefix
 
         when:
-        Map<Integer, CompoundTag> map = BlockSearcher.buildPaletteMap(palette, targetBlocks)
+        Map<Integer, CompoundTag> map = BlockSearcher.assemblePaletteMap(palette, targetBlocks)
 
         then:
         map.size() == 1  // Should match via blockMatchesTarget normalization

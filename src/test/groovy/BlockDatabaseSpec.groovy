@@ -582,7 +582,7 @@ class BlockDatabaseSpec extends Specification {
         db?.close()
     }
 
-    def "getBlockCount should return null for unknown block type"() {
+    def "getBlockCount should return empty map for unknown block type"() {
         given:
         File dbFile = tempDir.resolve('test.db').toFile()
         BlockDatabase db = new BlockDatabase(dbFile)
@@ -591,7 +591,7 @@ class BlockDatabaseSpec extends Specification {
         Map count = db.getBlockCount('minecraft:nonexistent')
 
         then:
-        count == null
+        count == [:]
 
         cleanup:
         db?.close()
