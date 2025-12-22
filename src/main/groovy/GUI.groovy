@@ -14,12 +14,15 @@ import javafx.scene.control.Button
 import javafx.scene.control.CheckBox
 import javafx.scene.control.Label
 import javafx.scene.control.Menu
+import javafx.scene.control.Spinner
+import javafx.scene.control.SpinnerValueFactory
 import javafx.scene.control.MenuBar
 import javafx.scene.control.MenuItem
 import javafx.scene.control.Separator
 import javafx.scene.control.SeparatorMenuItem
 import javafx.scene.control.TextArea
 import javafx.scene.control.TextField
+import javafx.scene.control.Tooltip
 import javafx.scene.input.Dragboard
 import javafx.scene.input.DragEvent
 import javafx.scene.input.TransferMode
@@ -42,11 +45,16 @@ class GUI extends Application {
     TextField worldPathField
     TextField outputPathField
     CheckBox removeFormattingCheckBox
-    CheckBox extractCustomNamesCheckBox
+    CheckBox indexItemsCheckBox
+    CheckBox skipCommonItemsCheckBox
+    CheckBox trackFailedRegionsCheckBox
     CheckBox findPortalsCheckBox
     CheckBox overworldCheckBox
     CheckBox netherCheckBox
     CheckBox endCheckBox
+    TextField searchBlocksField
+    Spinner<Integer> indexLimitSpinner
+    Spinner<Integer> itemLimitSpinner
     TextArea logArea
     Label statusLabel
     File worldDir
@@ -129,65 +137,180 @@ class GUI extends Application {
         outputBtn.onAction = { event -> selectOutputFolder(stage) }
         outputBox.children.addAll(new Label('Output Folder:').with { Label label -> label.minWidth = 120; label }, outputPathField, outputBtn)
 
+        // ══════════════════════════════════════════════════════════════════════
+        // SECTION: Content Extraction Options (what to extract from world)
+        // ══════════════════════════════════════════════════════════════════════
+        VBox contentExtractionSection = new VBox(8)
+        contentExtractionSection.style = '-fx-padding: 10; -fx-background-color: derive(-fx-base, 5%); -fx-background-radius: 5; -fx-border-color: derive(-fx-base, -10%); -fx-border-radius: 5;'
+
+        Label contentHeader = new Label('Content Extraction')
+        contentHeader.style = '-fx-font-weight: bold; -fx-font-size: 13px;'
+
         // Remove formatting checkbox
-        HBox formattingBox = new HBox(10)
-        formattingBox.alignment = Pos.CENTER_LEFT
-        removeFormattingCheckBox = new CheckBox('Remove Minecraft formatting codes (§ codes)')
+        removeFormattingCheckBox = new CheckBox('Remove Minecraft formatting codes (§ color/style codes)')
         removeFormattingCheckBox.selected = false
-        formattingBox.children.addAll(new Label('Options:').with { Label label -> label.minWidth = 120; label }, removeFormattingCheckBox)
+        removeFormattingCheckBox.tooltip = new Tooltip('Strip §a, §l, §n etc. from extracted text.\nUseful for plain text output.')
 
-        // Extract custom names checkbox
-        HBox customNamesBox = new HBox(10)
-        customNamesBox.alignment = Pos.CENTER_LEFT
-        extractCustomNamesCheckBox = new CheckBox('Extract custom names from items and entities')
-        extractCustomNamesCheckBox.selected = false
-        customNamesBox.children.addAll(new Label('').with { Label label -> label.minWidth = 120; label }, extractCustomNamesCheckBox)
+        contentExtractionSection.children.addAll(contentHeader, removeFormattingCheckBox)
 
-        // Block Search section with visual grouping
+        // ══════════════════════════════════════════════════════════════════════
+        // SECTION: Item Index Database (SQLite for querying items later)
+        // ══════════════════════════════════════════════════════════════════════
+        VBox itemIndexSection = new VBox(8)
+        itemIndexSection.style = '-fx-padding: 10; -fx-background-color: derive(-fx-base, 5%); -fx-background-radius: 5; -fx-border-color: derive(-fx-base, -10%); -fx-border-radius: 5;'
+
+        Label itemIndexHeader = new Label('Item Index Database')
+        itemIndexHeader.style = '-fx-font-weight: bold; -fx-font-size: 13px;'
+
+        // Index items checkbox (main toggle)
+        indexItemsCheckBox = new CheckBox('Build item index (creates SQLite database for querying items later)')
+        indexItemsCheckBox.selected = false
+        indexItemsCheckBox.tooltip = new Tooltip('Creates items.db in output folder.\nQuery later with: --item-query "diamond" --item-filter "enchanted"')
+
+        // Dependent options (indented via padding)
+        VBox itemIndexOptions = new VBox(6)
+        itemIndexOptions.padding = new Insets(0, 0, 0, 25)  // Indent to show dependency
+
+        skipCommonItemsCheckBox = new CheckBox('Skip common items (stone, dirt, cobblestone, netherrack, etc.)')
+        skipCommonItemsCheckBox.selected = true
+        skipCommonItemsCheckBox.tooltip = new Tooltip('Excludes bulk materials to reduce database size.\nUncheck to index EVERYTHING.')
+
+        HBox itemLimitRow = new HBox(10)
+        itemLimitRow.alignment = Pos.CENTER_LEFT
+        itemLimitSpinner = new Spinner<Integer>()
+        itemLimitSpinner.valueFactory = new SpinnerValueFactory.IntegerSpinnerValueFactory(0, 100000, 1000, 100)
+        itemLimitSpinner.editable = true
+        itemLimitSpinner.prefWidth = 100
+        itemLimitSpinner.tooltip = new Tooltip('Maximum items per type to store.')
+        Label itemLimitLabel = new Label('Limit per item type:')
+        itemLimitRow.children.addAll(itemLimitLabel, itemLimitSpinner)
+
+        itemIndexOptions.children.addAll(skipCommonItemsCheckBox, itemLimitRow)
+
+        // Enable/disable dependent options based on main checkbox
+        indexItemsCheckBox.selectedProperty().addListener { obs, oldVal, newVal ->
+            itemIndexOptions.disable = !newVal
+            itemIndexOptions.opacity = newVal ? 1.0 : 0.5
+        }
+        // Set initial state
+        itemIndexOptions.disable = true
+        itemIndexOptions.opacity = 0.5
+
+        itemIndexSection.children.addAll(itemIndexHeader, indexItemsCheckBox, itemIndexOptions)
+
+        // ══════════════════════════════════════════════════════════════════════
+        // SECTION: Block Search (find specific blocks in world)
+        // ══════════════════════════════════════════════════════════════════════
         VBox blockSearchSection = new VBox(8)
-        blockSearchSection.style = '-fx-padding: 10; -fx-background-color: #f5f5f5; -fx-background-radius: 5;'
+        blockSearchSection.style = '-fx-padding: 10; -fx-background-color: derive(-fx-base, 5%); -fx-background-radius: 5; -fx-border-color: derive(-fx-base, -10%); -fx-border-radius: 5;'
 
-        Label blockSearchHeader = new Label('Block Search Options')
-        blockSearchHeader.style = '-fx-font-weight: bold; -fx-font-size: 12px;'
+        Label blockSearchHeader = new Label('Block Search (skipped if nothing selected)')
+        blockSearchHeader.style = '-fx-font-weight: bold; -fx-font-size: 13px;'
 
         // Find portals checkbox
-        HBox findPortalsBox = new HBox(10)
-        findPortalsBox.alignment = Pos.CENTER_LEFT
         findPortalsCheckBox = new CheckBox('Find nether portals (with intelligent clustering)')
         findPortalsCheckBox.selected = false
-        findPortalsBox.children.addAll(findPortalsCheckBox)
+        findPortalsCheckBox.tooltip = new Tooltip('Scans for portal blocks and groups them into portal structures.\nOutputs coordinates with overworld/nether pairing.')
+
+        // Search blocks text field
+        HBox searchBlocksRow = new HBox(10)
+        searchBlocksRow.alignment = Pos.CENTER_LEFT
+        Label searchBlocksLabel = new Label('Search for blocks:')
+        searchBlocksField = new TextField()
+        searchBlocksField.promptText = 'e.g., diamond_ore,ancient_debris,spawner'
+        HBox.setHgrow(searchBlocksField, Priority.ALWAYS)
+        searchBlocksField.tooltip = new Tooltip('Comma-separated list of block IDs to find.')
+        searchBlocksRow.children.addAll(searchBlocksLabel, searchBlocksField)
+
+        // Dependent options (grayed out when block search inactive)
+        VBox blockSearchOptions = new VBox(6)
+        blockSearchOptions.padding = new Insets(0, 0, 0, 25)  // Indent to show dependency
+
+        // Block limit options row
+        HBox blockOptionsRow = new HBox(10)
+        blockOptionsRow.alignment = Pos.CENTER_LEFT
+        Label blockLimitLabel = new Label('Limit per type:')
+        indexLimitSpinner = new Spinner<Integer>()
+        indexLimitSpinner.valueFactory = new SpinnerValueFactory.IntegerSpinnerValueFactory(0, 100000, 5000, 500)
+        indexLimitSpinner.editable = true
+        indexLimitSpinner.prefWidth = 100
+        indexLimitSpinner.tooltip = new Tooltip('Maximum blocks per type to record.')
+        blockOptionsRow.children.addAll(blockLimitLabel, indexLimitSpinner)
 
         // Dimension selection checkboxes
-        HBox dimensionsBox = new HBox(10)
-        dimensionsBox.alignment = Pos.CENTER_LEFT
+        HBox dimensionsRow = new HBox(15)
+        dimensionsRow.alignment = Pos.CENTER_LEFT
+        Label dimensionsLabel = new Label('Search in:')
         overworldCheckBox = new CheckBox('Overworld')
         overworldCheckBox.selected = true
         netherCheckBox = new CheckBox('Nether')
         netherCheckBox.selected = true
         endCheckBox = new CheckBox('The End')
         endCheckBox.selected = true
-        Label dimensionsLabel = new Label('Search dimensions:')
-        dimensionsBox.children.addAll(dimensionsLabel, overworldCheckBox, netherCheckBox, endCheckBox)
+        dimensionsRow.children.addAll(dimensionsLabel, overworldCheckBox, netherCheckBox, endCheckBox)
 
-        blockSearchSection.children.addAll(blockSearchHeader, findPortalsBox, dimensionsBox)
+        blockSearchOptions.children.addAll(blockOptionsRow, dimensionsRow)
 
-        // Action buttons (left-aligned)
-        HBox btnBox = new HBox(15)
-        btnBox.alignment = Pos.CENTER_LEFT
+        // Helper to update dependent options state
+        Closure updateBlockSearchState = {
+            boolean active = findPortalsCheckBox.selected || searchBlocksField.text?.trim()
+            blockSearchOptions.disable = !active
+            blockSearchOptions.opacity = active ? 1.0 : 0.5
+        }
+
+        // Bind to both checkbox and text field changes
+        findPortalsCheckBox.selectedProperty().addListener { obs, oldVal, newVal -> updateBlockSearchState() }
+        searchBlocksField.textProperty().addListener { obs, oldVal, newVal -> updateBlockSearchState() }
+
+        // Set initial state (inactive)
+        blockSearchOptions.disable = true
+        blockSearchOptions.opacity = 0.5
+
+        blockSearchSection.children.addAll(blockSearchHeader, findPortalsCheckBox, searchBlocksRow, blockSearchOptions)
+
+        // ══════════════════════════════════════════════════════════════════════
+        // 2-Column Layout: Item Index Database | Block Search (side-by-side)
+        // ══════════════════════════════════════════════════════════════════════
+        HBox twoColumnSection = new HBox(15)
+        HBox.setHgrow(itemIndexSection, Priority.ALWAYS)
+        HBox.setHgrow(blockSearchSection, Priority.ALWAYS)
+        twoColumnSection.children.addAll(itemIndexSection, blockSearchSection)
+
+        // ══════════════════════════════════════════════════════════════════════
+        // SECTION: Execution Bar (action buttons + execution options)
+        // ══════════════════════════════════════════════════════════════════════
+        HBox executionBar = new HBox(20)
+        executionBar.alignment = Pos.CENTER_LEFT
+        executionBar.padding = new Insets(5, 0, 5, 0)
+
+        // Primary action button
         extractBtn = new Button('Extract')
         extractBtn.minWidth = 150
-        extractBtn.style = '-fx-font-size: 14px; -fx-background-color: #4CAF50; -fx-text-fill: white;'
+        extractBtn.style = '-fx-font-size: 14px; -fx-font-weight: bold; -fx-background-color: #4CAF50; -fx-text-fill: white;'
         extractBtn.onAction = { event -> runExtraction() }
+
+        // Execution option: Track failed regions (belongs near Execute button)
+        trackFailedRegionsCheckBox = new CheckBox('Track & suppress failing regions')
+        trackFailedRegionsCheckBox.selected = false
+        trackFailedRegionsCheckBox.tooltip = new Tooltip('If a region file fails repeatedly, suppress future errors.\nUseful for corrupted worlds.')
+
+        // Separator for visual grouping
+        Separator execSeparator = new Separator()
+        execSeparator.orientation = javafx.geometry.Orientation.VERTICAL
+        execSeparator.prefHeight = 30
+
+        // Secondary action buttons
         Button openFolderBtn = new Button('Open Output Folder')
         openFolderBtn.minWidth = 130
         openFolderBtn.onAction = { event -> openOutputFolder() }
         Button clearBtn = new Button('Clear Log')
-        clearBtn.minWidth = 100
+        clearBtn.minWidth = 80
         clearBtn.onAction = { event -> logArea.text = '' }
         Button exitBtn = new Button('Exit')
-        exitBtn.minWidth = 100
+        exitBtn.minWidth = 60
         exitBtn.onAction = { event -> Platform.exit() }
-        btnBox.children.addAll(extractBtn, openFolderBtn, clearBtn, exitBtn)
+
+        executionBar.children.addAll(extractBtn, trackFailedRegionsCheckBox, execSeparator, openFolderBtn, clearBtn, exitBtn)
 
         // Status label
         statusLabel = new Label('Ready')
@@ -200,17 +323,16 @@ class GUI extends Application {
         logArea.style = '-fx-font-family: "Courier New"; -fx-font-size: 11px;'
         VBox.setVgrow(logArea, Priority.ALWAYS)  // Make it grow vertically
 
-        // Assemble content layout
+        // Assemble content layout with clear visual sections
         contentRoot.children.addAll(
             title,
             new Separator(),
             worldBox,
             outputBox,
-            formattingBox,
-            customNamesBox,
-            blockSearchSection,
+            contentExtractionSection,
+            twoColumnSection,  // Item Index Database | Block Search (side-by-side)
             new Separator(),
-            btnBox,
+            executionBar,
             new Separator(),
             statusLabel,
             new Label('Extraction Log:').with { Label label -> label.style = '-fx-font-weight: bold;'; label },
@@ -222,9 +344,9 @@ class GUI extends Application {
         root.top = menuBar
         root.center = contentRoot
 
-        stage.scene = new Scene(root, 720, 550)
-        stage.minWidth = 700
-        stage.minHeight = 500
+        stage.scene = new Scene(root, 950, 750)
+        stage.minWidth = 900
+        stage.minHeight = 650
         stage.show()
 
         // Parse command-line arguments using Picocli (reuses Main's @Option definitions)
@@ -277,8 +399,28 @@ class GUI extends Application {
             removeFormattingCheckBox.selected = true
         }
 
-        if (Main.extractCustomNames) {
-            extractCustomNamesCheckBox.selected = true
+        if (Main.indexItems) {
+            indexItemsCheckBox.selected = true
+        }
+
+        if (Main.trackFailedRegions) {
+            trackFailedRegionsCheckBox.selected = true
+        }
+
+        // Skip common items (default is true, so only set if explicitly false)
+        skipCommonItemsCheckBox.selected = Main.skipCommonItems
+
+        // Set limit spinners from CLI values
+        if (Main.itemLimit != 1000) {  // Not default
+            itemLimitSpinner.valueFactory.value = Main.itemLimit
+        }
+        if (Main.indexLimit != 5000) {  // Not default
+            indexLimitSpinner.valueFactory.value = Main.indexLimit
+        }
+
+        // Search blocks field
+        if (Main.searchBlocks) {
+            searchBlocksField.text = Main.searchBlocks.join(',')
         }
 
         if (Main.findPortals) {
@@ -464,8 +606,32 @@ class GUI extends Application {
                 if (removeFormattingCheckBox.selected) {
                     args += ['--remove-formatting']
                 }
-                if (extractCustomNamesCheckBox.selected) {
-                    args += ['--extract-custom-names']
+                // Always extract custom names (no toggle needed)
+                args += ['--extract-custom-names']
+                if (indexItemsCheckBox.selected) {
+                    args += ['--index-items']
+                }
+                if (trackFailedRegionsCheckBox.selected) {
+                    args += ['--track-failed-regions']
+                }
+                if (!skipCommonItemsCheckBox.selected) {
+                    // Only pass if unchecked (default is true)
+                    args += ['--skip-common-items', 'false']
+                }
+                // Item limit (only if not default)
+                int itemLimitValue = itemLimitSpinner.value
+                if (itemLimitValue != 1000) {
+                    args += ['--item-limit', itemLimitValue.toString()]
+                }
+                // Search blocks
+                String searchBlocksText = searchBlocksField.text?.trim()
+                if (searchBlocksText) {
+                    args += ['--search-blocks', searchBlocksText]
+                }
+                // Block index limit (only if not default)
+                int indexLimitValue = indexLimitSpinner.value
+                if (indexLimitValue != 5000) {
+                    args += ['--index-limit', indexLimitValue.toString()]
                 }
                 if (findPortalsCheckBox.selected) {
                     args += ['--find-portals']

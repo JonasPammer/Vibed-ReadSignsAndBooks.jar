@@ -114,9 +114,6 @@ class Main implements Runnable {
     @Option(names = ['--search-dimensions'], description = 'Dimensions to search for blocks/portals (default: all). Options: overworld,nether,end', split = ',', defaultValue = 'overworld,nether,end')
     static List<String> searchDimensions = DEFAULT_DIMENSIONS
 
-    @Option(names = ['--block-output-format'], description = 'Output format for block search (csv, json, txt)', defaultValue = 'csv')
-    static String blockOutputFormat = 'csv'
-
     // Block index database options
 
     @Option(names = ['--index-limit'], description = 'Max blocks per type to index (default: 5000, 0 for unlimited)', defaultValue = '5000')
@@ -216,7 +213,6 @@ class Main implements Runnable {
         commandSpec = null
         findPortals = false
         searchDimensions = DEFAULT_DIMENSIONS
-        blockOutputFormat = 'csv'
         blockSearchResults = []
         portalResults = []
 
@@ -1342,18 +1338,10 @@ class Main implements Runnable {
     static void writePortalOutput(String outputPath) {
         LOGGER.info("Writing portal output (${portalResults.size()} portals found)")
 
-        switch (blockOutputFormat.toLowerCase()) {
-            case 'json':
-                writePortalJson(outputPath)
-                break
-            case 'txt':
-                writePortalTxt(outputPath)
-                break
-            case 'csv':
-            default:
-                writePortalCsv(outputPath)
-                break
-        }
+        // Output all 3 formats (CSV, JSON, TXT)
+        writePortalCsv(outputPath)
+        writePortalJson(outputPath)
+        writePortalTxt(outputPath)
     }
 
     static void writePortalCsv(String outputPath) {
@@ -1436,18 +1424,10 @@ class Main implements Runnable {
     static void writeBlockOutput(String outputPath) {
         LOGGER.info("Writing block output (${blockSearchResults.size()} blocks found)")
 
-        switch (blockOutputFormat.toLowerCase()) {
-            case 'json':
-                writeBlockJson(outputPath)
-                break
-            case 'txt':
-                writeBlockTxt(outputPath)
-                break
-            case 'csv':
-            default:
-                writeBlockCsv(outputPath)
-                break
-        }
+        // Output all 3 formats (CSV, JSON, TXT)
+        writeBlockCsv(outputPath)
+        writeBlockJson(outputPath)
+        writeBlockTxt(outputPath)
     }
 
     static void writeBlockCsv(String outputPath) {
@@ -1573,18 +1553,10 @@ class Main implements Runnable {
             int totalBlocks = db.totalBlockCount
             LOGGER.info("Writing block output from database (${totalBlocks} blocks indexed)")
 
-            switch (blockOutputFormat.toLowerCase()) {
-                case 'json':
-                    writeBlockJsonFromDb(outputPath, db)
-                    break
-                case 'txt':
-                    writeBlockTxtFromDb(outputPath, db)
-                    break
-                case 'csv':
-                default:
-                    writeBlockCsvFromDb(outputPath, db)
-                    break
-            }
+            // Output all 3 formats (CSV, JSON, TXT)
+            writeBlockCsvFromDb(outputPath, db)
+            writeBlockJsonFromDb(outputPath, db)
+            writeBlockTxtFromDb(outputPath, db)
         } finally {
             db.close()
         }

@@ -77,19 +77,50 @@ try {
   - "About" - Shows version, attribution (Matt /u/worldseed, Querz NBT, Claude 4.5), and legal disclaimers
   - "Third-Party Licenses" - Opens dialog displaying all dependency licenses (italic monospace font)
 
-#### 2. Input Controls
+#### 2. Path Configuration
 - **World Directory:** Optional - uses current working directory if not set (same as CLI `-w`)
 - **Output Folder:** Optional - shows dynamic prompt text with default path (same as CLI `-o`)
-- **Remove Formatting:** Checkbox - passes `--remove-formatting` flag to CLI
-- **Extract Custom Names:** Checkbox - passes `--extract-custom-names` flag to CLI
 
-#### 3. Action Buttons (Left-Aligned)
-- **Extract** (Green) - Runs extraction in background thread
+#### 3. Content Extraction Section (Visual Group)
+Bordered panel with header "Content Extraction":
+- **Remove Formatting:** Checkbox - passes `--remove-formatting` flag to CLI
+  - Tooltip: "Strip §a, §l, §n etc. from extracted text"
+- **Custom Names:** Always extracted automatically (no toggle needed)
+
+#### 4. Item Index Database Section (Visual Group with Dependencies)
+Bordered panel with header "Item Index Database":
+- **Build Item Index:** Checkbox (main toggle) - passes `--index-items` flag to CLI
+  - Tooltip: "Creates items.db in output folder. Query later with: --item-query"
+  - **Dependent options** (indented, disabled until main checkbox checked):
+    - **Skip Common Items:** Checkbox (default: checked) - passes `--skip-common-items false` when unchecked
+      - Tooltip: "Excludes bulk materials to reduce database size"
+    - **Item Limit:** Spinner (default: 1000) - passes `--item-limit N` to CLI
+      - Tooltip: "Maximum items per type to store."
+
+#### 5. Block Search Section (Visual Group with Dependencies)
+Bordered panel with header "Block Search (skipped if nothing selected)":
+- **Find Portals:** Checkbox - passes `--find-portals` flag to CLI
+  - Tooltip: "Scans for portal blocks and groups them into portal structures"
+- **Search Blocks:** Text field - passes `--search-blocks TYPE1,TYPE2` to CLI
+  - Tooltip: "Comma-separated list of block IDs to find"
+- **Dependent options** (indented, disabled until portals checkbox or search field has content):
+  - **Block Limit:** Spinner (default: 5000) - passes `--index-limit N` to CLI
+    - Tooltip: "Maximum blocks per type to record."
+  - **Dimension Checkboxes:** Overworld/Nether/End (all checked by default) - passes `--search-dimensions` to CLI
+- **Output:** All 3 formats (CSV, JSON, TXT) generated automatically (no dropdown)
+
+#### 6. Execution Bar (Horizontal)
+Combines primary action with execution options:
+- **Extract** (Green, bold) - Runs extraction in background thread
+- **Track & Suppress Failing Regions:** Checkbox - passes `--track-failed-regions` flag to CLI
+  - Tooltip: "If a region file fails repeatedly, suppress future errors"
+  - Located next to Extract button since it's execution behavior, not extraction config
+- **[Vertical Separator]**
 - **Open Output Folder** - Opens output directory in file explorer
 - **Clear Log** - Clears the log TextArea
 - **Exit** - Closes application
 
-#### 4. Extraction Log
+#### 7. Extraction Log
 **Real-time Logback integration** - Shows live logging output from CLI execution with rolling buffer to prevent UI freeze.
 
 ### Live Logging Implementation
@@ -226,8 +257,8 @@ void runExtraction() {
 ## Window Behavior
 
 ### Sizing & Layout
-- **Initial size:** 720×550
-- **Minimum size:** 700×500 (prevents UI breaking)
+- **Initial size:** 950×750
+- **Minimum size:** 900×650 (prevents UI breaking)
 - **Resizable:** Yes
 
 ### Responsive Design
@@ -264,7 +295,15 @@ The GUI is designed to **perfectly mirror CLI behavior**:
 | No output selected | Uses default | `java -jar app.jar` (no `-o`) uses default |
 | Output selected | Passes `-o /path` | `java -jar app.jar -o /path` |
 | Formatting checkbox | Passes `--remove-formatting` | `java -jar app.jar --remove-formatting` |
-| Custom names checkbox | Passes `--extract-custom-names` | `java -jar app.jar --extract-custom-names` |
+| Track failed regions checkbox | Passes `--track-failed-regions` | `java -jar app.jar --track-failed-regions` |
+| Custom names | Always passes `--extract-custom-names` | Always extracted (no toggle) |
+| Item index checkbox | Passes `--index-items` | `java -jar app.jar --index-items` |
+| Skip common items checkbox | Passes `--skip-common-items false` when unchecked | `java -jar app.jar --skip-common-items false` |
+| Item limit spinner | Passes `--item-limit N` | `java -jar app.jar --item-limit 500` |
+| Search blocks field | Passes `--search-blocks TYPES` | `java -jar app.jar --search-blocks diamond_ore,spawner` |
+| Block index limit spinner | Passes `--index-limit N` | `java -jar app.jar --index-limit 10000` |
+| Find portals checkbox | Passes `--find-portals` | `java -jar app.jar --find-portals` |
+| Block output | All 3 formats (CSV, JSON, TXT) | All 3 formats automatically (no `--block-output-format`) |
 
 **Design Philosophy:** GUI only passes arguments that are explicitly set by user. CLI handles all defaults and validation.
 
