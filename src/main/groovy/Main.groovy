@@ -1172,6 +1172,11 @@ class Main implements Runnable {
      * 1. Targeted search: --search-blocks obsidian,nether_portal (specific block types)
      * 2. Index-all mode: --search-blocks (no arguments) - indexes all blocks except air/cave_air,
      *    rarity-filtered by --index-limit
+     *
+     * Optimization (GitHub issue #15):
+     * When both --find-portals and --search-blocks are specified, combines them into a single
+     * world scan by adding minecraft:nether_portal to the target blocks set. Portal blocks
+     * are then extracted from results for clustering, avoiding duplicate world scans.
      */
     static void runBlockSearch() {
         boolean hasSpecificBlocks = searchBlocks && !searchBlocks.empty
@@ -1189,6 +1194,10 @@ class Main implements Runnable {
         LOGGER.info('BLOCK SEARCH')
         LOGGER.info('=' * 80)
 
+        // Determine if we can combine portal search with block search (optimization)
+        // Combined mode: both flags set AND we have specific blocks (not index-all mode)
+        boolean useCombinedScan = hasPortalSearch && hasSpecificBlocks
+
         // Always create block index database when searching for blocks
         if (hasBlockSearch) {
             File dbFile = new File(resolveOutputBaseDir(), 'block_index.db')
@@ -1202,33 +1211,77 @@ class Main implements Runnable {
         }
 
         try {
-            // Run portal detection if requested
-            if (hasPortalSearch) {
-                LOGGER.info("Finding nether portals in dimensions: ${searchDimensions.join(', ')}")
-                portalResults = PortalDetector.findPortalsInWorld(baseDirectory, searchDimensions)
-                LOGGER.info("Found ${portalResults.size()} portal structures")
-            }
+            if (useCombinedScan) {
+                // OPTIMIZATION: Combined scan for both portals and blocks in single world pass
+                LOGGER.info('Combined scan mode: searching for blocks and portals in single pass')
 
-            // Run block search with database indexing
-            if (hasBlockSearch) {
-                if (hasIndexAllMode) {
-                    // Index-all mode: scan all blocks except air/cave_air
-                    LOGGER.info("INDEX-ALL MODE: Scanning all blocks (rarity-filtered by limit: ${indexLimit == 0 ? 'unlimited' : indexLimit})")
-                    LOGGER.info("Dimensions: ${searchDimensions.join(', ')}")
-                    LOGGER.info('Skipping: minecraft:air, minecraft:cave_air')
+                Set<String> targetBlocks = BlockSearcher.parseBlockIds(searchBlocks.join(','))
 
-                    // Use specialized index-all method that streams directly to DB
-                    BlockSearcher.indexAllBlocks(baseDirectory, searchDimensions, blockDatabase)
-                    // Results stay in DB only - no in-memory list needed
-                    blockSearchResults = []  // Empty - will stream from DB for output
+                // Add nether_portal to target blocks if not already present
+                String portalBlockId = 'minecraft:nether_portal'
+                boolean portalAlreadyIncluded = targetBlocks.contains(portalBlockId)
+                if (!portalAlreadyIncluded) {
+                    targetBlocks.add(portalBlockId)
+                    LOGGER.info("Added ${portalBlockId} to search targets for portal clustering")
+                }
+
+                LOGGER.info("Searching for blocks: ${targetBlocks.join(', ')}")
+                LOGGER.info("Dimensions: ${searchDimensions.join(', ')}")
+
+                // Single combined scan
+                blockSearchResults = BlockSearcher.searchBlocks(baseDirectory, targetBlocks, searchDimensions, blockDatabase)
+                LOGGER.info("Found ${blockSearchResults.size()} matching blocks")
+
+                // Extract portal blocks from results and run clustering
+                List<BlockSearcher.BlockLocation> portalBlocks = blockSearchResults.findAll { loc ->
+                    loc.blockType == portalBlockId
+                }
+                if (portalBlocks) {
+                    LOGGER.info("Clustering ${portalBlocks.size()} portal blocks into structures...")
+                    portalResults = PortalDetector.detectPortals(portalBlocks)
+                    LOGGER.info("Found ${portalResults.size()} portal structures")
                 } else {
-                    // Targeted search mode
-                    Set<String> targetBlocks = BlockSearcher.parseBlockIds(searchBlocks.join(','))
-                    LOGGER.info("Searching for blocks: ${targetBlocks.join(', ')}")
-                    LOGGER.info("Dimensions: ${searchDimensions.join(', ')}")
+                    LOGGER.info('No portal blocks found')
+                    portalResults = []
+                }
+            } else {
+                // Non-combined mode: handle separately (either portal-only or block search modes)
 
-                    blockSearchResults = BlockSearcher.searchBlocks(baseDirectory, targetBlocks, searchDimensions, blockDatabase)
-                    LOGGER.info("Found ${blockSearchResults.size()} matching blocks")
+                // Run portal detection if requested (standalone, no block search)
+                if (hasPortalSearch && !hasBlockSearch) {
+                    LOGGER.info("Finding nether portals in dimensions: ${searchDimensions.join(', ')}")
+                    portalResults = PortalDetector.findPortalsInWorld(baseDirectory, searchDimensions)
+                    LOGGER.info("Found ${portalResults.size()} portal structures")
+                }
+
+                // Run block search with database indexing
+                if (hasBlockSearch) {
+                    if (hasIndexAllMode) {
+                        // Index-all mode: scan all blocks except air/cave_air
+                        LOGGER.info("INDEX-ALL MODE: Scanning all blocks (rarity-filtered by limit: ${indexLimit == 0 ? 'unlimited' : indexLimit})")
+                        LOGGER.info("Dimensions: ${searchDimensions.join(', ')}")
+                        LOGGER.info('Skipping: minecraft:air, minecraft:cave_air')
+
+                        // Use specialized index-all method that streams directly to DB
+                        BlockSearcher.indexAllBlocks(baseDirectory, searchDimensions, blockDatabase)
+                        // Results stay in DB only - no in-memory list needed
+                        blockSearchResults = []  // Empty - will stream from DB for output
+
+                        // For index-all mode with portal search, query portals from database after indexing
+                        if (hasPortalSearch) {
+                            LOGGER.info("Finding nether portals from indexed data...")
+                            portalResults = PortalDetector.findPortalsInWorld(baseDirectory, searchDimensions)
+                            LOGGER.info("Found ${portalResults.size()} portal structures")
+                        }
+                    } else {
+                        // Targeted search mode (without portal search - combined handled above)
+                        Set<String> targetBlocks = BlockSearcher.parseBlockIds(searchBlocks.join(','))
+                        LOGGER.info("Searching for blocks: ${targetBlocks.join(', ')}")
+                        LOGGER.info("Dimensions: ${searchDimensions.join(', ')}")
+
+                        blockSearchResults = BlockSearcher.searchBlocks(baseDirectory, targetBlocks, searchDimensions, blockDatabase)
+                        LOGGER.info("Found ${blockSearchResults.size()} matching blocks")
+                    }
                 }
             }
         } finally {
