@@ -5,11 +5,11 @@ plugins {
     id 'org.openjfx.javafxplugin' version '0.1.0'
     id 'com.github.jk1.dependency-license-report' version '3.0.1'
     id 'org.beryx.runtime' version '1.13.1'
+    id 'com.gorylenko.gradle-git-properties' version '2.5.0'
     id 'jacoco'
 }
 
 group = 'com.minecraftdatamining'
-version = '1.0.0'
 
 sourceCompatibility = '21'
 targetCompatibility = '21'
@@ -276,6 +276,16 @@ tasks.named('generateLicenseReport') {
 
 tasks.named('processResources') {
     dependsOn 'generateLicenseReport'
+}
+
+// Configure gradle-git-properties plugin
+gitProperties {
+    // Only include the properties we need
+    keys = ['git.commit.id.abbrev', 'git.commit.time', 'git.remote.origin.url']
+    dateFormat = "yyyy-MM-dd"
+    dateFormatTimeZone = "UTC"
+    // Add build time as custom property
+    customProperty 'git.build.time', { new java.text.SimpleDateFormat('yyyy-MM-dd').format(new Date()) }
 }
 
 // jpackage configuration for Windows distribution

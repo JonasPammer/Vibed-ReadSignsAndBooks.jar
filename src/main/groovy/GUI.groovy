@@ -486,23 +486,7 @@ class GUI extends Application {
 
         MenuItem aboutItem = new MenuItem('About')
         aboutItem.onAction = { event ->
-            showAlert('About',
-                'ReadSignsAndBooks v1.0.0\n\n' +
-                'Attribution:\n' +
-                'This project would not exist without the code shared in 2020\n' +
-                'by Matt (/u/worldseed) in the r/MinecraftDataMining Discord server,\n' +
-                'and it would be more than one file if not for the Querz NBT Library.\n\n' +
-                'All changes are just vibe coded with help of Claude 4.5.\n\n' +
-                '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n' +
-                'DISCLAIMER:\n' +
-                'This software is NOT affiliated with, endorsed by, or associated with\n' +
-                'Mojang Studios, Microsoft Corporation, or any of their subsidiaries.\n\n' +
-                'This program is provided "AS IS" without warranty of any kind.\n' +
-                'Although the program aims to only write to its destination/output folder, ' +
-                'neither the program nor the author is responsible for any corruption of world files,\n' +
-                'data loss, or any other damages that may occur from using this software.\n\n' +
-                'Use at your own risk. Always backup your worlds before processing.',
-                Alert.AlertType.INFORMATION)
+            showAboutDialog()
         }
 
         SeparatorMenuItem separator = new SeparatorMenuItem()
@@ -771,6 +755,86 @@ class GUI extends Application {
             // Default to light theme if detection fails - exception may occur if theme detection unavailable
             Application.userAgentStylesheet = new PrimerLight().userAgentStylesheet
         }
+    }
+
+    void showAboutDialog() {
+        // Create a new stage for the about dialog
+        Stage dialog = new Stage()
+        dialog.title = 'About ReadSignsAndBooks'
+        dialog.initOwner(statusLabel.scene.window)
+
+        // Version info section
+        String versionText = "ReadSignsAndBooks ${VersionInfo.getFullVersionString()}"
+        Label versionLabel = new Label(versionText)
+        versionLabel.style = '-fx-font-size: 16px; -fx-font-weight: bold;'
+
+        // Clickable commit link
+        javafx.scene.control.Hyperlink commitLink = new javafx.scene.control.Hyperlink(VersionInfo.getCommitUrl())
+        commitLink.onAction = {
+            try {
+                Desktop.desktop.browse(new URI(VersionInfo.getCommitUrl()))
+            } catch (Exception e) {
+                showAlert('Error', "Could not open browser: ${e.message}", Alert.AlertType.ERROR)
+            }
+        }
+
+        Label buildLabel = new Label("Built: ${VersionInfo.getBuildDate()}")
+        buildLabel.style = '-fx-font-size: 11px; -fx-text-fill: gray;'
+
+        // Attribution text
+        String attributionText = '''
+Attribution:
+This project would not exist without the code shared in 2020
+by Matt (/u/worldseed) in the r/MinecraftDataMining Discord server,
+and it would be more than one file if not for the Querz NBT Library.
+
+All changes are just vibe coded with help of Claude 4.5.
+'''
+
+        String disclaimerText = '''
+DISCLAIMER:
+This software is NOT affiliated with, endorsed by, or associated with
+Mojang Studios, Microsoft Corporation, or any of their subsidiaries.
+
+This program is provided "AS IS" without warranty of any kind.
+Although the program aims to only write to its destination/output folder,
+neither the program nor the author is responsible for any corruption of
+world files, data loss, or any other damages that may occur from using
+this software.
+
+Use at your own risk. Always backup your worlds before processing.
+'''
+
+        Label attributionLabel = new Label(attributionText.trim())
+        attributionLabel.wrapText = true
+        attributionLabel.style = '-fx-font-size: 12px;'
+
+        Label disclaimerLabel = new Label(disclaimerText.trim())
+        disclaimerLabel.wrapText = true
+        disclaimerLabel.style = '-fx-font-size: 11px; -fx-text-fill: #666666;'
+
+        // Close button
+        Button closeBtn = new Button('Close')
+        closeBtn.onAction = { dialog.close() }
+        closeBtn.minWidth = 100
+
+        HBox btnBox = new HBox(closeBtn)
+        btnBox.alignment = Pos.CENTER
+        btnBox.padding = new Insets(10)
+
+        // Layout
+        VBox content = new VBox(10, versionLabel, commitLink, buildLabel,
+            new Separator(), attributionLabel, new Separator(), disclaimerLabel)
+        content.padding = new Insets(20)
+        content.alignment = Pos.TOP_LEFT
+
+        BorderPane root = new BorderPane()
+        root.center = content
+        root.bottom = btnBox
+
+        dialog.scene = new Scene(root, 550, 450)
+        dialog.resizable = false
+        dialog.show()
     }
 
     void showLicensesDialog() {

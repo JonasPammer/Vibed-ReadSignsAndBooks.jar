@@ -21,6 +21,7 @@ import ch.qos.logback.core.FileAppender
 import ch.qos.logback.classic.spi.ILoggingEvent
 import picocli.CommandLine
 import picocli.CommandLine.Command
+import picocli.CommandLine.IVersionProvider
 import picocli.CommandLine.Option
 import javafx.application.Application
 
@@ -29,8 +30,19 @@ import java.text.SimpleDateFormat
 @Command(name = 'ReadSignsAndBooks',
         mixinStandardHelpOptions = true,
         description = 'Minecraft World Data Extractor - Extracts books and signs from Minecraft worlds',
-        version = '1.0')
+        versionProvider = Main.VersionProvider)
 class Main implements Runnable {
+
+    /**
+     * Provides version information for Picocli --version output.
+     * Reads from version.properties generated at build time.
+     */
+    static class VersionProvider implements IVersionProvider {
+        @Override
+        String[] getVersion() {
+            return VersionInfo.getVersionLines()
+        }
+    }
 
     private static final Logger LOGGER = LoggerFactory.getLogger(Main)
     private static final JsonSlurper JSON_SLURPER = new JsonSlurper()
