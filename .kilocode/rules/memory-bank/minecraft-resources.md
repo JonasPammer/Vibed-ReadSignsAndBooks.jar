@@ -122,6 +122,47 @@
 
 **Full table**: See minecraft-datapacks.md or https://minecraft.wiki/w/Pack_format
 
+## Structure Files & Schematics
+
+### Official Documentation
+- **Structure File Format**: https://minecraft.wiki/w/Structure_file
+  - Vanilla .nbt structure format, size limits (48x48x48)
+- **Block Entity Format**: https://minecraft.wiki/w/Block_entity_format
+  - Sign NBT (front_text, back_text), Lectern NBT (Book compound)
+- **Structure Block**: https://minecraft.wiki/w/Structure_Block
+  - In-game structure loading/saving
+
+### Schematic Format Tools & Libraries
+- **SchemConvert**: https://github.com/PiTheGuy/SchemConvert
+  - **RECOMMENDED**: Java 21 tool supporting .nbt, .schem, .litematic, .bp
+  - Reference implementation for format conversion
+  - **Local clone**: `/tmp/SchemConvert` (for analysis)
+- **Litematica Mod**: https://github.com/maruohon/litematica
+  - Original mod for .litematic format
+- **Sakura-Ryoko Litematica Fork**: https://github.com/sakura-ryoko/litematica
+  - Updated fork for 1.20.5+ compatibility
+- **Litemapy**: https://github.com/SmylerMC/litemapy
+  - Python library for .litematic files
+  - Docs: https://litemapy.readthedocs.io/en/latest/litematics.html
+
+### Format Converters
+- **Lite2Edit**: https://github.com/GoldenDelicios/Lite2Edit
+  - Converts Litematics to WorldEdit schematics
+- **litematic-converter**: https://github.com/paxxxw/litematic-converter
+  - Python tool for .bp and .schem conversion
+- **ObjToSchematic**: https://github.com/LucasDower/ObjToSchematic
+  - 3D models to .schematic, .litematic, .schem, .nbt
+
+### Format Quick Reference
+
+| Format | Extension | Max Size | Library |
+|--------|-----------|----------|---------|
+| Vanilla Structure | `.nbt` | 48x48x48 | Querz NBT 6.1 |
+| Litematica | `.litematic` | Unlimited | Querz NBT 6.1 |
+| Sponge Schematic | `.schem` | Unlimited | Querz NBT 6.1 |
+
+**Detailed format docs**: See @nbt-litematica-formats.md
+
 ## Related Projects (Reference Implementations)
 
 - **Text2Book**: https://github.com/TheWilley/Text2Book
@@ -147,6 +188,7 @@
 
 ## Last Verified
 
-- **Date**: 2025-12-01
-- **Minecraft Versions**: 1.13 through 1.21.1
+- **Date**: 2025-12-22
+- **Minecraft Versions**: 1.13 through 1.21.4
 - **All links tested**: Via Tavily search during research session
+- **SchemConvert cloned**: For NBT/Litematica format analysis

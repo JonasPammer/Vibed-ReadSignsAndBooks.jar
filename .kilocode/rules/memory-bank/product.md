@@ -49,6 +49,17 @@ ReadSignsAndBooks.jar provides a straightforward CLI tool that:
 - **Custom Names CSV** - Tabular format with named items/entities and their coordinates
 - **Custom Names TXT** - Human-readable grouped report organized by item/entity type
 - **Custom Names JSON** - Structured format with full metadata for programmatic processing
+- **Litematica Schematics** - Ready-to-use .litematic files for the Litematica mod:
+  - `signs.litematic` - All extracted signs in a grid layout at Y=0
+    - Click first line of any sign → shows original world coordinates
+    - Click coordinates → teleports to original location
+    - Signs placed in X/Z grid with duplicates stacking on Z axis
+  - `books_commands.litematic` - Chain of command blocks for book distribution
+    - First block is impulse (needs redstone/button to start)
+    - Remaining blocks are chain (auto-execute in sequence)
+    - Each command block gives a shulker box organized by author
+    - 27 books max per shulker box, multiple boxes for prolific authors
+    - Place schematic and activate first block to receive all books
 
 ### Content Processing
 - NBT binary format parsing and traversal

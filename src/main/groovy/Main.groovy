@@ -957,6 +957,9 @@ class Main implements Runnable {
             // Generate shulker box commands organized by author
             writeShulkerBoxesToMcfunction()
 
+            // Export Litematica schematic files (signs and book command blocks)
+            exportLitematicaFiles()
+
             // Flush and close all mcfunction writers
             mcfunctionWriters.values().each { BufferedWriter writer ->
                 writer?.flush()
@@ -2433,6 +2436,45 @@ class Main implements Runnable {
         }
 
         LOGGER.info('Shulker box generation complete')
+    }
+
+    /**
+     * Export signs and books to Litematica (.litematic) schematic files.
+     * Creates two files:
+     * - signs.litematic: All extracted signs in a grid layout
+     * - books_commands.litematic: Chain command blocks that /give shulker boxes
+     */
+    static void exportLitematicaFiles() {
+        File outputDir = new File(outputFolder)
+        if (!outputDir.absolute) {
+            outputDir = new File(baseDirectory, outputFolder)
+        }
+
+        // Export signs to Litematica
+        if (!signsByHash.empty) {
+            File signsFile = new File(outputDir, 'signs.litematic')
+            try {
+                LitematicaExporter.exportSigns(signsByHash, signsFile)
+                LOGGER.info("Exported ${signsByHash.size()} signs to Litematica: ${signsFile.name}")
+            } catch (Exception e) {
+                LOGGER.warn("Failed to export signs to Litematica: ${e.message}", e)
+            }
+        } else {
+            LOGGER.debug('No signs to export to Litematica')
+        }
+
+        // Export book commands to Litematica
+        if (!booksByAuthor.empty) {
+            File booksFile = new File(outputDir, 'books_commands.litematic')
+            try {
+                LitematicaExporter.exportBookCommands(booksByAuthor, booksFile)
+                LOGGER.info("Exported book commands to Litematica: ${booksFile.name}")
+            } catch (Exception e) {
+                LOGGER.warn("Failed to export book commands to Litematica: ${e.message}", e)
+            }
+        } else {
+            LOGGER.debug('No books to export to Litematica')
+        }
     }
 
     static void printSummaryStatistics(long elapsedMillis) {

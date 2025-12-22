@@ -91,6 +91,19 @@ The tool creates output in `ReadBooks/YYYY-MM-DD/`:
 *** `books.mcfunction` - `/give` commands to recreate all books
 *** `signs.mcfunction` - `/setblock` commands with clickable teleport to original coordinates
 
+* `signs.litematic` - Litematica schematic file containing all extracted signs
+** Signs placed in a grid layout at Y=0
+** First line of each sign is clickable to show original world coordinates
+** Click the coordinates to teleport to original location
+** Load with https://github.com/maruohon/litematica[Litematica mod]
+
+* `books_commands.litematic` - Litematica schematic with command blocks for book distribution
+** Chain of command blocks that `/give` shulker boxes organized by author
+** First block is impulse (needs redstone/button), rest are chain (auto-execute)
+** Each author gets a deterministic shulker box color
+** 27 books max per shulker box, multiple boxes for prolific authors
+** Place the schematic and activate the first command block to receive all books
+
 * `blocks.csv` - CSV export of found blocks (when using `--search-blocks`)
 * `block_index.db` - SQLite database of block coordinates (when using `--search-blocks`)
 ** See <<Block Index Database>> for schema and example queries.
@@ -194,6 +207,30 @@ You should see a message confirming the datapack was loaded.
 ----
 /function readbooks:signs
 ----
+
+=== Using Litematica Schematics
+
+The tool generates Litematica `.litematic` files that can be loaded with the https://github.com/maruohon/litematica[Litematica mod]:
+
+. *Install Litematica* for your Minecraft version (requires https://fabricmc.net/[Fabric] or https://github.com/FabricMC/fabric-loader[similar loader])
+
+. *Load the schematic:*
+** Open Litematica menu (default: `M` key)
+** Go to "Load Schematics"
+** Navigate to your `ReadBooks/YYYY-MM-DD/` folder
+** Select `signs.litematic` or `books_commands.litematic`
+
+. *For signs:*
+** Place the schematic where you want the signs
+** Use Litematica's paste or build mode to place blocks
+** Click the first line of any sign to see its original coordinates
+** Click the coordinates to teleport to that location
+
+. *For books:*
+** Place the command block chain schematic
+** Power the first (impulse) command block with a button or lever
+** All shulker boxes will be given to nearby players
+** Break open the shulker boxes to access the books
 
 === Portal Search
 

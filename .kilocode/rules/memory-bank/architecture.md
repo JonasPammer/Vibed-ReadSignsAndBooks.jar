@@ -99,6 +99,36 @@ Minecraft datapack structure creation with version-specific directories.
 
 **CRITICAL**: Handles `function/` vs `functions/` directory naming for 1.21+ compatibility.
 
+### LitematicaExporter.groovy (~500 lines)
+**Location:** `src/main/groovy/LitematicaExporter.groovy`
+
+Litematica schematic export for signs and book command blocks.
+
+**Key Methods:**
+- `exportSigns(Map<String, Map> signsByHash, File outputFile)` - Export signs as .litematic with grid layout
+- `exportBookCommands(Map<String, List<Map>> booksByAuthor, File outputFile)` - Export book commands as chain command blocks
+- `packBlockStates(int[] blockStates, int paletteSize)` - Bit-pack block states into LongArray
+- `calculateBitsPerValue(int paletteSize)` - Calculate bits per value (minimum 2)
+- `calculate3DIndex(int x, int y, int z, int sizeX, int sizeZ)` - X→Z→Y ordering for Litematica
+- `createSignTileEntity(...)` - Create sign NBT with front_text/back_text and clickEvent
+- `createImpulseCommandBlock(int x, int y, int z, String command)` - Impulse block (auto:0b)
+- `createChainCommandBlock(int x, int y, int z, String command)` - Chain block (auto:1b)
+- `createLitematicaRoot(...)` - Create root structure with Version=6 and Metadata
+- `createRegion(...)` - Create region with Position, Size, BlockStatePalette, BlockStates, TileEntities
+- `createPaletteEntry(String blockName)` - Create simple palette entry
+- `createCommandBlockPaletteEntry(boolean chain)` - Create command block entry with facing:east
+- `escapeJsonString(String text)` - Escape special characters for JSON in NBT
+
+**Constants:**
+- `LITEMATICA_VERSION = 6` - Litematica format version
+- `MINECRAFT_DATA_VERSION = 3837` - Minecraft 1.21 data version
+
+**Output Files:**
+- `signs.litematic` - All signs in grid layout at Y=0, clickable to show original coordinates
+- `books_commands.litematic` - Chain of command blocks that `/give` shulker boxes organized by author
+
+**Integration:** Called from `Main.exportLitematicaFiles()` after shulker generation, always runs (no CLI flag needed).
+
 ### OutputWriters.groovy (232 lines)
 **Location:** `src/main/groovy/OutputWriters.groovy`
 
