@@ -29,6 +29,7 @@
         "PublicMethodsBeforeNonPublicMethods": "off",
         "StaticMethodsBeforeInstanceMethods": "off",
         "ThrowRuntimeException": "off",
+        "UnnecessaryGetter": "off",
         "UnnecessaryGString": "off",
         "UnnecessaryObjectReferences": "off",
         "VariableTypeRequired": "off"
