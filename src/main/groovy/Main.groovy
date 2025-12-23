@@ -81,7 +81,8 @@ class Main implements Runnable {
     static List<Map<String, Object>> bookCsvData = []
     static List<Map<String, Object>> signCsvData = []
     static int emptySignsRemoved = 0
-    static BufferedWriter combinedBooksWriter
+    static BufferedWriter combinedBooksWriter      // Clean version (formatting stripped)
+    static BufferedWriter combinedBooksWriterRaw   // Raw version (formatting preserved)
     static Map<String, BufferedWriter> mcfunctionWriters = [:]
     static Map<String, BufferedWriter> signsMcfunctionWriters = [:]  // Separate writers for sign mcfunction files
     static Map<String, Map<String, Object>> signsByHash = [:]  // Tracks unique signs by hash with position tracking
@@ -95,9 +96,6 @@ class Main implements Runnable {
 
     @Option(names = ['-o', '--output'], description = 'Specify custom output directory')
     static String customOutputDirectory
-
-    @Option(names = ['--remove-formatting'], description = 'Remove Minecraft text formatting codes (§ codes) from output files (default: false)', defaultValue = 'false')
-    static boolean removeFormatting = false
 
     @Option(names = ['--extract-custom-names'], description = 'Extract custom names from items and entities (default: false)', defaultValue = 'false')
     static boolean extractCustomNames = false
@@ -201,6 +199,7 @@ class Main implements Runnable {
         mcfunctionWriters = [:]
         signsMcfunctionWriters = [:]
         combinedBooksWriter = null
+        combinedBooksWriterRaw = null
 
         // Reset output paths (will be recomputed on next run)
         outputFolder = null
@@ -213,7 +212,6 @@ class Main implements Runnable {
         // Reset command-line option fields to prevent test pollution
         customWorldDirectory = null
         customOutputDirectory = null
-        removeFormatting = false
         extractCustomNames = false
         autoStart = false
         guiMode = false
@@ -918,7 +916,9 @@ class Main implements Runnable {
         long startTime = System.currentTimeMillis()
 
         try {
+            // Initialize combined books writers (clean and raw versions)
             combinedBooksWriter = new File(outputBaseDir, 'all_books.txt').newWriter()
+            combinedBooksWriterRaw = new File(outputBaseDir, 'all_books_raw.txt').newWriter()
 
             // Create datapack structures and initialize mcfunction writers for each Minecraft version
             LOGGER.info('Creating Minecraft datapacks...')
@@ -961,6 +961,7 @@ class Main implements Runnable {
             readSignsAndBooks()
             readEntities()
             combinedBooksWriter?.close()
+            combinedBooksWriterRaw?.close()
 
             // Generate shulker box commands organized by author
             writeShulkerBoxesToMcfunction()
@@ -1011,6 +1012,7 @@ class Main implements Runnable {
         } catch (IllegalStateException | IOException e) {
             LOGGER.error("Fatal error: ${e.message}", e)
             combinedBooksWriter?.close()
+            combinedBooksWriterRaw?.close()
             mcfunctionWriters.values().each { BufferedWriter writer -> writer?.close() }
             // Rollback and close item database on error
             if (itemDatabase) {
@@ -3297,10 +3299,37 @@ class Main implements Runnable {
             }
         }
 
-        // Write to combined books file in Stendhal format with VSCode regions
+        // Write to combined books files in Stendhal format with VSCode regions
+        // Two versions: clean (formatting stripped) and raw (formatting preserved)
         String filenameWithoutExtension = filename.replace('.stendhal', '')
         String regionDelimiter = '─' * 40
+
+        // Write clean version (formatting codes stripped)
         combinedBooksWriter?.with {
+            writeLine("#region ${regionDelimiter} ${filenameWithoutExtension}")
+            writeLine("title: ${TextUtils.removeTextFormatting(title ?: 'Untitled')}")
+            writeLine("author: ${TextUtils.removeTextFormatting(author ?: '')}")
+            writeLine('pages:')
+
+            (0..<pages.size()).each { int pc ->
+                String pageText = extractPageText(pages, pc)
+                if (!pageText) {
+                    return
+                }
+
+                String pageContent = TextUtils.removeTextFormatting(extractTextContentPreserveFormatting(pageText))
+                writeLine('#- ')
+                writeLine(pageContent)
+            }
+
+            writeLine('')
+            writeLine("#endregion ${filenameWithoutExtension}")
+            writeLine('')
+            flush() // Flush immediately to ensure streaming output
+        }
+
+        // Write raw version (formatting codes preserved)
+        combinedBooksWriterRaw?.with {
             writeLine("#region ${regionDelimiter} ${filenameWithoutExtension}")
             writeLine("title: ${title ?: 'Untitled'}")
             writeLine("author: ${author ?: ''}")
@@ -3398,12 +3427,12 @@ class Main implements Runnable {
             generation: 'Original'
         ])
 
-        // Collect all page content for CSV
+        // Collect all page content for CSV (raw text - OutputWriters generates both clean and raw versions)
         List<String> allPageContents = []
         (0..<pages.size()).each { int pc ->
             String pageText = extractPageText(pages, pc)
             if (pageText) {
-                allPageContents.add(removeTextFormatting(pageText))
+                allPageContents.add(extractTextContent(pageText))
             }
         }
         String concatenatedPages = allPageContents.join(' ')
@@ -3462,9 +3491,12 @@ class Main implements Runnable {
             }
         }
 
-        // Write to combined books file in Stendhal format with VSCode regions
+        // Write to combined books files in Stendhal format with VSCode regions
+        // Two versions: clean (formatting stripped) and raw (formatting preserved)
         String filenameWithoutExtension = filename.replace('.stendhal', '')
         String regionDelimiter = '─' * 40
+
+        // Write clean version (formatting codes stripped)
         combinedBooksWriter?.with {
             writeLine("#region ${regionDelimiter} ${filenameWithoutExtension}")
             writeLine('title: Writable Book')
@@ -3477,7 +3509,30 @@ class Main implements Runnable {
                     return
                 }
 
-                // For .stendhal files, always preserve formatting codes
+                String pageContent = TextUtils.removeTextFormatting(pageText)
+                writeLine('#- ')
+                writeLine(pageContent)
+            }
+
+            writeLine('')
+            writeLine("#endregion ${filenameWithoutExtension}")
+            writeLine('')
+            flush() // Flush immediately to ensure streaming output
+        }
+
+        // Write raw version (formatting codes preserved)
+        combinedBooksWriterRaw?.with {
+            writeLine("#region ${regionDelimiter} ${filenameWithoutExtension}")
+            writeLine('title: Writable Book')
+            writeLine('author: ')
+            writeLine('pages:')
+
+            (0..<pages.size()).each { int pc ->
+                String pageText = extractPageText(pages, pc)
+                if (!pageText) {
+                    return
+                }
+
                 String pageContent = pageText
                 writeLine('#- ')
                 writeLine(pageContent)
@@ -3581,8 +3636,12 @@ class Main implements Runnable {
         return TextUtils.extractPageText(pages, index)
     }
 
+    /**
+     * Extract text content from page text, preserving formatting codes.
+     * Raw text is stored; OutputWriters generates both clean and raw output files.
+     */
     static String extractTextContent(String pageText) {
-        return TextUtils.extractTextContent(pageText, removeFormatting)
+        return TextUtils.extractTextContentPreserveFormatting(pageText)
     }
 
     /**
@@ -3756,10 +3815,6 @@ class Main implements Runnable {
 
     static String extractSignLineText(String line) {
         return TextUtils.extractSignLineText(line)
-    }
-
-    static String removeTextFormatting(String text) {
-        return TextUtils.removeTextFormattingIfEnabled(text, removeFormatting)
     }
 
     // ========== NBT Helper Methods (delegated to NbtUtils) ==========

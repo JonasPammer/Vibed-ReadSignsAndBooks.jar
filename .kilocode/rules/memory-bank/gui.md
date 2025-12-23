@@ -35,8 +35,6 @@ static boolean shouldUseGui(String[] args) {
 **Static Fields:**
 - `worldPathField` - TextField for world directory path
 - `outputPathField` - TextField for output folder path
-- `removeFormattingCheckBox` - CheckBox for formatting removal option
-- `extractCustomNamesCheckBox` - CheckBox for custom name extraction option
 - `logArea` - TextArea showing live Logback output
 - `statusLabel` - Label showing extraction status
 - `worldDir` - Selected world directory File
@@ -81,13 +79,7 @@ try {
 - **World Directory:** Optional - uses current working directory if not set (same as CLI `-w`)
 - **Output Folder:** Optional - shows dynamic prompt text with default path (same as CLI `-o`)
 
-#### 3. Content Extraction Section (Visual Group)
-Bordered panel with header "Content Extraction":
-- **Remove Formatting:** Checkbox - passes `--remove-formatting` flag to CLI
-  - Tooltip: "Strip §a, §l, §n etc. from extracted text"
-- **Custom Names:** Always extracted automatically (no toggle needed)
-
-#### 4. Item Index Database Section (Visual Group with Dependencies)
+#### 3. Item Index Database Section (Visual Group with Dependencies)
 Bordered panel with header "Item Index Database":
 - **Build Item Index:** Checkbox (main toggle) - passes `--index-items` flag to CLI
   - Tooltip: "Creates items.db in output folder. Query later with: --item-query"
@@ -190,16 +182,12 @@ void parseGuiArguments() {
     // Apply parsed values to GUI controls
     if (Main.customWorldDirectory) { worldDir = new File(...) }
     if (Main.customOutputDirectory) { outputFolder = new File(...) }
-    if (Main.removeFormatting) { removeFormattingCheckBox.selected = true }
-    if (Main.extractCustomNames) { extractCustomNamesCheckBox.selected = true }
 }
 ```
 
 **Supported GUI Arguments:**
 - `-w, --world <path>` - Pre-set world directory
 - `-o, --output <path>` - Pre-set output directory
-- `--remove-formatting` - Pre-check formatting removal option
-- `--extract-custom-names` - Pre-check custom names option
 - `--start` - Auto-start extraction after 3-second countdown
 
 ### Auto-Start Feature (`--start` flag)
@@ -239,8 +227,8 @@ void runExtraction() {
         def args = []
         if (worldDir) args += ['-w', worldDir.absolutePath]
         if (outputFolder) args += ['-o', outputFolder.absolutePath]
-        if (removeFormattingCheckBox.selected) args += ['--remove-formatting']
-        if (extractCustomNamesCheckBox.selected) args += ['--extract-custom-names']
+        // Always extract custom names (no toggle needed)
+        args += ['--extract-custom-names']
 
         Main.runCli(args as String[])  // Direct CLI call, not Main.main()
 
@@ -294,7 +282,6 @@ The GUI is designed to **perfectly mirror CLI behavior**:
 | World selected | Passes `-w /path` | `java -jar app.jar -w /path` |
 | No output selected | Uses default | `java -jar app.jar` (no `-o`) uses default |
 | Output selected | Passes `-o /path` | `java -jar app.jar -o /path` |
-| Formatting checkbox | Passes `--remove-formatting` | `java -jar app.jar --remove-formatting` |
 | Track failed regions checkbox | Passes `--track-failed-regions` | `java -jar app.jar --track-failed-regions` |
 | Custom names | Always passes `--extract-custom-names` | Always extracted (no toggle) |
 | Item index checkbox | Passes `--index-items` | `java -jar app.jar --index-items` |

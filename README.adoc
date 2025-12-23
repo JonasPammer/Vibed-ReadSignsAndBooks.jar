@@ -73,17 +73,21 @@ The tool creates output in `ReadBooks/YYYY-MM-DD/`:
 ** `pass:[Title_(PageCount)_by_Author~location~coords.stendhal]`, Example: `pass:[My_Book_(3)_by_Joe~minecraft_chest~-10_65_20.stendhal]`
 ** `.duplicates/` - directory containing duplicate books (same content, different locations)
 
-* `all_books.txt` - concatenation of all books in Stendhal format, separated by `#region` and `#endregion` markers for VSCode folding
-* `all_books.csv` - CSV export of all books with metadata
+* `all_books.txt` - concatenation of all books in Stendhal format (clean, formatting codes stripped)
+** Separated by `#region` and `#endregion` markers for VSCode folding
+* `all_books_raw.txt` - same as above but with Minecraft formatting codes (§a, §l, etc.) preserved
+* `all_books.csv` - CSV export of all books with metadata (clean, formatting codes stripped)
 ** Columns: `X`, `Y`, `Z`, `FoundWhere`, `Bookname`, `Author`, `PageCount`, `Generation`, `Pages`
 ** Note/TODO: page boundaries lost; use `.stendhal` files for full content for now
+* `all_books_raw.csv` - same as above but with Minecraft formatting codes preserved
 
 * `all_signs.txt` - all signs found in the world, one per line
 ** Example Line: `Chunk [31, 31]	(-2 75 -5)		Line 1! ⚠ Line 2! ☀`
 
-* `all_signs.csv` - CSV export of all signs with metadata
+* `all_signs.csv` - CSV export of all signs with metadata (clean, formatting codes stripped)
 ** Columns: `X`, `Y`, `Z`, `FoundWhere`, `SignText`, `Line1`, `Line2`, `Line3`, `Line4`
-** Note/TODO: For 1.20+ signs with front/back text, only front text is included in CSV (back text is preserved in datapack mcfunction files) 
+** Note/TODO: For 1.20+ signs with front/back text, only front text is included in CSV (back text is preserved in datapack mcfunction files)
+* `all_signs_raw.csv` - same as above but with Minecraft formatting codes preserved 
 
 * `readbooks_datapack_[1_13|1_14|1_20_5|1_21]/` - Ready-to-use Minecraft datapacks (4 versions)
 ** `pack.mcmeta` - Datapack metadata with version-appropriate pack_format (4, 4, 41, 48)

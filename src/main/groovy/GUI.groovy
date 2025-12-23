@@ -44,7 +44,6 @@ class GUI extends Application {
 
     TextField worldPathField
     TextField outputPathField
-    CheckBox removeFormattingCheckBox
     CheckBox indexItemsCheckBox
     CheckBox skipCommonItemsCheckBox
     CheckBox trackFailedRegionsCheckBox
@@ -136,22 +135,6 @@ class GUI extends Application {
         Button outputBtn = new Button('Browse...')
         outputBtn.onAction = { event -> selectOutputFolder(stage) }
         outputBox.children.addAll(new Label('Output Folder:').with { Label label -> label.minWidth = 120; label }, outputPathField, outputBtn)
-
-        // ══════════════════════════════════════════════════════════════════════
-        // SECTION: Content Extraction Options (what to extract from world)
-        // ══════════════════════════════════════════════════════════════════════
-        VBox contentExtractionSection = new VBox(8)
-        contentExtractionSection.style = '-fx-padding: 10; -fx-background-color: derive(-fx-base, 5%); -fx-background-radius: 5; -fx-border-color: derive(-fx-base, -10%); -fx-border-radius: 5;'
-
-        Label contentHeader = new Label('Content Extraction')
-        contentHeader.style = '-fx-font-weight: bold; -fx-font-size: 13px;'
-
-        // Remove formatting checkbox
-        removeFormattingCheckBox = new CheckBox('Remove Minecraft formatting codes (§ color/style codes)')
-        removeFormattingCheckBox.selected = false
-        removeFormattingCheckBox.tooltip = new Tooltip('Strip §a, §l, §n etc. from extracted text.\nUseful for plain text output.')
-
-        contentExtractionSection.children.addAll(contentHeader, removeFormattingCheckBox)
 
         // ══════════════════════════════════════════════════════════════════════
         // SECTION: Item Index Database (SQLite for querying items later)
@@ -329,7 +312,6 @@ class GUI extends Application {
             new Separator(),
             worldBox,
             outputBox,
-            contentExtractionSection,
             twoColumnSection,  // Item Index Database | Block Search (side-by-side)
             new Separator(),
             executionBar,
@@ -393,10 +375,6 @@ class GUI extends Application {
             outputPathField.text = Main.customOutputDirectory
             updateOutputFolderPrompt()
             logArea.appendText("Output directory: ${Main.customOutputDirectory}\n")
-        }
-
-        if (Main.removeFormatting) {
-            removeFormattingCheckBox.selected = true
         }
 
         if (Main.indexItems) {
@@ -586,9 +564,6 @@ class GUI extends Application {
                 }
                 if (outputFolder) {
                     args += ['-o', outputFolder.absolutePath]
-                }
-                if (removeFormattingCheckBox.selected) {
-                    args += ['--remove-formatting']
                 }
                 // Always extract custom names (no toggle needed)
                 args += ['--extract-custom-names']

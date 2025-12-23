@@ -83,7 +83,6 @@ class MainSpec extends Specification {
         given:
         Main.customWorldDirectory = '/some/path'
         Main.customOutputDirectory = '/output'
-        Main.removeFormatting = true
         Main.extractCustomNames = true
         Main.autoStart = true
         Main.guiMode = true
@@ -95,7 +94,6 @@ class MainSpec extends Specification {
         then:
         Main.customWorldDirectory == null
         Main.customOutputDirectory == null
-        Main.removeFormatting == false
         Main.extractCustomNames == false
         Main.autoStart == false
         Main.guiMode == false
@@ -220,7 +218,7 @@ class MainSpec extends Specification {
 
     def "shouldUseGui should return false for other CLI arguments"() {
         expect:
-        !Main.shouldUseGui(['--remove-formatting'] as String[])
+        !Main.shouldUseGui(['--track-failed-regions'] as String[])
         !Main.shouldUseGui(['--extract-custom-names'] as String[])
         !Main.shouldUseGui(['-o', '/output'] as String[])
     }
