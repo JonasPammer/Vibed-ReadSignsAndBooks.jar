@@ -225,12 +225,15 @@ class MinecraftCommands {
      * Generate book components (1.20.5+ format).
      * Used for creating book entries in shulker boxes for versions 1.20.5+.
      *
+     * CRITICAL: In 1.20.5+, book data in containers must be wrapped in written_book_content component.
+     * This is different from /give commands where the component is part of the item format.
+     *
      * @param title The book title
      * @param author The book author
      * @param pages The book pages as NBT ListTag
      * @param version The Minecraft version
      * @param generation The book generation
-     * @return The components string
+     * @return The components string with written_book_content wrapper
      */
     static String generateBookComponents(String title, String author, ListTag<?> pages, String version, int generation = 0) {
         String escapedTitle = escapeForMinecraftCommand(title ?: 'Untitled', version)
@@ -243,7 +246,18 @@ class MinecraftCommands {
             "\"${escaped}\""
         }.join(',')
 
-        return "{title:\"${escapedTitle}\",author:\"${escapedAuthor}\",generation:${generation},pages:[${pagesStr}]}"
+        // Build the book data
+        String bookData = "{title:\"${escapedTitle}\",author:\"${escapedAuthor}\",generation:${generation},pages:[${pagesStr}]}"
+
+        // CRITICAL FIX: Wrap in written_book_content component for container items
+        // Without this wrapper, Minecraft complains: "No component with type 'minecraft:pages'"
+        if (version == '1_20_5') {
+            // 1.20.5 uses minecraft:written_book_content prefix
+            return "{\"minecraft:written_book_content\":${bookData}}"
+        } else {
+            // 1.21+ uses written_book_content without minecraft: prefix
+            return "{written_book_content:${bookData}}"
+        }
     }
 
     // ========== Sign Command Generation ==========

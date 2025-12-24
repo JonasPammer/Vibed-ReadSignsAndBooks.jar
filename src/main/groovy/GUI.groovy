@@ -462,6 +462,11 @@ class GUI extends Application {
             }
         }
 
+        MenuItem outputViewerItem = new MenuItem('Output Viewer')
+        outputViewerItem.onAction = { event ->
+            showOutputViewer()
+        }
+
         MenuItem aboutItem = new MenuItem('About')
         aboutItem.onAction = { event ->
             showAboutDialog()
@@ -474,7 +479,7 @@ class GUI extends Application {
             showLicensesDialog()
         }
 
-        helpMenu.items.addAll(githubItem, separator, aboutItem, licensesItem)
+        helpMenu.items.addAll(githubItem, outputViewerItem, separator, aboutItem, licensesItem)
         menuBar.menus.add(helpMenu)
 
         return menuBar
@@ -810,6 +815,22 @@ Use at your own risk. Always backup your worlds before processing.
         dialog.scene = new Scene(root, 550, 450)
         dialog.resizable = false
         dialog.show()
+    }
+
+    void showOutputViewer() {
+        try {
+            OutputViewer viewer = new OutputViewer()
+
+            // If we have an actual output folder from the last extraction, pre-populate it
+            if (actualOutputFolder && actualOutputFolder.exists()) {
+                viewer.folderField.text = actualOutputFolder.absolutePath
+            }
+
+            viewer.show()
+        } catch (Exception e) {
+            showAlert('Error', "Failed to open Output Viewer: ${e.message}", Alert.AlertType.ERROR)
+            org.slf4j.LoggerFactory.getLogger(GUI).error('Failed to open Output Viewer', e)
+        }
     }
 
     void showLicensesDialog() {
