@@ -130,6 +130,30 @@ class OutputViewer extends Stage {
         refreshButton.onAction = { event -> loadFolder() }
         refreshButton.disable = true
 
+        // Auto-refresh checkbox
+        CheckBox autoRefreshCheckBox = new CheckBox('Auto-refresh')
+        autoRefreshCheckBox.tooltip = new Tooltip('Automatically reload data every 30 seconds')
+        autoRefreshCheckBox.disable = true
+
+        // Auto-refresh timer
+        javafx.animation.Timeline autoRefreshTimer = new javafx.animation.Timeline(
+            new javafx.animation.KeyFrame(javafx.util.Duration.seconds(30), { event ->
+                if (autoRefreshCheckBox.selected && folderField.text) {
+                    javafx.application.Platform.runLater { loadFolder() }
+                }
+            })
+        )
+        autoRefreshTimer.cycleCount = javafx.animation.Timeline.INDEFINITE
+
+        autoRefreshCheckBox.selectedProperty().addListener { obs, oldVal, newVal ->
+            if (newVal) {
+                autoRefreshTimer.play()
+                statusBar.text = statusBar.text + ' (auto-refresh enabled)'
+            } else {
+                autoRefreshTimer.stop()
+            }
+        }
+
         // Theme toggle button
         Button themeToggleButton = new Button()
         updateThemeButtonText(themeToggleButton)
@@ -144,9 +168,10 @@ class OutputViewer extends Stage {
             boolean hasFolder = newVal && !newVal.trim().isEmpty()
             loadButton.disable = !hasFolder
             refreshButton.disable = !hasFolder
+            autoRefreshCheckBox.disable = !hasFolder
         }
 
-        toolbar.children.addAll(label, folderField, browseButton, loadButton, refreshButton, new Separator(), themeToggleButton)
+        toolbar.children.addAll(label, folderField, browseButton, loadButton, refreshButton, autoRefreshCheckBox, new Separator(), themeToggleButton)
         return toolbar
     }
 
@@ -349,29 +374,89 @@ class OutputViewer extends Stage {
     }
 
     /**
-     * Update the Signs tab.
+     * Update the Signs tab with search/filter capability.
      */
     private void updateSignsTab() {
+        Tab signsTab = contentTabs.tabs[1]
+
         if (model.signs.isEmpty()) {
+            Label placeholder = new Label('No signs found in output folder')
+            placeholder.style = '-fx-text-fill: gray; -fx-font-style: italic;'
+            signsTab.content = new BorderPane(placeholder)
             return
         }
 
-        Tab signsTab = contentTabs.tabs[1]
-        TextArea textArea = new TextArea()
-        textArea.editable = false
-        textArea.wrapText = true
-        textArea.text = "Loaded ${model.signs.size()} signs\n\n" +
-            model.signs.take(10).collect { sign ->
-                "Lines: ${sign.line1 ?: ''} | ${sign.line2 ?: ''} | ${sign.line3 ?: ''} | ${sign.line4 ?: ''}\n" +
-                "Location: (${sign.x}, ${sign.y}, ${sign.z})\n" +
-                "Dimension: ${sign.dimension ?: 'Unknown'}\n"
-            }.join('\n---\n')
+        BorderPane signPane = new BorderPane()
+        signPane.padding = new Insets(10)
 
-        if (model.signs.size() > 10) {
-            textArea.text += "\n\n... and ${model.signs.size() - 10} more"
+        // Search bar at top
+        HBox searchBar = new HBox(10)
+        searchBar.alignment = Pos.CENTER_LEFT
+        searchBar.padding = new Insets(0, 0, 10, 0)
+
+        Label searchLabel = new Label('Search:')
+        TextField signSearchField = new TextField()
+        signSearchField.promptText = 'Filter by text, dimension, or coordinates...'
+        HBox.setHgrow(signSearchField, Priority.ALWAYS)
+
+        ComboBox<String> dimensionFilter = new ComboBox<>()
+        dimensionFilter.items.addAll('All Dimensions', 'overworld', 'nether', 'end')
+        dimensionFilter.value = 'All Dimensions'
+
+        Label countLabel = new Label("${model.signs.size()} signs")
+        countLabel.style = '-fx-font-weight: bold;'
+
+        searchBar.children.addAll(searchLabel, signSearchField, dimensionFilter, countLabel)
+        signPane.top = searchBar
+
+        // Signs list
+        ListView<String> signListView = new ListView<>()
+        signListView.cellFactory = { param ->
+            new javafx.scene.control.ListCell<String>() {
+                @Override
+                protected void updateItem(String item, boolean empty) {
+                    super.updateItem(item, empty)
+                    text = empty ? null : item
+                    style = '-fx-font-family: monospace;'
+                }
+            }
         }
 
-        signsTab.content = textArea
+        // Populate and filter signs
+        Closure<Void> filterSigns = {
+            String searchText = signSearchField.text?.toLowerCase() ?: ''
+            String selectedDim = dimensionFilter.value
+
+            List<Map> filtered = model.signs.findAll { sign ->
+                boolean matchesSearch = !searchText ||
+                    (sign.line1?.toLowerCase()?.contains(searchText) ?: false) ||
+                    (sign.line2?.toLowerCase()?.contains(searchText) ?: false) ||
+                    (sign.line3?.toLowerCase()?.contains(searchText) ?: false) ||
+                    (sign.line4?.toLowerCase()?.contains(searchText) ?: false) ||
+                    "${sign.x},${sign.y},${sign.z}".contains(searchText)
+
+                boolean matchesDim = selectedDim == 'All Dimensions' || sign.dimension == selectedDim
+
+                return matchesSearch && matchesDim
+            }
+
+            signListView.items.clear()
+            filtered.each { sign ->
+                String text = "[${sign.dimension ?: '?'}] (${sign.x}, ${sign.y}, ${sign.z}): " +
+                    "${sign.line1 ?: ''} | ${sign.line2 ?: ''} | ${sign.line3 ?: ''} | ${sign.line4 ?: ''}"
+                signListView.items.add(text)
+            }
+            countLabel.text = "${filtered.size()} of ${model.signs.size()} signs"
+        }
+
+        signSearchField.textProperty().addListener { obs, old, newVal -> filterSigns() }
+        dimensionFilter.onAction = { filterSigns() }
+
+        filterSigns()  // Initial population
+
+        signPane.center = signListView
+        signsTab.content = signPane
+        LOGGER.info("Signs tab updated with ${model.signs.size()} signs")
     }
 
     /**
