@@ -11,6 +11,10 @@ import javafx.stage.DirectoryChooser
 import javafx.stage.Stage
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import viewers.BlockGridViewer
+import viewers.BookViewer
+import viewers.PortalViewer
+import viewers.StatsDashboard
 import viewers.ThemeManager
 
 /**
@@ -167,15 +171,15 @@ class OutputViewer extends Stage {
         TabPane tabs = new TabPane()
         tabs.tabClosingPolicy = TabPane.TabClosingPolicy.UNAVAILABLE
 
-        // Create placeholder tabs
+        // Create tabs - some start as placeholders and get populated on data load
         tabs.tabs.addAll(
-            createPlaceholderTab('Books', 'Books will be displayed here'),
-            createPlaceholderTab('Signs', 'Signs will be displayed here'),
-            createPlaceholderTab('Items', 'Item database queries will be displayed here'),
-            createPlaceholderTab('Blocks', 'Block database queries will be displayed here'),
-            createPlaceholderTab('Portals', 'Portal locations will be displayed here'),
-            createPlaceholderTab('Map', 'Interactive map view (future feature)'),
-            createPlaceholderTab('Statistics', 'Statistics and summaries will be displayed here')
+            createPlaceholderTab('Books', 'Load an output folder to view books...'),
+            createPlaceholderTab('Signs', 'Load an output folder to view signs...'),
+            createPlaceholderTab('Items', 'Load an output folder to view item database...'),
+            createPlaceholderTab('Blocks', 'Load an output folder to view block database...'),
+            createPlaceholderTab('Portals', 'Load an output folder to view portals...'),
+            createPlaceholderTab('Map', '🗺️ Interactive map view - Coming Soon!\n\nThis feature will display extracted items and blocks on a Minecraft world map.'),
+            createPlaceholderTab('Statistics', 'Load an output folder to view statistics dashboard...')
         )
 
         return tabs
@@ -305,30 +309,43 @@ class OutputViewer extends Stage {
     }
 
     /**
-     * Update the Books tab.
+     * Update the Books tab with embedded BookViewer.
      */
     private void updateBooksTab() {
+        Tab booksTab = contentTabs.tabs[0]
+
         if (model.books.isEmpty()) {
+            Label placeholder = new Label('No books found in output folder')
+            placeholder.style = '-fx-text-fill: gray; -fx-font-style: italic;'
+            booksTab.content = new BorderPane(placeholder)
             return
         }
 
-        Tab booksTab = contentTabs.tabs[0]
-        TextArea textArea = new TextArea()
-        textArea.editable = false
-        textArea.wrapText = true
-        textArea.text = "Loaded ${model.books.size()} books\n\n" +
-            model.books.take(10).collect { book ->
-                "Title: ${book.title ?: 'Untitled'}\n" +
-                "Author: ${book.author ?: 'Unknown'}\n" +
-                "Pages: ${book.pages?.size() ?: 0}\n" +
-                "Location: ${book.location ?: 'Unknown'}\n"
-            }.join('\n---\n')
+        try {
+            // Create BookViewer and initialize UI
+            BookViewer bookViewer = new BookViewer()
+            BorderPane bookViewerUI = bookViewer.initializeUI()
 
-        if (model.books.size() > 10) {
-            textArea.text += "\n\n... and ${model.books.size() - 10} more"
+            // Load books from model (convert to format BookViewer expects)
+            bookViewer.allBooks = model.books
+            bookViewer.filterBooks()
+
+            booksTab.content = bookViewerUI
+            LOGGER.info("BookViewer integrated with ${model.books.size()} books")
+        } catch (Exception e) {
+            LOGGER.error("Failed to create BookViewer: ${e.message}", e)
+            // Fallback to simple text display
+            TextArea textArea = new TextArea()
+            textArea.editable = false
+            textArea.wrapText = true
+            textArea.text = "Loaded ${model.books.size()} books\n\n" +
+                model.books.take(10).collect { book ->
+                    "Title: ${book.title ?: 'Untitled'}\n" +
+                    "Author: ${book.author ?: 'Unknown'}\n" +
+                    "Pages: ${book.pages?.size() ?: 0}\n"
+                }.join('\n---\n')
+            booksTab.content = textArea
         }
-
-        booksTab.content = textArea
     }
 
     /**
@@ -390,7 +407,7 @@ class OutputViewer extends Stage {
     }
 
     /**
-     * Update the Blocks tab.
+     * Update the Blocks tab with embedded BlockGridViewer.
      */
     private void updateBlocksTab() {
         Tab blocksTab = contentTabs.tabs[3]
@@ -403,6 +420,27 @@ class OutputViewer extends Stage {
             return
         }
 
+        try {
+            // Find the block database file
+            File dbFile = new File(model.outputFolder, 'block_index.db')
+            if (!dbFile.exists()) {
+                dbFile = new File(model.outputFolder, 'blocks.db')
+            }
+
+            if (dbFile.exists()) {
+                BlockGridViewer blockViewer = new BlockGridViewer()
+                boolean loaded = blockViewer.loadBlocks(dbFile)
+                if (loaded) {
+                    blocksTab.content = blockViewer
+                    LOGGER.info('BlockGridViewer integrated')
+                    return
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.error("Failed to create BlockGridViewer: ${e.message}", e)
+        }
+
+        // Fallback to simple text display
         TextArea textArea = new TextArea()
         textArea.editable = false
         textArea.wrapText = true
@@ -445,39 +483,66 @@ class OutputViewer extends Stage {
     }
 
     /**
-     * Update the Statistics tab.
+     * Update the Statistics tab with embedded StatsDashboard.
      */
     private void updateStatisticsTab() {
         Tab statsTab = contentTabs.tabs[6]
-        TextArea textArea = new TextArea()
-        textArea.editable = false
-        textArea.wrapText = true
 
-        StringBuilder stats = new StringBuilder('Output Data Statistics\n\n')
+        try {
+            // Create StatsDashboard and populate with data
+            StatsDashboard dashboard = new StatsDashboard()
 
-        stats.append("Books: ${model.metadata.booksCount}\n")
-        stats.append("Signs: ${model.metadata.signsCount}\n")
-        stats.append("Custom Names: ${model.metadata.customNamesCount}\n")
-        stats.append("Portals: ${model.metadata.portalsCount}\n")
-        stats.append("Block Results: ${model.metadata.blockResultsCount}\n")
+            // Convert books to the format StatsDashboard expects (grouped by author)
+            Map<String, List<Map>> booksByAuthor = model.books.groupBy { it.author ?: 'Unknown' }
 
-        if (model.itemDatabase) {
-            stats.append("\nItem Database:\n")
-            stats.append("  Item Types: ${model.metadata.itemTypesCount}\n")
-            stats.append("  Items Indexed: ${model.metadata.totalItemsIndexed}\n")
-            stats.append("  Total Items Found: ${model.metadata.totalItemCount}\n")
+            // Create a simple hash map for signs
+            Map<String, Map> signsByHash = [:]
+            model.signs.eachWithIndex { sign, index ->
+                signsByHash["sign_${index}"] = sign
+            }
+
+            // Update dashboard with model data
+            dashboard.updateData(
+                booksByAuthor,
+                signsByHash,
+                model.itemDatabase,
+                model.blockDatabase,
+                model.portals
+            )
+
+            statsTab.content = dashboard
+            LOGGER.info('StatsDashboard integrated')
+        } catch (Exception e) {
+            LOGGER.error("Failed to create StatsDashboard: ${e.message}", e)
+            // Fallback to simple text display
+            TextArea textArea = new TextArea()
+            textArea.editable = false
+            textArea.wrapText = true
+
+            StringBuilder stats = new StringBuilder('Output Data Statistics\n\n')
+            stats.append("Books: ${model.metadata.booksCount}\n")
+            stats.append("Signs: ${model.metadata.signsCount}\n")
+            stats.append("Custom Names: ${model.metadata.customNamesCount}\n")
+            stats.append("Portals: ${model.metadata.portalsCount}\n")
+            stats.append("Block Results: ${model.metadata.blockResultsCount}\n")
+
+            if (model.itemDatabase) {
+                stats.append("\nItem Database:\n")
+                stats.append("  Item Types: ${model.metadata.itemTypesCount}\n")
+                stats.append("  Items Indexed: ${model.metadata.totalItemsIndexed}\n")
+                stats.append("  Total Items Found: ${model.metadata.totalItemCount}\n")
+            }
+
+            if (model.blockDatabase) {
+                stats.append("\nBlock Database:\n")
+                stats.append("  Block Types: ${model.metadata.blockTypesCount}\n")
+                stats.append("  Blocks Indexed: ${model.metadata.totalBlocksIndexed}\n")
+            }
+
+            stats.append("\nOutput Folder: ${model.outputFolder?.absolutePath ?: 'Not loaded'}\n")
+            textArea.text = stats.toString()
+            statsTab.content = textArea
         }
-
-        if (model.blockDatabase) {
-            stats.append("\nBlock Database:\n")
-            stats.append("  Block Types: ${model.metadata.blockTypesCount}\n")
-            stats.append("  Blocks Indexed: ${model.metadata.totalBlocksIndexed}\n")
-        }
-
-        stats.append("\nOutput Folder: ${model.outputFolder?.absolutePath ?: 'Not loaded'}\n")
-
-        textArea.text = stats.toString()
-        statsTab.content = textArea
     }
 
     /**
