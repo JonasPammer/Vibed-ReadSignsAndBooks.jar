@@ -808,10 +808,31 @@ class BlockSearcher {
     }
 
     /**
+     * Special wildcard value to search for all blocks.
+     * When this is returned from parseBlockIds, the caller should use indexAllBlocks mode.
+     */
+    static final String WILDCARD_ALL = '*'
+
+    /**
+     * Check if input represents a wildcard search for all blocks.
+     * @param input The input string to check
+     * @return true if input is "*" (wildcard for all blocks)
+     */
+    static boolean isWildcardSearch(String input) {
+        return input?.trim() == WILDCARD_ALL
+    }
+
+    /**
      * Parse block IDs from comma-separated input
+     * @param input Comma-separated block IDs, or "*" for all blocks
+     * @return Set of normalized block IDs (empty if wildcard "*" is used - check isWildcardSearch first)
      */
     static Set<String> parseBlockIds(String input) {
         if (!input || input.trim().empty) {
+            return [] as Set
+        }
+        // Wildcard returns empty set - caller should check isWildcardSearch() first
+        if (isWildcardSearch(input)) {
             return [] as Set
         }
         return input.split(',')*.trim()

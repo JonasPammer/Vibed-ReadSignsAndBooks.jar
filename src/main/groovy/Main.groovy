@@ -1192,8 +1192,11 @@ class Main implements Runnable {
      * are then extracted from results for clustering, avoiding duplicate world scans.
      */
     static void runBlockSearch() {
-        boolean hasSpecificBlocks = searchBlocks && !searchBlocks.empty
-        boolean hasIndexAllMode = searchBlocksSpecified && !hasSpecificBlocks
+        // Check if user specified "*" wildcard for all blocks
+        boolean isWildcard = searchBlocks && searchBlocks.size() == 1 && BlockSearcher.isWildcardSearch(searchBlocks[0])
+
+        boolean hasSpecificBlocks = searchBlocks && !searchBlocks.empty && !isWildcard
+        boolean hasIndexAllMode = (searchBlocksSpecified && !hasSpecificBlocks) || isWildcard
         boolean hasBlockSearch = hasSpecificBlocks || hasIndexAllMode
         boolean hasPortalSearch = findPortals
 
@@ -1271,7 +1274,9 @@ class Main implements Runnable {
                 if (hasBlockSearch) {
                     if (hasIndexAllMode) {
                         // Index-all mode: scan all blocks except air/cave_air
-                        LOGGER.info("INDEX-ALL MODE: Scanning all blocks (rarity-filtered by limit: ${indexLimit == 0 ? 'unlimited' : indexLimit})")
+                        // Triggered by either --search-blocks (no args) or --search-blocks "*"
+                        String modeIndicator = isWildcard ? 'wildcard "*"' : 'no arguments'
+                        LOGGER.info("INDEX-ALL MODE (${modeIndicator}): Scanning all blocks (rarity-filtered by limit: ${indexLimit == 0 ? 'unlimited' : indexLimit})")
                         LOGGER.info("Dimensions: ${searchDimensions.join(', ')}")
                         LOGGER.info('Skipping: minecraft:air, minecraft:cave_air')
 

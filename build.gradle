@@ -95,6 +95,9 @@ dependencies {
     // Modern JavaFX theme library with built-in dark/light themes
     implementation 'io.github.mkpaz:atlantafx-base:2.1.0'
 
+    // Flowless for efficient virtual scrolling
+    implementation 'org.fxmisc.flowless:flowless:0.7.3'
+
     // Spock Framework for testing
     testImplementation 'org.spockframework:spock-core:2.3-groovy-4.0'
     testImplementation 'org.apache.groovy:groovy-all:4.0.24'
