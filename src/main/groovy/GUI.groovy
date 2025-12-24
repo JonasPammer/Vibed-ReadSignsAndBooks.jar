@@ -195,6 +195,11 @@ class GUI extends Application {
         findPortalsCheckBox.selected = false
         findPortalsCheckBox.tooltip = new Tooltip('Scans for portal blocks and groups them into portal structures.\nOutputs coordinates with overworld/nether pairing.')
 
+        // Index all blocks checkbox
+        CheckBox indexAllBlocksCheckBox = new CheckBox('Index ALL blocks (rarity-filtered)')
+        indexAllBlocksCheckBox.selected = false
+        indexAllBlocksCheckBox.tooltip = new Tooltip('Scan and index all block types in the world.\nSkips only air/cave_air. Uses the limit per type setting.')
+
         // Search blocks text field
         HBox searchBlocksRow = new HBox(10)
         searchBlocksRow.alignment = Pos.CENTER_LEFT
@@ -202,8 +207,20 @@ class GUI extends Application {
         searchBlocksField = new TextField()
         searchBlocksField.promptText = 'e.g., diamond_ore,ancient_debris,spawner'
         HBox.setHgrow(searchBlocksField, Priority.ALWAYS)
-        searchBlocksField.tooltip = new Tooltip('Comma-separated list of block IDs to find.')
+        searchBlocksField.tooltip = new Tooltip('Comma-separated list of block IDs to find.\nLeave empty if using "Index ALL blocks" checkbox.')
         searchBlocksRow.children.addAll(searchBlocksLabel, searchBlocksField)
+
+        // Bind "Index all blocks" checkbox to disable search field and enforce minimum limit
+        indexAllBlocksCheckBox.selectedProperty().addListener { obs, oldVal, selected ->
+            searchBlocksField.disable = selected
+            if (selected) {
+                searchBlocksField.text = ''  // Clear when indexing all
+                // Enforce minimum limit of 1 when indexing all (can't be 0)
+                if (indexLimitSpinner.value == 0) {
+                    indexLimitSpinner.valueFactory.value = 1
+                }
+            }
+        }
 
         // Dependent options (grayed out when block search inactive)
         VBox blockSearchOptions = new VBox(6)
@@ -236,20 +253,21 @@ class GUI extends Application {
 
         // Helper to update dependent options state
         Closure updateBlockSearchState = {
-            boolean active = findPortalsCheckBox.selected || searchBlocksField.text?.trim()
+            boolean active = findPortalsCheckBox.selected || searchBlocksField.text?.trim() || indexAllBlocksCheckBox.selected
             blockSearchOptions.disable = !active
             blockSearchOptions.opacity = active ? 1.0 : 0.5
         }
 
-        // Bind to both checkbox and text field changes
+        // Bind to checkboxes and text field changes
         findPortalsCheckBox.selectedProperty().addListener { obs, oldVal, newVal -> updateBlockSearchState() }
         searchBlocksField.textProperty().addListener { obs, oldVal, newVal -> updateBlockSearchState() }
+        indexAllBlocksCheckBox.selectedProperty().addListener { obs, oldVal, newVal -> updateBlockSearchState() }
 
         // Set initial state (inactive)
         blockSearchOptions.disable = true
         blockSearchOptions.opacity = 0.5
 
-        blockSearchSection.children.addAll(blockSearchHeader, findPortalsCheckBox, searchBlocksRow, blockSearchOptions)
+        blockSearchSection.children.addAll(blockSearchHeader, findPortalsCheckBox, indexAllBlocksCheckBox, searchBlocksRow, blockSearchOptions)
 
         // ══════════════════════════════════════════════════════════════════════
         // 2-Column Layout: Item Index Database | Block Search (side-by-side)
@@ -587,10 +605,14 @@ class GUI extends Application {
                 if (itemLimitValue != 1000) {
                     args += ['--item-limit', itemLimitValue.toString()]
                 }
-                // Search blocks
-                String searchBlocksText = searchBlocksField.text?.trim()
-                if (searchBlocksText) {
-                    args += ['--search-blocks', searchBlocksText]
+                // Search blocks - use "*" wildcard if "Index all blocks" is checked
+                if (indexAllBlocksCheckBox.selected) {
+                    args += ['--search-blocks', '*']
+                } else {
+                    String searchBlocksText = searchBlocksField.text?.trim()
+                    if (searchBlocksText) {
+                        args += ['--search-blocks', searchBlocksText]
+                    }
                 }
                 // Block index limit (only if not default)
                 int indexLimitValue = indexLimitSpinner.value
