@@ -60,7 +60,7 @@ class BookViewer extends Application {
     private List<Text> obfuscatedTexts = []
 
     // Minecraft color mappings (§ codes)
-    private static final Map<Character, Color> COLOR_MAP = [
+    private static final Map<String, Color> COLOR_MAP = [
         '0': Color.web('#000000'),  // Black
         '1': Color.web('#0000AA'),  // Dark Blue
         '2': Color.web('#00AA00'),  // Dark Green
@@ -86,20 +86,8 @@ class BookViewer extends Application {
     void start(Stage primaryStage) {
         primaryStage.title = 'Minecraft Book Viewer'
 
-        // Main layout: sidebar (left) | book viewer (right)
-        BorderPane root = new BorderPane()
-
-        // Create sidebar
-        VBox sidebar = createSidebar()
-        sidebar.prefWidth = 300
-        sidebar.minWidth = 250
-        sidebar.maxWidth = 400
-
-        // Create book viewer area
-        VBox bookViewer = createBookViewer()
-
-        root.left = sidebar
-        root.center = bookViewer
+        // Initialize UI components
+        BorderPane root = initializeUI()
 
         Scene scene = new Scene(root, 1100, 700)
 
@@ -117,6 +105,29 @@ class BookViewer extends Application {
 
         // Try to load default book file (all_books_stendhal.json)
         tryLoadDefaultBooks()
+    }
+
+    /**
+     * Initialize UI components. Can be called directly for testing
+     * without launching the full Application.
+     * @return The root BorderPane containing the full UI
+     */
+    BorderPane initializeUI() {
+        BorderPane root = new BorderPane()
+
+        // Create sidebar
+        VBox sidebar = createSidebar()
+        sidebar.prefWidth = 300
+        sidebar.minWidth = 250
+        sidebar.maxWidth = 400
+
+        // Create book viewer area
+        VBox bookViewer = createBookViewer()
+
+        root.left = sidebar
+        root.center = bookViewer
+
+        return root
     }
 
     private VBox createSidebar() {
@@ -206,12 +217,16 @@ class BookViewer extends Application {
         pageSpread.maxHeight = 500
 
         // Left page
-        VBox leftPage = createPage()
-        leftPageFlow = leftPage.lookup('.pageFlow') as TextFlow
+        leftPageFlow = new TextFlow()
+        leftPageFlow.prefHeight = 440
+        leftPageFlow.maxWidth = 340
+        VBox leftPage = createPage(leftPageFlow)
 
         // Right page
-        VBox rightPage = createPage()
-        rightPageFlow = rightPage.lookup('.pageFlow') as TextFlow
+        rightPageFlow = new TextFlow()
+        rightPageFlow.prefHeight = 440
+        rightPageFlow.maxWidth = 340
+        VBox rightPage = createPage(rightPageFlow)
 
         pageSpread.children.addAll(leftPage, rightPage)
 
@@ -246,16 +261,11 @@ class BookViewer extends Application {
         return viewer
     }
 
-    private VBox createPage() {
+    private VBox createPage(TextFlow pageFlow) {
         VBox page = new VBox()
         page.prefWidth = 380
         page.prefHeight = 480
         page.style = "-fx-background-color: ${PARCHMENT_COLOR}; -fx-border-color: ${BORDER_COLOR}; -fx-border-width: 2; -fx-padding: 20;"
-
-        TextFlow pageFlow = new TextFlow()
-        pageFlow.prefHeight = 440
-        pageFlow.maxWidth = 340
-        pageFlow.id = 'pageFlow'
 
         page.children.add(pageFlow)
 
@@ -486,10 +496,11 @@ class BookViewer extends Application {
                 }
 
                 char code = input.charAt(i + 1)
+                String codeStr = String.valueOf(code)
                 i++  // Skip the code character
 
                 // Reset code
-                if (code == 'r') {
+                if (codeStr == 'r') {
                     currentColor = Color.BLACK
                     bold = false
                     italic = false
@@ -498,8 +509,8 @@ class BookViewer extends Application {
                     obfuscated = false
                 }
                 // Color codes
-                else if (COLOR_MAP.containsKey(code)) {
-                    currentColor = COLOR_MAP[code]
+                else if (COLOR_MAP.containsKey(codeStr)) {
+                    currentColor = COLOR_MAP[codeStr]
                     // Colors reset formatting in Minecraft
                     bold = false
                     italic = false
@@ -508,19 +519,19 @@ class BookViewer extends Application {
                     obfuscated = false
                 }
                 // Formatting codes
-                else if (code == 'l') {
+                else if (codeStr == 'l') {
                     bold = true
                 }
-                else if (code == 'o') {
+                else if (codeStr == 'o') {
                     italic = true
                 }
-                else if (code == 'n') {
+                else if (codeStr == 'n') {
                     underline = true
                 }
-                else if (code == 'm') {
+                else if (codeStr == 'm') {
                     strikethrough = true
                 }
-                else if (code == 'k') {
+                else if (codeStr == 'k') {
                     obfuscated = true
                 }
 

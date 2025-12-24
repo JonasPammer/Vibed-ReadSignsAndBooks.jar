@@ -74,6 +74,7 @@ class BookViewerSpec extends Specification {
         Platform.runLater({
             try {
                 viewer = new BookViewer()
+                viewer.initializeUI()  // Initialize UI components for testing
                 latch.countDown()
             } catch (Exception e) {
                 println "ERROR creating BookViewer: ${e.message}"
@@ -99,6 +100,7 @@ class BookViewerSpec extends Specification {
         Platform.runLater({
             try {
                 viewer = new BookViewer()
+                viewer.initializeUI()  // Initialize UI components for testing
                 latch.countDown()
             } catch (Exception e) {
                 println "ERROR checking components: ${e.message}"
@@ -154,6 +156,7 @@ class BookViewerSpec extends Specification {
         Platform.runLater({
             try {
                 viewer = new BookViewer()
+                viewer.initializeUI()
                 viewer.loadBooks(booksFile)
                 latch.countDown()
             } catch (Exception e) {
@@ -195,6 +198,7 @@ class BookViewerSpec extends Specification {
         Platform.runLater({
             try {
                 viewer = new BookViewer()
+                viewer.initializeUI()
                 viewer.loadBooks(booksFile)
                 latch.countDown()
             } catch (Exception e) {
@@ -232,6 +236,7 @@ class BookViewerSpec extends Specification {
         Platform.runLater({
             try {
                 viewer = new BookViewer()
+                viewer.initializeUI()
                 viewer.loadBooks(booksFile)
                 authorCount = viewer.authorFilterCombo.items.size()
                 latch.countDown()
@@ -275,6 +280,7 @@ class BookViewerSpec extends Specification {
         Platform.runLater({
             try {
                 viewer = new BookViewer()
+                viewer.initializeUI()
                 viewer.loadBooks(booksFile)
                 // Select first book by simulating list selection
                 String displayName = viewer.bookListView.items[0]
@@ -320,6 +326,7 @@ class BookViewerSpec extends Specification {
         Platform.runLater({
             try {
                 viewer = new BookViewer()
+                viewer.initializeUI()
                 viewer.loadBooks(booksFile)
                 viewer.selectBook(viewer.bookListView.items[0])
                 initialPage = viewer.currentPageIndex
@@ -363,6 +370,7 @@ class BookViewerSpec extends Specification {
         Platform.runLater({
             try {
                 viewer = new BookViewer()
+                viewer.initializeUI()
                 viewer.loadBooks(booksFile)
                 viewer.selectBook(viewer.bookListView.items[0])
 
@@ -407,6 +415,7 @@ class BookViewerSpec extends Specification {
         Platform.runLater({
             try {
                 viewer = new BookViewer()
+                viewer.initializeUI()
                 viewer.loadBooks(booksFile)
                 viewer.selectBook(viewer.bookListView.items[0])
 
@@ -444,6 +453,7 @@ class BookViewerSpec extends Specification {
         Platform.runLater({
             try {
                 viewer = new BookViewer()
+                viewer.initializeUI()
                 String input = '§cRed text§r normal §9Blue text'
                 textNodes = viewer.parseMinecraftText(input)
                 latch.countDown()
@@ -479,6 +489,7 @@ class BookViewerSpec extends Specification {
         Platform.runLater({
             try {
                 viewer = new BookViewer()
+                viewer.initializeUI()
                 String input = '§lBold§r §oItalic§r §nUnderline§r §mStrikethrough'
                 textNodes = viewer.parseMinecraftText(input)
                 latch.countDown()
@@ -522,6 +533,7 @@ class BookViewerSpec extends Specification {
         Platform.runLater({
             try {
                 viewer = new BookViewer()
+                viewer.initializeUI()
                 String input = '§kObfuscated text'
                 textNodes = viewer.parseMinecraftText(input)
                 latch.countDown()
@@ -552,6 +564,7 @@ class BookViewerSpec extends Specification {
         Platform.runLater({
             try {
                 viewer = new BookViewer()
+                viewer.initializeUI()
                 String input = '§l§nBold Underline§cRed resets formatting'
                 textNodes = viewer.parseMinecraftText(input)
                 latch.countDown()
@@ -603,6 +616,7 @@ class BookViewerSpec extends Specification {
         Platform.runLater({
             try {
                 viewer = new BookViewer()
+                viewer.initializeUI()
                 viewer.loadBooks(booksFile)
                 viewer.searchField.text = 'Adventure'
                 viewer.filterBooks()
@@ -641,6 +655,7 @@ class BookViewerSpec extends Specification {
         Platform.runLater({
             try {
                 viewer = new BookViewer()
+                viewer.initializeUI()
                 viewer.loadBooks(booksFile)
                 viewer.searchField.text = 'title'
                 viewer.filterBooks()
@@ -680,6 +695,7 @@ class BookViewerSpec extends Specification {
         Platform.runLater({
             try {
                 viewer = new BookViewer()
+                viewer.initializeUI()
                 viewer.loadBooks(booksFile)
                 viewer.authorFilterCombo.value = 'Alice'
                 viewer.filterBooks()
@@ -719,6 +735,7 @@ class BookViewerSpec extends Specification {
         Platform.runLater({
             try {
                 viewer = new BookViewer()
+                viewer.initializeUI()
                 viewer.loadBooks(booksFile)
                 viewer.sortCombo.value = 'Title (A-Z)'
                 viewer.filterBooks()
@@ -758,6 +775,7 @@ class BookViewerSpec extends Specification {
         Platform.runLater({
             try {
                 viewer = new BookViewer()
+                viewer.initializeUI()
                 viewer.loadBooks(booksFile)
                 viewer.sortCombo.value = 'Page Count (High-Low)'
                 viewer.filterBooks()
@@ -799,6 +817,7 @@ class BookViewerSpec extends Specification {
         Platform.runLater({
             try {
                 viewer = new BookViewer()
+                viewer.initializeUI()
                 viewer.loadBooks(booksFile)
                 viewer.selectBook(viewer.bookListView.items[0])
                 pageLabel = viewer.pageNumberLabel.text
@@ -836,6 +855,7 @@ class BookViewerSpec extends Specification {
         Platform.runLater({
             try {
                 viewer = new BookViewer()
+                viewer.initializeUI()
                 viewer.loadBooks(booksFile)
                 viewer.selectBook(viewer.bookListView.items[0])
                 nextDisabled = viewer.nextButton.isDisabled()
@@ -875,6 +895,7 @@ class BookViewerSpec extends Specification {
         Platform.runLater({
             try {
                 viewer = new BookViewer()
+                viewer.initializeUI()
                 viewer.loadBooks(booksFile)
                 viewer.selectBook(viewer.bookListView.items[0])
 
@@ -917,6 +938,7 @@ class BookViewerSpec extends Specification {
         Platform.runLater({
             try {
                 viewer = new BookViewer()
+                viewer.initializeUI()
                 viewer.loadBooks(booksFile)
                 viewer.selectBook(viewer.bookListView.items[0])
                 authorText = viewer.bookAuthorLabel.text
@@ -957,6 +979,7 @@ class BookViewerSpec extends Specification {
         Platform.runLater({
             try {
                 viewer = new BookViewer()
+                viewer.initializeUI()
                 viewer.loadBooks(booksFile)
                 viewer.selectBook(viewer.bookListView.items[0])
                 obfuscatedCount = viewer.obfuscatedTexts.size()
@@ -982,12 +1005,13 @@ class BookViewerSpec extends Specification {
         CountDownLatch latch = new CountDownLatch(1)
         BookViewer viewer = null
         String randomized = null
+        String input = 'Hello World\nNew line'
 
         when: 'We randomize text with spaces'
         Platform.runLater({
             try {
                 viewer = new BookViewer()
-                String input = 'Hello World\nNew line'
+                viewer.initializeUI()
                 randomized = viewer.randomizeText(input)
                 latch.countDown()
             } catch (Exception e) {
@@ -1025,6 +1049,7 @@ class BookViewerSpec extends Specification {
         Platform.runLater({
             try {
                 viewer = new BookViewer()
+                viewer.initializeUI()
                 viewer.loadBooks(booksFile)
                 // If we get here, check if books are empty
                 loadFailed = viewer.allBooks.empty
@@ -1058,6 +1083,7 @@ class BookViewerSpec extends Specification {
         Platform.runLater({
             try {
                 viewer = new BookViewer()
+                viewer.initializeUI()
                 viewer.loadBooks(booksFile)
                 loadFailed = viewer.allBooks.empty
                 latch.countDown()
