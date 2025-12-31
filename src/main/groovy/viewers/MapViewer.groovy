@@ -10,6 +10,8 @@ import javafx.scene.Scene
 import javafx.scene.control.*
 import javafx.scene.image.Image
 import javafx.scene.image.ImageView
+import javafx.scene.input.KeyCode
+import javafx.scene.input.KeyEvent
 import javafx.scene.input.MouseButton
 import javafx.scene.input.MouseEvent
 import javafx.scene.input.ScrollEvent
@@ -23,6 +25,9 @@ import javafx.stage.FileChooser
 import javafx.stage.Stage
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+
+import static viewers.ThemeManager.isDark
+import static viewers.ThemeManager.getColors
 
 /**
  * Interactive map viewer for Minecraft world data visualization.
@@ -87,6 +92,12 @@ class MapViewer extends BorderPane {
     // Marker data
     private List<MapMarker> allMarkers = []
     private boolean markersVisible = true
+
+    // Marker type filters
+    private CheckBox showSignsCheckBox
+    private CheckBox showPortalsCheckBox
+    private CheckBox showItemsCheckBox
+    private CheckBox showBlocksCheckBox
 
     // Clustering
     private static final double CLUSTER_GRID_SIZE = 50  // Grid cell size in pixels for clustering
@@ -220,19 +231,45 @@ class MapViewer extends BorderPane {
         Separator sep2 = new Separator()
         sep2.orientation = javafx.geometry.Orientation.VERTICAL
 
+        // Marker type filter checkboxes
+        showSignsCheckBox = new CheckBox('Signs')
+        showSignsCheckBox.selected = true
+        showSignsCheckBox.style = '-fx-text-fill: #8B4513;'  // Brown for signs
+        showSignsCheckBox.onAction = { updateMarkers() }
+
+        showPortalsCheckBox = new CheckBox('Portals')
+        showPortalsCheckBox.selected = true
+        showPortalsCheckBox.style = '-fx-text-fill: #9400D3;'  // Purple for portals
+        showPortalsCheckBox.onAction = { updateMarkers() }
+
+        showItemsCheckBox = new CheckBox('Items')
+        showItemsCheckBox.selected = true
+        showItemsCheckBox.style = '-fx-text-fill: #FFD700;'  // Gold for items
+        showItemsCheckBox.onAction = { updateMarkers() }
+
+        showBlocksCheckBox = new CheckBox('Blocks')
+        showBlocksCheckBox.selected = true
+        showBlocksCheckBox.style = '-fx-text-fill: #87CEEB;'  // Light blue for blocks
+        showBlocksCheckBox.onAction = { updateMarkers() }
+
+        Separator sep3 = new Separator()
+        sep3.orientation = javafx.geometry.Orientation.VERTICAL
+
         coordsLabel = new Label('World: (?, ?)')
         coordsLabel.minWidth = 150
 
         toolbar.children.addAll(
             loadMapBtn, sep1,
             zoomInBtn, zoomOutBtn, zoomFitBtn, zoomLabel, sep2,
-            jumpToBtn, toggleMarkersBtn, sep2,
+            jumpToBtn, toggleMarkersBtn, sep3,
+            showSignsCheckBox, showPortalsCheckBox, showItemsCheckBox, showBlocksCheckBox,
+            sep3,
             coordsLabel
         )
 
         // Map container with overlay layers
         mapContainer = new StackPane()
-        mapContainer.style = '-fx-background-color: #2b2b2b;'
+        mapContainer.style = "-fx-background-color: ${isDark() ? '#1e1e1e' : '#f5f5f5'};"
 
         // Base map image layer
         mapImage = new ImageView()
@@ -278,6 +315,108 @@ class MapViewer extends BorderPane {
 
         // Cursor feedback
         mapImage.cursor = Cursor.CROSSHAIR
+
+        // Make component focusable for keyboard input
+        this.focusTraversable = true
+        mapScrollPane.focusTraversable = true
+
+        // Request focus when clicked
+        mapScrollPane.onMouseClicked = { event ->
+            mapScrollPane.requestFocus()
+        }
+
+        // Keyboard shortcuts
+        mapScrollPane.addEventFilter(KeyEvent.KEY_PRESSED, this.&handleKeyPress)
+    }
+
+    /**
+     * Handle keyboard shortcuts
+     *
+     * Shortcuts:
+     * - +/= : Zoom in
+     * - -   : Zoom out
+     * - 0   : Fit to window
+     * - M   : Toggle markers
+     * - G   : Jump to coordinates
+     * - L   : Load map image
+     * - Arrow keys : Pan map
+     */
+    private void handleKeyPress(KeyEvent event) {
+        switch (event.code) {
+            case KeyCode.PLUS:
+            case KeyCode.EQUALS:
+            case KeyCode.ADD:
+                zoom(ZOOM_STEP)
+                event.consume()
+                break
+            case KeyCode.MINUS:
+            case KeyCode.SUBTRACT:
+                zoom(-ZOOM_STEP)
+                event.consume()
+                break
+            case KeyCode.DIGIT0:
+            case KeyCode.NUMPAD0:
+                zoomToFit()
+                event.consume()
+                break
+            case KeyCode.M:
+                toggleMarkers()
+                event.consume()
+                break
+            case KeyCode.G:
+                showJumpToDialog()
+                event.consume()
+                break
+            case KeyCode.L:
+                loadMapImage()
+                event.consume()
+                break
+            case KeyCode.UP:
+                panBy(0, -50)
+                event.consume()
+                break
+            case KeyCode.DOWN:
+                panBy(0, 50)
+                event.consume()
+                break
+            case KeyCode.LEFT:
+                panBy(-50, 0)
+                event.consume()
+                break
+            case KeyCode.RIGHT:
+                panBy(50, 0)
+                event.consume()
+                break
+        }
+    }
+
+    /**
+     * Pan the map by the specified pixel amounts
+     */
+    private void panBy(double deltaX, double deltaY) {
+        if (!mapImage.image) return
+
+        double contentWidth = mapImage.fitWidth
+        double contentHeight = mapImage.fitHeight
+        double viewportWidth = mapScrollPane.viewportBounds.width
+        double viewportHeight = mapScrollPane.viewportBounds.height
+
+        // Calculate new scroll positions
+        double hValue = mapScrollPane.hvalue
+        double vValue = mapScrollPane.vvalue
+
+        // Convert pixel delta to scroll value delta
+        double hRange = contentWidth - viewportWidth
+        double vRange = contentHeight - viewportHeight
+
+        if (hRange > 0) {
+            hValue += deltaX / hRange
+            mapScrollPane.hvalue = Math.max(0, Math.min(1, hValue))
+        }
+        if (vRange > 0) {
+            vValue += deltaY / vRange
+            mapScrollPane.vvalue = Math.max(0, Math.min(1, vValue))
+        }
     }
 
     /**
@@ -631,13 +770,35 @@ class MapViewer extends BorderPane {
     }
 
     /**
+     * Get filtered markers based on type filter checkboxes
+     */
+    private List<MapMarker> getFilteredMarkers() {
+        return allMarkers.findAll { marker ->
+            switch (marker.type) {
+                case 'sign':
+                    return showSignsCheckBox?.selected != false
+                case 'portal':
+                    return showPortalsCheckBox?.selected != false
+                case 'item':
+                    return showItemsCheckBox?.selected != false
+                case 'block':
+                    return showBlocksCheckBox?.selected != false
+                default:
+                    return true  // Show unknown marker types
+            }
+        }
+    }
+
+    /**
      * Update marker rendering with clustering
      */
     private void updateMarkers() {
         markerLayer.children.clear()
         visibleClusters.clear()
 
-        if (!markersVisible || allMarkers.empty || !mapImage.image) {
+        List<MapMarker> filteredMarkers = getFilteredMarkers()
+
+        if (!markersVisible || filteredMarkers.empty || !mapImage.image) {
             return
         }
 
@@ -645,17 +806,17 @@ class MapViewer extends BorderPane {
         boolean shouldCluster = currentZoom < 0.5
 
         if (shouldCluster) {
-            renderClustered()
+            renderClustered(filteredMarkers)
         } else {
-            renderIndividual()
+            renderIndividual(filteredMarkers)
         }
     }
 
     /**
      * Render individual markers (no clustering)
      */
-    private void renderIndividual() {
-        allMarkers.each { marker ->
+    private void renderIndividual(List<MapMarker> markers) {
+        markers.each { marker ->
             Point2D imagePos = worldToImage(marker.worldX, marker.worldZ)
             double scaledX = imagePos.x * currentZoom
             double scaledY = imagePos.y * currentZoom
@@ -671,11 +832,11 @@ class MapViewer extends BorderPane {
     /**
      * Render markers with grid-based clustering
      */
-    private void renderClustered() {
+    private void renderClustered(List<MapMarker> markers) {
         // Group markers into grid cells
         Map<String, List<MapMarker>> grid = [:]
 
-        allMarkers.each { marker ->
+        markers.each { marker ->
             Point2D imagePos = worldToImage(marker.worldX, marker.worldZ)
             double scaledX = imagePos.x * currentZoom
             double scaledY = imagePos.y * currentZoom
@@ -688,10 +849,10 @@ class MapViewer extends BorderPane {
         }
 
         // Render clusters
-        grid.each { gridKey, List<MapMarker> markers ->
-            if (markers.size() == 1) {
+        grid.each { gridKey, List<MapMarker> cellMarkers ->
+            if (cellMarkers.size() == 1) {
                 // Single marker, render normally
-                MapMarker marker = markers[0]
+                MapMarker marker = cellMarkers[0]
                 Point2D imagePos = worldToImage(marker.worldX, marker.worldZ)
                 double scaledX = imagePos.x * currentZoom
                 double scaledY = imagePos.y * currentZoom
@@ -703,7 +864,7 @@ class MapViewer extends BorderPane {
                 markerLayer.children.add(markerNode)
             } else {
                 // Multiple markers, create cluster
-                MarkerCluster cluster = new MarkerCluster(markers)
+                MarkerCluster cluster = new MarkerCluster(cellMarkers)
                 visibleClusters[gridKey] = cluster
 
                 Point2D clusterImagePos = worldToImage((int) cluster.centerX, (int) cluster.centerZ)
@@ -725,10 +886,10 @@ class MapViewer extends BorderPane {
     private StackPane createMarkerNode(MapMarker marker, boolean inSpiderfy) {
         StackPane stack = new StackPane()
 
-        // Background circle for visibility
+        // Background circle for visibility - theme-aware stroke
         Circle bg = new Circle(12)
         bg.fill = getMarkerColor(marker.type)
-        bg.stroke = Color.WHITE
+        bg.stroke = isDark() ? Color.WHITE : Color.DARKGRAY
         bg.strokeWidth = 2
 
         // Emoji icon
@@ -758,16 +919,17 @@ class MapViewer extends BorderPane {
     private StackPane createClusterNode(MarkerCluster cluster, String gridKey) {
         StackPane stack = new StackPane()
 
-        // Background circle
+        // Background circle - theme-aware colors
         Circle bg = new Circle(15)
-        bg.fill = Color.PURPLE
-        bg.stroke = Color.WHITE
+        Map<String, String> themeColors = getColors()
+        bg.fill = Color.web(themeColors['enchant-purple'] ?: (isDark() ? '#b080ff' : '#8040ff'))
+        bg.stroke = isDark() ? Color.WHITE : Color.DARKGRAY
         bg.strokeWidth = 2
 
         // Count label
         Text count = new Text("${cluster.markers.size()}")
         count.font = Font.font('Arial', FontWeight.BOLD, 14)
-        count.fill = Color.WHITE
+        count.fill = isDark() ? Color.WHITE : Color.BLACK
 
         stack.children.addAll(bg, count)
         stack.cursor = Cursor.HAND
@@ -818,9 +980,9 @@ class MapViewer extends BorderPane {
                 markerNode.layoutX = x - 12
                 markerNode.layoutY = y - 12
 
-                // Draw connecting line
+                // Draw connecting line - theme-aware
                 javafx.scene.shape.Line line = new javafx.scene.shape.Line(centerX, centerY, x, y)
-                line.stroke = Color.gray(0.5, 0.5)
+                line.stroke = isDark() ? Color.gray(0.7, 0.7) : Color.gray(0.3, 0.7)
                 line.strokeWidth = 1
 
                 markerLayer.children.addAll(line, markerNode)
@@ -855,15 +1017,22 @@ class MapViewer extends BorderPane {
     }
 
     /**
-     * Get marker color based on type
+     * Get marker color based on type and theme
      */
     private Color getMarkerColor(String type) {
+        // Use theme-aware colors matching ThemeManager's Minecraft palette
+        Map<String, String> colors = getColors()
         switch (type) {
-            case 'sign': return Color.BROWN
-            case 'portal': return Color.PURPLE
-            case 'item': return Color.GOLD
-            case 'block': return Color.LIGHTBLUE
-            default: return Color.GRAY
+            case 'sign':
+                return Color.web(colors['sign-wood'] ?: (isDark() ? '#8B7355' : '#A08060'))
+            case 'portal':
+                return Color.web(colors['enchant-purple'] ?: (isDark() ? '#b080ff' : '#8040ff'))
+            case 'item':
+                return Color.web(colors['gold-text'] ?: (isDark() ? '#ffcc00' : '#ffaa00'))
+            case 'block':
+                return isDark() ? Color.LIGHTBLUE : Color.DEEPSKYBLUE
+            default:
+                return isDark() ? Color.LIGHTGRAY : Color.GRAY
         }
     }
 

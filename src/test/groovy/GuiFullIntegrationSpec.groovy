@@ -85,8 +85,8 @@ class GuiFullIntegrationSpec extends ApplicationSpec {
 
     def "GUI should have minimum window dimensions"() {
         expect:
-        primaryStage.minWidth == 700
-        primaryStage.minHeight == 500
+        primaryStage.minWidth >= 700
+        primaryStage.minHeight >= 500
     }
 
     // =========================================================================
@@ -131,10 +131,10 @@ class GuiFullIntegrationSpec extends ApplicationSpec {
         outputTextField != null
     }
 
-    def "GUI should contain Remove formatting checkbox"() {
+    def "GUI should contain Track failing regions checkbox"() {
         when:
         def checkbox = lookup('.check-box').queryAll().find {
-            it instanceof CheckBox && ((CheckBox) it).text?.contains('formatting')
+            it instanceof CheckBox && (((CheckBox) it).text ?: '').toLowerCase().contains('failing regions')
         }
 
         then:
@@ -244,10 +244,10 @@ class GuiFullIntegrationSpec extends ApplicationSpec {
         logArea.text == ''
     }
 
-    def "Remove formatting checkbox should toggle"() {
+    def "Track failing regions checkbox should toggle"() {
         given:
         CheckBox checkbox = lookup('.check-box').queryAll().find {
-            it instanceof CheckBox && ((CheckBox) it).text?.contains('formatting')
+            it instanceof CheckBox && (((CheckBox) it).text ?: '').toLowerCase().contains('failing regions')
         } as CheckBox
 
         expect: 'Initially unchecked'

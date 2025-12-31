@@ -1,15 +1,29 @@
 /*
  * Minecraft Theme CSS
  *
- * CSS Variables for theme colors are set by ThemeManager as inline styles on root node:
+ * Theme colors are provided as JavaFX "looked-up colors" (custom CSS properties)
+ * set by ThemeManager on the root node:
  * -mc-slot-bg, -mc-slot-border, -mc-tooltip-bg, -mc-enchant-purple, -mc-gold-text, etc.
  *
- * Example usage: -fx-background-color: var(-mc-slot-bg, #373737);
+ * JavaFX CSS does NOT support web `var()`; looked-up colors are referenced directly:
+ *   -fx-background-color: -mc-slot-bg;
  */
+
+/* Default palette (ThemeManager overrides these per theme) */
+.root {
+    -mc-slot-bg: #373737;
+    -mc-slot-border: #1d1d1d;
+    -mc-tooltip-bg: rgba(16, 0, 16, 0.94);
+    -mc-enchant-purple: #8040ff;
+    -mc-gold-text: #ffaa00;
+    -mc-book-page: #E8D5B3;
+    -mc-sign-wood: #8B7355;
+    -mc-sign-border: #5D4E37;
+}
 
 /* Minecraft-style tooltip */
 .minecraft-tooltip {
-    -fx-background-color: var(-mc-tooltip-bg, #100010f0);
+    -fx-background-color: -mc-tooltip-bg;
     -fx-border-color: #5000ff #28007f #28007f #5000ff;
     -fx-border-width: 2;
     -fx-padding: 6;
@@ -18,8 +32,8 @@
 
 /* Item slot styling */
 .item-slot {
-    -fx-background-color: var(-mc-slot-bg, #373737);
-    -fx-border-color: var(-mc-slot-border, #1d1d1d) #5a5a5a #5a5a5a var(-mc-slot-border, #1d1d1d);
+    -fx-background-color: -mc-slot-bg;
+    -fx-border-color: -mc-slot-border #5a5a5a #5a5a5a -mc-slot-border;
     -fx-border-width: 2;
     -fx-padding: 4;
     -fx-pref-width: 48;
@@ -30,6 +44,11 @@
     -fx-background-color: #4a4a4a;
     -fx-scale-x: 1.05;
     -fx-scale-y: 1.05;
+}
+
+.item-slot.selected {
+    -fx-border-color: #55ffff;
+    -fx-border-width: 3;
 }
 
 .item-slot.enchanted {

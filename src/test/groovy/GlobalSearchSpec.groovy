@@ -28,6 +28,8 @@ class GlobalSearchSpec extends Specification {
     def setupSpec() {
         // Initialize JavaFX toolkit (required for JavaFX components)
         new JFXPanel()
+        // Keep JavaFX runtime alive across tests that may open/close Stages.
+        Platform.setImplicitExit(false)
     }
 
     def setup() {
@@ -681,9 +683,18 @@ class GlobalSearchSpec extends Specification {
     // Programmatic Control Tests
     // =========================================================================
 
+    @spock.lang.IgnoreIf({ java.awt.GraphicsEnvironment.headless })
     def "focusSearch() focuses the search field"() {
         given: 'GlobalSearch instance'
         def search = createGlobalSearchOnFxThread({ result -> capturedResults << result })
+
+        and: 'A scene so focus can be assigned'
+        javafx.stage.Stage stage = null
+        runOnFxThreadAndWait {
+            stage = new javafx.stage.Stage()
+            stage.scene = new javafx.scene.Scene(new javafx.scene.layout.StackPane(search), 500, 300)
+            stage.show()
+        }
 
         when: 'Calling focusSearch()'
         runOnFxThreadAndWait {
@@ -692,6 +703,11 @@ class GlobalSearchSpec extends Specification {
 
         then: 'Search field is focused'
         runOnFxThreadAndGet { search.searchField.focused }
+
+        cleanup:
+        runOnFxThreadAndWait {
+            stage?.close()
+        }
     }
 
     def "clearSearch() clears query and results"() {
@@ -785,6 +801,15 @@ class GlobalSearchSpec extends Specification {
         latch.await(5, TimeUnit.SECONDS)
         // Additional wait for background search thread
         Thread.sleep(1000)
+
+        // Snapshot results (tests assert against computed results, not selection callback)
+        List<GlobalSearch.SearchResult> resultsSnapshot = runOnFxThreadAndGet {
+            return (search.@allResults ?: []) as List<GlobalSearch.SearchResult>
+        } ?: []
+        capturedResults.clear()
+        if (resultsSnapshot) {
+            capturedResults.addAll(resultsSnapshot)
+        }
     }
 
     /**

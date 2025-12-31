@@ -88,7 +88,7 @@ class OutputViewerSpec extends Specification {
         success
         model.signs.size() == 2
         model.signs[0].dimension == 'overworld'
-        model.signs[0].x == '100'
+        model.signs[0].x == 100
         model.signs[0].line1 == 'Welcome'
         model.signs[1].dimension == 'nether'
         model.metadata.signsCount == 2
@@ -187,7 +187,7 @@ class OutputViewerSpec extends Specification {
                 z: 100
             ]
         ]
-        File blockResultsFile = new File(outputFolder, 'block_results.json')
+        File blockResultsFile = new File(outputFolder, 'blocks.json')
         blockResultsFile.text = new JsonBuilder(blockResultsData).toPrettyString()
 
         and: 'An OutputViewerModel'

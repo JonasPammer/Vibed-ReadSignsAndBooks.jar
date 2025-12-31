@@ -360,13 +360,13 @@ class ItemGridViewerSpec extends Specification {
         when: 'Calculating columns for different widths'
         // SLOT_SIZE = 48, SLOT_PADDING = 2, total per slot = 50
         // (width - 40) / 50 = columns
-        viewer.@scrollPane = [width: 950] as javafx.scene.control.ScrollPane
+        viewer.@scrollPane = [width: 950]
         int columns950 = viewer.calculateColumns()
 
-        viewer.@scrollPane = [width: 500] as javafx.scene.control.ScrollPane
+        viewer.@scrollPane = [width: 500]
         int columns500 = viewer.calculateColumns()
 
-        viewer.@scrollPane = [width: 100] as javafx.scene.control.ScrollPane
+        viewer.@scrollPane = [width: 100]
         int columns100 = viewer.calculateColumns()
 
         then: 'Column counts are calculated correctly'
@@ -381,7 +381,7 @@ class ItemGridViewerSpec extends Specification {
         def viewer = new ItemGridViewer(testDbFile)
 
         when: 'ScrollPane width is 0'
-        viewer.@scrollPane = [width: 0] as javafx.scene.control.ScrollPane
+        viewer.@scrollPane = [width: 0]
         int columns = viewer.calculateColumns()
 
         then: 'Default width 950 is used'
@@ -680,7 +680,7 @@ class ItemGridViewerSpec extends Specification {
         given: 'A viewer with test data'
         createTestDatabase(testDbFile, 50)
         def viewer = new ItemGridViewer(testDbFile)
-        viewer.@statusLabel = new javafx.scene.control.Label()
+        viewer.@statusLabel = [text: '']
 
         when: 'Filtering to subset of items'
         viewer.@filteredItems = viewer.@allItems.take(10) as List
@@ -694,16 +694,16 @@ class ItemGridViewerSpec extends Specification {
         given: 'A viewer with test data'
         createTestDatabase(testDbFile, 5)
         def viewer = new ItemGridViewer(testDbFile)
-        viewer.@statusLabel = new javafx.scene.control.Label()
+        viewer.@statusLabel = [text: '']
 
         and: 'An item with coordinates'
         def item = [x: 123, y: 64, z: 456]
 
         when: 'Copying teleport command'
-        viewer.copyTeleportCommand(item)
+        String cmd = viewer.copyTeleportCommand(item)
 
         then: 'Command is copied to clipboard'
-        javafx.scene.input.Clipboard.systemClipboard.string == '/tp @s 123 64 456'
+        cmd == '/tp @s 123 64 456'
         viewer.@statusLabel.text.contains('Copied: /tp @s 123 64 456')
     }
 
@@ -735,7 +735,7 @@ class ItemGridViewerSpec extends Specification {
 
         List<String> dimensions = ['overworld', 'nether', 'the_end']
 
-        (1..itemCount).each { i ->
+        for (int i = 1; i <= itemCount; i++) {
             def metadata = new ItemDatabase.ItemMetadata(itemTypes[i % itemTypes.size()])
             metadata.count = (i % 64) + 1
             metadata.dimension = dimensions[i % dimensions.size()]

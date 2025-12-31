@@ -1,5 +1,6 @@
 package viewers
 
+import javafx.animation.PauseTransition
 import javafx.application.Platform
 import javafx.geometry.Insets
 import javafx.geometry.Pos
@@ -11,6 +12,7 @@ import javafx.scene.layout.*
 import javafx.scene.paint.Color
 import javafx.scene.text.Font
 import javafx.scene.text.FontWeight
+import javafx.util.Duration
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
@@ -45,7 +47,9 @@ class GlobalSearch extends VBox {
     private OutputViewerModel model
     private List<SearchResult> allResults = []
     private String lastQuery = ''
-    private long lastSearchTime = 0
+    private String pendingQuery = ''
+    private PauseTransition debounceTimer
+    private volatile long currentSearchToken = 0
 
     // Callback for result selection
     private Closure<Void> onResultSelected
@@ -62,6 +66,14 @@ class GlobalSearch extends VBox {
 
         setupUI()
         setupKeyboardShortcuts()
+        setupDebounce()
+    }
+
+    private void setupDebounce() {
+        debounceTimer = new PauseTransition(Duration.millis(SEARCH_DEBOUNCE_MS))
+        debounceTimer.onFinished = { event ->
+            startSearch(pendingQuery)
+        }
     }
 
     private void setupUI() {
@@ -162,46 +174,70 @@ class GlobalSearch extends VBox {
      * Clear the search and reset UI.
      */
     void clearSearch() {
+        pendingQuery = ''
+        lastQuery = ''
+        currentSearchToken = 0
+        debounceTimer?.stop()
+        loadingIndicator.visible = false
+
         searchField.clear()
         resultsList.items.clear()
         allResults.clear()
         statusLabel.text = ''
-        lastQuery = ''
     }
 
     /**
      * Handle search input with debouncing.
      */
     private void handleSearchInput(String query) {
-        if (!query || query.trim().length() < MIN_QUERY_LENGTH) {
+        String trimmed = query?.trim() ?: ''
+        if (trimmed.length() < MIN_QUERY_LENGTH) {
+            pendingQuery = ''
+            debounceTimer?.stop()
+            currentSearchToken = 0
+            loadingIndicator.visible = false
             resultsList.items.clear()
             allResults.clear()
-            statusLabel.text = query?.trim() ? 'Enter at least 2 characters' : ''
+            statusLabel.text = trimmed ? 'Enter at least 2 characters' : ''
             return
         }
 
-        query = query.trim()
+        pendingQuery = trimmed
 
-        // Debounce: only search if enough time has passed since last input
-        long now = System.currentTimeMillis()
-        if (now - lastSearchTime < SEARCH_DEBOUNCE_MS && query == lastQuery) {
+        // Debounce: wait for user to stop typing before searching
+        debounceTimer.stop()
+        debounceTimer.playFromStart()
+    }
+
+    private void startSearch(String query) {
+        String q = query?.trim() ?: ''
+        if (q.length() < MIN_QUERY_LENGTH) {
             return
         }
 
-        lastQuery = query
-        lastSearchTime = now
+        // Avoid re-searching the same query unless the model changed (updateModel() clears lastQuery)
+        if (q == lastQuery) {
+            return
+        }
+        lastQuery = q
 
-        // Perform search in background thread
+        long token = System.nanoTime()
+        currentSearchToken = token
+
         Thread.start {
-            performSearch(query)
+            performSearch(q, token)
         }
     }
 
     /**
      * Perform the actual search across all data types.
      */
-    private void performSearch(String query) {
-        Platform.runLater { loadingIndicator.visible = true }
+    private void performSearch(String query, long token) {
+        Platform.runLater {
+            if (token == currentSearchToken) {
+                loadingIndicator.visible = true
+            }
+        }
 
         List<SearchResult> results = []
         String lowerQuery = query.toLowerCase()
@@ -356,6 +392,9 @@ class GlobalSearch extends VBox {
 
             // Update UI on JavaFX thread
             Platform.runLater {
+                if (token != currentSearchToken) {
+                    return
+                }
                 allResults = results
                 updateResultsList()
                 loadingIndicator.visible = false
@@ -372,6 +411,9 @@ class GlobalSearch extends VBox {
         } catch (Exception e) {
             LOGGER.error("Search failed: ${e.message}", e)
             Platform.runLater {
+                if (token != currentSearchToken) {
+                    return
+                }
                 loadingIndicator.visible = false
                 statusLabel.text = "Search error: ${e.message}"
             }
@@ -397,11 +439,6 @@ class GlobalSearch extends VBox {
             return 80
         }
 
-        // Contains whole word
-        if (lowerText.contains(" ${query} ") || lowerText.startsWith("${query} ") || lowerText.endsWith(" ${query}")) {
-            return 60
-        }
-
         // Contains substring
         if (lowerText.contains(query)) {
             return 50
@@ -420,12 +457,13 @@ class GlobalSearch extends VBox {
      */
     private boolean fuzzyMatch(String text, String query) {
         int textIndex = 0
-        for (char c : query.toCharArray()) {
-            textIndex = text.indexOf(c, textIndex)
+        for (int i = 0; i < query.length(); i++) {
+            String ch = query.substring(i, i + 1)
+            textIndex = text.indexOf(ch, textIndex)
             if (textIndex == -1) {
                 return false
             }
-            textIndex++
+            textIndex += 1
         }
         return true
     }

@@ -15,6 +15,9 @@ import javafx.scene.paint.Stop
 import javafx.scene.shape.Rectangle
 import javafx.util.Duration
 
+import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
+
 /**
  * Singleton manager for loading and caching Minecraft item textures.
  * Handles texture loading from JAR resources, scaling, and fallback placeholders.
@@ -26,6 +29,10 @@ class IconManager {
     private static final int ICON_SIZE = 32
     private static final int ORIGINAL_SIZE = 16  // Minecraft texture size
 
+    // Optional external texture source (user-provided Minecraft client jar / resource pack zip / extracted dir)
+    private static File externalTextureSource = null
+    private static ZipFile externalZip = null
+
     /**
      * Get an icon image for a Minecraft item ID.
      * Loads from resources if available, otherwise generates a colored placeholder.
@@ -36,6 +43,13 @@ class IconManager {
     static Image getIcon(String itemId) {
         if (iconCache.containsKey(itemId)) {
             return iconCache[itemId]
+        }
+
+        // Try to load from external texture source (if configured)
+        Image external = tryLoadExternalIcon(itemId)
+        if (external) {
+            iconCache[itemId] = external
+            return external
         }
 
         // Try to load from resources
@@ -58,6 +72,127 @@ class IconManager {
 
         // Fallback: generate colored placeholder
         return generatePlaceholder(itemId)
+    }
+
+    /**
+     * Configure an external texture source (Minecraft client jar/zip/resource pack folder).
+     *
+     * This does NOT ship any Minecraft assets; it only reads from a user-selected local file/folder.
+     *
+     * @return true if source was accepted, false otherwise.
+     */
+    static boolean setExternalTextureSource(File source) {
+        clearExternalTextureSource()
+
+        if (!source || !source.exists()) {
+            return false
+        }
+
+        if (source.directory) {
+            externalTextureSource = source
+            clearCache()
+            return true
+        }
+
+        if (source.file) {
+            try {
+                externalZip = new ZipFile(source)
+                externalTextureSource = source
+                clearCache()
+                return true
+            } catch (Exception e) {
+                // Ensure cleanup on failure
+                clearExternalTextureSource()
+                return false
+            }
+        }
+
+        return false
+    }
+
+    /**
+     * Clear configured external texture source.
+     */
+    static void clearExternalTextureSource() {
+        if (externalZip != null) {
+            try {
+                externalZip.close()
+            } catch (Exception ignored) {
+                // ignore
+            }
+        }
+        externalZip = null
+        externalTextureSource = null
+        clearCache()
+    }
+
+    /**
+     * Human-readable label for the currently active texture source.
+     */
+    static String getTextureSourceLabel() {
+        if (externalTextureSource == null) {
+            return 'Built-in placeholders'
+        }
+        return externalTextureSource.name
+    }
+
+    private static Image tryLoadExternalIcon(String itemId) {
+        if (externalTextureSource == null) {
+            return null
+        }
+
+        String resourceName = itemId.replace('minecraft:', '')
+
+        // Try item texture first, then block texture as fallback for block-items
+        String[] candidatePaths = [
+            "assets/minecraft/textures/item/${resourceName}.png",
+            "assets/minecraft/textures/block/${resourceName}.png"
+        ] as String[]
+
+        for (String relPath : candidatePaths) {
+            InputStream stream = null
+            try {
+                stream = openExternalStream(relPath)
+                if (stream != null) {
+                    return new Image(stream, ICON_SIZE, ICON_SIZE, false, false)
+                }
+            } catch (Exception ignored) {
+                // ignore and try next
+            } finally {
+                try {
+                    stream?.close()
+                } catch (Exception ignored2) {
+                    // ignore
+                }
+            }
+        }
+
+        return null
+    }
+
+    private static InputStream openExternalStream(String relPath) {
+        if (externalTextureSource == null) {
+            return null
+        }
+
+        // Zip/jar
+        if (externalZip != null) {
+            ZipEntry entry = externalZip.getEntry(relPath)
+            if (entry != null) {
+                return externalZip.getInputStream(entry)
+            }
+            return null
+        }
+
+        // Directory
+        if (externalTextureSource.directory) {
+            File f = new File(externalTextureSource, relPath)
+            if (f.exists() && f.file) {
+                return f.newInputStream()
+            }
+        }
+
+        return null
     }
 
     /**

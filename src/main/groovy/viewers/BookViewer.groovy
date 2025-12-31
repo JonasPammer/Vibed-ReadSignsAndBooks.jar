@@ -130,6 +130,39 @@ class BookViewer extends Application {
         return root
     }
 
+    /**
+     * Display a specific book Map programmatically (used by GlobalSearch and embedded viewers).
+     * This does not require the book to be currently selected in the list, but will attempt
+     * to sync selection if possible.
+     */
+    void displayBook(Map book) {
+        if (!book) {
+            return
+        }
+
+        // Ensure UI is initialized (fields like leftPageFlow/bookTitleLabel are set there)
+        if (!leftPageFlow || !rightPageFlow || !bookTitleLabel) {
+            initializeUI()
+        }
+
+        currentBook = book
+        currentPageIndex = 0
+        displayCurrentPages()
+
+        // Best-effort: highlight in list if it exists in current filtered list
+        try {
+            if (bookListView && filteredBooks) {
+                int idx = filteredBooks.indexOf(book)
+                if (idx >= 0) {
+                    bookListView.selectionModel.select(idx)
+                    bookListView.scrollTo(idx)
+                }
+            }
+        } catch (Exception ignored) {
+            // no-op
+        }
+    }
+
     private VBox createSidebar() {
         VBox sidebar = new VBox(10)
         sidebar.padding = new Insets(15)

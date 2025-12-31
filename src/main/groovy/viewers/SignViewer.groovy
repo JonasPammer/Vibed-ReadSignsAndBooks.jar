@@ -81,17 +81,36 @@ class SignViewer extends Application {
     private FlowPane signGridPane
     private Label statusLabel
 
+    // Root pane for embedding or standalone usage
+    private BorderPane rootPane
+
     @Override
     void start(Stage primaryStage) {
         primaryStage.title = 'Minecraft Sign Viewer'
         applyTheme()
 
-        // Main layout
-        BorderPane root = new BorderPane()
+        // Build core UI and add menu bar for standalone mode
+        BorderPane root = initializeUI()
+        root.top = createMenuBar(primaryStage)
 
-        // Top: Menu bar
-        MenuBar menuBar = createMenuBar(primaryStage)
-        root.top = menuBar
+        Scene scene = new Scene(root, 1200, 800)
+        primaryStage.scene = scene
+        primaryStage.show()
+
+        // Load sample data or from CLI args
+        loadSignsFromArgs()
+    }
+
+    /**
+     * Build the SignViewer UI and return the root pane.
+     * This is used by both the standalone Application and embedded in other windows (e.g., OutputViewer).
+     */
+    BorderPane initializeUI() {
+        if (rootPane) {
+            return rootPane
+        }
+
+        rootPane = new BorderPane()
 
         // Center: Sign grid
         VBox centerContent = new VBox(10)
@@ -112,24 +131,68 @@ class SignViewer extends Application {
         signGridPane.padding = new Insets(15)
         signGridPane.style = '-fx-background-color: derive(-fx-base, -5%);'
 
+        // Initial placeholder content
+        Label emptyLabel = new Label('No signs loaded')
+        emptyLabel.style = '-fx-font-size: 14px; -fx-text-fill: gray; -fx-font-style: italic;'
+        signGridPane.children.add(emptyLabel)
+
         scrollPane.content = signGridPane
         VBox.setVgrow(scrollPane, Priority.ALWAYS)
         centerContent.children.add(scrollPane)
 
-        root.center = centerContent
+        rootPane.center = centerContent
 
         // Bottom: Status bar
         statusLabel = new Label('No signs loaded')
         statusLabel.padding = new Insets(5, 10, 5, 10)
         statusLabel.style = '-fx-font-size: 11px; -fx-text-fill: gray;'
-        root.bottom = statusLabel
+        rootPane.bottom = statusLabel
 
-        Scene scene = new Scene(root, 1200, 800)
-        primaryStage.scene = scene
-        primaryStage.show()
+        return rootPane
+    }
 
-        // Load sample data or from CLI args
-        loadSignsFromArgs()
+    /**
+     * Set the current sign dataset (used for embedding in OutputViewer).
+     */
+    void setSigns(List<Map<String, Object>> signs) {
+        allSigns = (signs ?: []) as List<Map<String, Object>>
+        filteredSigns = new ArrayList<>(allSigns)
+
+        if (statusLabel) {
+            statusLabel.text = "Loaded ${allSigns.size()} signs"
+        }
+
+        // If UI is initialized, render immediately.
+        if (signGridPane) {
+            applyFilters()
+        }
+    }
+
+    /**
+     * Best-effort navigation/highlight hook (used by GlobalSearch integration).
+     */
+    void highlightSign(Map<String, Object> sign) {
+        if (!sign) return
+
+        // Ensure UI exists
+        initializeUI()
+
+        // Try to make the sign visible by narrowing the search to its first line (fast + simple).
+        if (searchField) {
+            searchField.text = (sign.line1 ?: sign.signText ?: '').toString()
+        }
+
+        // Open detail dialog for immediate context
+        try {
+            Platform.runLater { showSignDetail(sign) }
+        } catch (Exception ignored) {
+            // ignore if called outside FX thread
+            try {
+                showSignDetail(sign)
+            } catch (Exception ignored2) {
+                // no-op
+            }
+        }
     }
 
     /**

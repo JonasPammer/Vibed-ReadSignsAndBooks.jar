@@ -1,11 +1,10 @@
-import atlantafx.base.theme.PrimerDark
-import atlantafx.base.theme.PrimerLight
-import com.jthemedetecor.OsThemeDetector
-import javafx.application.Application
 import javafx.geometry.Insets
 import javafx.geometry.Pos
+import javafx.scene.Node
 import javafx.scene.Scene
 import javafx.scene.control.*
+import javafx.scene.input.Clipboard
+import javafx.scene.input.ClipboardContent
 import javafx.scene.layout.*
 import javafx.stage.DirectoryChooser
 import javafx.stage.Stage
@@ -13,7 +12,11 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import viewers.BlockGridViewer
 import viewers.BookViewer
+import viewers.GlobalSearch
+import viewers.ItemGridViewer
+import viewers.MapViewer
 import viewers.PortalViewer
+import viewers.SignViewer
 import viewers.StatsDashboard
 import viewers.ThemeManager
 
@@ -36,6 +39,16 @@ class OutputViewer extends Stage {
     Label statusBar
     Button loadButton
     TextField folderField
+    GlobalSearch globalSearch
+
+    // Embedded specialized viewers (created lazily so we can support navigation + avoid re-allocations)
+    private BookViewer bookViewer
+    private BorderPane bookViewerUI
+    private SignViewer signViewer
+    private BorderPane signViewerUI
+    private PortalViewer portalViewer
+    private MapViewer mapViewer
+    private StatsDashboard statsDashboard
 
     /**
      * Create the Output Viewer window.
@@ -69,8 +82,17 @@ class OutputViewer extends Stage {
 
         // Left: Folder tree
         folderTree = createFolderTree()
-        VBox leftPane = new VBox(new Label('Output Files:').with { it.style = '-fx-font-weight: bold;'; it }, folderTree)
+        globalSearch = new GlobalSearch(model, { GlobalSearch.SearchResult result ->
+            navigateToResult(result)
+        })
+
+        Label filesLabel = new Label('Output Files:')
+        filesLabel.style = '-fx-font-weight: bold;'
+
+        VBox leftPane = new VBox(10)
+        leftPane.children.addAll(globalSearch, new Separator(), filesLabel, folderTree)
         leftPane.padding = new Insets(10)
+        VBox.setVgrow(globalSearch, Priority.ALWAYS)
         VBox.setVgrow(folderTree, Priority.ALWAYS)
 
         // Right: Content tabs
@@ -148,9 +170,14 @@ class OutputViewer extends Stage {
         autoRefreshCheckBox.selectedProperty().addListener { obs, oldVal, newVal ->
             if (newVal) {
                 autoRefreshTimer.play()
-                statusBar.text = statusBar.text + ' (auto-refresh enabled)'
             } else {
                 autoRefreshTimer.stop()
+            }
+
+            // Keep status bar suffix stable (no repeated appends)
+            if (statusBar) {
+                String base = (statusBar.text ?: '').replace(' (auto-refresh enabled)', '')
+                statusBar.text = newVal ? (base + ' (auto-refresh enabled)') : base
             }
         }
 
@@ -203,7 +230,7 @@ class OutputViewer extends Stage {
             createPlaceholderTab('Items', 'Load an output folder to view item database...'),
             createPlaceholderTab('Blocks', 'Load an output folder to view block database...'),
             createPlaceholderTab('Portals', 'Load an output folder to view portals...'),
-            createPlaceholderTab('Map', '🗺️ Interactive map view - Coming Soon!\n\nThis feature will display extracted items and blocks on a Minecraft world map.'),
+            createPlaceholderTab('Map', '🗺️ Map Viewer\n\nLoad an output folder, then use “Load Map Image…” to open a PNG/JPG exported from tools like uNmINeD or Dynmap.\n\nMarkers for signs and portals will appear after a map is loaded.'),
             createPlaceholderTab('Statistics', 'Load an output folder to view statistics dashboard...')
         )
 
@@ -272,7 +299,7 @@ class OutputViewer extends Stage {
                     if (success) {
                         updateUI()
                         statusBar.text = model.getSummaryText()
-                        showInfo('Load Complete', "Successfully loaded data from:\n${folder.absolutePath}")
+                        LOGGER.info("Load complete: ${folder.absolutePath}")
                     } else {
                         statusBar.text = 'Failed to load data'
                         showError('Load Failed', 'Could not load data from the selected folder.')
@@ -297,13 +324,198 @@ class OutputViewer extends Stage {
         // Update folder tree
         updateFolderTree()
 
+        // Update global search model (and clear old query/results)
+        globalSearch?.updateModel(model)
+
         // Update tabs (will be implemented by sub-viewers)
         updateBooksTab()
         updateSignsTab()
         updateItemsTab()
         updateBlocksTab()
         updatePortalsTab()
+        updateMapTab()
         updateStatisticsTab()
+    }
+
+    /**
+     * Navigate to a GlobalSearch selection.
+     */
+    private void navigateToResult(GlobalSearch.SearchResult result) {
+        if (!result || result.type == 'header') return
+
+        switch (result.type) {
+            case 'book':
+                navigateToBook(result.data as Map)
+                break
+            case 'sign':
+                navigateToSign(result.data as Map)
+                break
+            case 'item':
+                navigateToItem(result.data as Map)
+                break
+            case 'portal':
+                navigateToPortal(result.data as Map)
+                break
+            case 'custom_name':
+                navigateToCustomName(result.data as Map)
+                break
+            default:
+                LOGGER.debug("Unhandled search result type: ${result.type}")
+        }
+    }
+
+    private void navigateToBook(Map book) {
+        contentTabs.selectionModel.select(0)
+        try {
+            // Ensure viewer is initialized before navigation
+            if (!bookViewer && !model.books.isEmpty()) {
+                updateBooksTab()
+            }
+            bookViewer?.displayBook(book)
+        } catch (Exception e) {
+            LOGGER.debug("Failed to navigate to book: ${e.message}")
+        }
+    }
+
+    private void navigateToSign(Map sign) {
+        contentTabs.selectionModel.select(1)
+        try {
+            // Ensure viewer is initialized before navigation
+            if (!signViewer && !model.signs.isEmpty()) {
+                updateSignsTab()
+            }
+            signViewer?.highlightSign(sign as Map<String, Object>)
+        } catch (Exception e) {
+            LOGGER.debug("Failed to navigate to sign: ${e.message}")
+        }
+    }
+
+    private void navigateToItem(Map item) {
+        contentTabs.selectionModel.select(2)
+
+        try {
+            String itemId = item.item_id ?: item.itemId ?: 'Unknown'
+            def x = item.x
+            def y = item.y
+            def z = item.z
+            String dimension = item.dimension ?: item.dim ?: item.Dimension ?: ''
+            String customName = item.custom_name ?: item.customName ?: ''
+
+            String tp = (x != null && y != null && z != null) ? "/tp @s ${x} ${y} ${z}" : null
+
+            // Find the DB file on disk (needed to launch ItemGridViewer)
+            File dbFile = new File(model.outputFolder, 'item_index.db')
+            if (!dbFile.exists()) {
+                dbFile = new File(model.outputFolder, 'items.db')
+            }
+
+            Alert dialog = new Alert(Alert.AlertType.INFORMATION)
+            dialog.title = 'Item'
+            dialog.headerText = itemId
+
+            StringBuilder sb = new StringBuilder()
+            if (customName) sb.append("Name: ${customName}\n")
+            if (item.count != null) sb.append("Count: ${item.count}\n")
+            if (dimension) sb.append("Dimension: ${dimension}\n")
+            if (x != null && y != null && z != null) sb.append("Location: (${x}, ${y}, ${z})\n")
+            if (tp) sb.append("\nTeleport:\n${tp}\n")
+
+            TextArea details = new TextArea(sb.toString())
+            details.editable = false
+            details.wrapText = true
+            details.prefRowCount = 8
+            dialog.dialogPane.content = details
+
+            ButtonType openBtn = new ButtonType('Open Item Grid Viewer…', ButtonBar.ButtonData.OK_DONE)
+            ButtonType copyTpBtn = new ButtonType('Copy Teleport', ButtonBar.ButtonData.OTHER)
+            dialog.buttonTypes.setAll(openBtn, copyTpBtn, ButtonType.CLOSE)
+
+            Node openNode = dialog.dialogPane.lookupButton(openBtn)
+            if (openNode) openNode.disable = !dbFile.exists()
+
+            Node copyNode = dialog.dialogPane.lookupButton(copyTpBtn)
+            if (copyNode) copyNode.disable = (tp == null)
+
+            dialog.showAndWait().ifPresent { result ->
+                if (result == openBtn) {
+                    openItemGridViewer(dbFile, itemId)
+                } else if (result == copyTpBtn) {
+                    copyToClipboard(tp)
+                    if (statusBar) statusBar.text = "Copied: ${tp}"
+                }
+            }
+        } catch (Exception ignored) {
+            // no-op
+        }
+    }
+
+    private void navigateToPortal(Map portal) {
+        contentTabs.selectionModel.select(4)
+        try {
+            String dim = (portal.dimension ?: 'unknown') as String
+            def cx = portal.center_x ?: portal.center?.x ?: portal.centerX
+            def cy = portal.center_y ?: portal.center?.y ?: portal.centerY
+            def cz = portal.center_z ?: portal.center?.z ?: portal.centerZ
+
+            String tp = (cx != null && cy != null && cz != null) ? "/tp @s ${cx} ${cy} ${cz}" : null
+
+            Alert dialog = new Alert(Alert.AlertType.INFORMATION)
+            dialog.title = 'Portal'
+            dialog.headerText = "Portal (${dim})"
+
+            StringBuilder sb = new StringBuilder()
+            sb.append("Dimension: ${dim}\n")
+            if (portal.block_count != null) sb.append("Blocks: ${portal.block_count}\n")
+            if (portal.width != null || portal.height != null) sb.append("Size: ${portal.width ?: '?'}×${portal.height ?: '?'}\n")
+            if (portal.axis) sb.append("Axis: ${portal.axis}\n")
+            if (cx != null && cy != null && cz != null) sb.append("Center: (${cx}, ${cy}, ${cz})\n")
+            if (tp) sb.append("\nTeleport:\n${tp}\n")
+
+            TextArea details = new TextArea(sb.toString())
+            details.editable = false
+            details.wrapText = true
+            details.prefRowCount = 8
+            dialog.dialogPane.content = details
+
+            ButtonType copyTpBtn = new ButtonType('Copy Teleport', ButtonBar.ButtonData.OK_DONE)
+            dialog.buttonTypes.setAll(copyTpBtn, ButtonType.CLOSE)
+
+            Node copyNode = dialog.dialogPane.lookupButton(copyTpBtn)
+            if (copyNode) copyNode.disable = (tp == null)
+
+            dialog.showAndWait().ifPresent { result ->
+                if (result == copyTpBtn && tp) {
+                    copyToClipboard(tp)
+                    if (statusBar) statusBar.text = "Copied: ${tp}"
+                }
+            }
+        } catch (Exception ignored) {
+            // no-op
+        }
+    }
+
+    private void navigateToCustomName(Map customName) {
+        // No dedicated tab yet; show details + TP helper
+        try {
+            String name = customName.name ?: customName.customName ?: 'Custom Name'
+            String type = customName.type ?: 'unknown'
+            String itemId = customName.item_id ?: customName.itemOrEntityId ?: ''
+            def x = customName.x
+            def y = customName.y
+            def z = customName.z
+
+            StringBuilder msg = new StringBuilder()
+            msg.append("Name: ${name}\n")
+            msg.append("Type: ${type}\n")
+            if (itemId) msg.append("ID: ${itemId}\n")
+            if (x != null && y != null && z != null) {
+                msg.append("\nTeleport:\n/tp @s ${x} ${y} ${z}")
+            }
+
+            showInfo('Custom Name', msg.toString())
+        } catch (Exception e) {
+            LOGGER.debug("Failed to show custom name dialog: ${e.message}", e)
+        }
     }
 
     /**
@@ -347,9 +559,19 @@ class OutputViewer extends Stage {
         }
 
         try {
-            // Create BookViewer and initialize UI
-            BookViewer bookViewer = new BookViewer()
-            BorderPane bookViewerUI = bookViewer.initializeUI()
+            // Create BookViewer once and reuse it for navigation/highlighting
+            if (!bookViewer) {
+                bookViewer = new BookViewer()
+                bookViewerUI = bookViewer.initializeUI()
+            }
+
+            // Reset filters on reload to ensure fresh state
+            try {
+                if (bookViewer.searchField) bookViewer.searchField.clear()
+                if (bookViewer.authorFilterCombo) bookViewer.authorFilterCombo.value = 'All Authors'
+            } catch (Exception ignored) {
+                // Ignore if filter components not accessible
+            }
 
             // Load books from model (convert to format BookViewer expects)
             bookViewer.allBooks = model.books
@@ -386,77 +608,52 @@ class OutputViewer extends Stage {
             return
         }
 
-        BorderPane signPane = new BorderPane()
-        signPane.padding = new Insets(10)
+        try {
+            if (!signViewer) {
+                signViewer = new SignViewer()
+                signViewerUI = signViewer.initializeUI()
+            }
 
-        // Search bar at top
-        HBox searchBar = new HBox(10)
-        searchBar.alignment = Pos.CENTER_LEFT
-        searchBar.padding = new Insets(0, 0, 10, 0)
+            // Reset filters on reload to ensure fresh state
+            try {
+                if (signViewer.searchField) signViewer.searchField.clear()
+                if (signViewer.dimensionFilter) signViewer.dimensionFilter.value = 'All'
+            } catch (Exception ignored) {
+                // Ignore if filter components not accessible
+            }
 
-        Label searchLabel = new Label('Search:')
-        TextField signSearchField = new TextField()
-        signSearchField.promptText = 'Filter by text, dimension, or coordinates...'
-        HBox.setHgrow(signSearchField, Priority.ALWAYS)
+            signViewer.setSigns(model.signs as List<Map<String, Object>>)
+            signsTab.content = signViewerUI
+            LOGGER.info("SignViewer integrated with ${model.signs.size()} signs")
+        } catch (Exception e) {
+            LOGGER.error("Failed to create SignViewer: ${e.message}", e)
 
-        ComboBox<String> dimensionFilter = new ComboBox<>()
-        dimensionFilter.items.addAll('All Dimensions', 'overworld', 'nether', 'end')
-        dimensionFilter.value = 'All Dimensions'
+            // Fallback: simple list view
+            BorderPane signPane = new BorderPane()
+            signPane.padding = new Insets(10)
 
-        Label countLabel = new Label("${model.signs.size()} signs")
-        countLabel.style = '-fx-font-weight: bold;'
-
-        searchBar.children.addAll(searchLabel, signSearchField, dimensionFilter, countLabel)
-        signPane.top = searchBar
-
-        // Signs list
-        ListView<String> signListView = new ListView<>()
-        signListView.cellFactory = { param ->
-            new javafx.scene.control.ListCell<String>() {
-                @Override
-                protected void updateItem(String item, boolean empty) {
-                    super.updateItem(item, empty)
-                    text = empty ? null : item
-                    style = '-fx-font-family: monospace;'
+            ListView<String> signListView = new ListView<>()
+            signListView.cellFactory = { param ->
+                new javafx.scene.control.ListCell<String>() {
+                    @Override
+                    protected void updateItem(String item, boolean empty) {
+                        super.updateItem(item, empty)
+                        text = empty ? null : item
+                        style = '-fx-font-family: monospace;'
+                    }
                 }
             }
+
+            signListView.items.addAll(
+                model.signs.collect { sign ->
+                    "[${sign.dimension ?: '?'}] (${sign.x}, ${sign.y}, ${sign.z}): " +
+                        "${sign.line1 ?: ''} | ${sign.line2 ?: ''} | ${sign.line3 ?: ''} | ${sign.line4 ?: ''}"
+                }
+            )
+
+            signPane.center = signListView
+            signsTab.content = signPane
         }
-
-        // Populate and filter signs
-        Closure<Void> filterSigns = {
-            String searchText = signSearchField.text?.toLowerCase() ?: ''
-            String selectedDim = dimensionFilter.value
-
-            List<Map> filtered = model.signs.findAll { sign ->
-                boolean matchesSearch = !searchText ||
-                    (sign.line1?.toLowerCase()?.contains(searchText) ?: false) ||
-                    (sign.line2?.toLowerCase()?.contains(searchText) ?: false) ||
-                    (sign.line3?.toLowerCase()?.contains(searchText) ?: false) ||
-                    (sign.line4?.toLowerCase()?.contains(searchText) ?: false) ||
-                    "${sign.x},${sign.y},${sign.z}".contains(searchText)
-
-                boolean matchesDim = selectedDim == 'All Dimensions' || sign.dimension == selectedDim
-
-                return matchesSearch && matchesDim
-            }
-
-            signListView.items.clear()
-            filtered.each { sign ->
-                String text = "[${sign.dimension ?: '?'}] (${sign.x}, ${sign.y}, ${sign.z}): " +
-                    "${sign.line1 ?: ''} | ${sign.line2 ?: ''} | ${sign.line3 ?: ''} | ${sign.line4 ?: ''}"
-                signListView.items.add(text)
-            }
-            countLabel.text = "${filtered.size()} of ${model.signs.size()} signs"
-        }
-
-        signSearchField.textProperty().addListener { obs, old, newVal -> filterSigns() }
-        dimensionFilter.onAction = { filterSigns() }
-
-        filterSigns()  // Initial population
-
-        signPane.center = signListView
-        signsTab.content = signPane
-        LOGGER.info("Signs tab updated with ${model.signs.size()} signs")
     }
 
     /**
@@ -473,9 +670,14 @@ class OutputViewer extends Stage {
             return
         }
 
-        TextArea textArea = new TextArea()
-        textArea.editable = false
-        textArea.wrapText = true
+        // Find the DB file on disk (needed to launch ItemGridViewer)
+        File dbFile = new File(model.outputFolder, 'item_index.db')
+        if (!dbFile.exists()) {
+            dbFile = new File(model.outputFolder, 'items.db')
+        }
+
+        // Summary (lightweight, quick)
+        TextArea textArea = new TextArea(editable: false, wrapText: true)
 
         List<Map> summary = model.itemDatabase.getSummary()
         textArea.text = "Item Database Summary\n\n" +
@@ -484,11 +686,25 @@ class OutputViewer extends Stage {
             "Total items found: ${model.metadata.totalItemCount}\n\n" +
             "Top 20 item types:\n" +
             summary.take(20).collect { item ->
-                "  ${item.item_id}: ${item.total_count} total, ${item.indexed_count} indexed" +
+                "  ${item.item_id}: ${item.total_count} total, ${item.unique_locations} unique locations" +
                     (item.limit_reached ? ' (LIMIT REACHED)' : '')
             }.join('\n')
 
-        itemsTab.content = textArea
+        Button openGridBtn = new Button('Open Item Grid Viewer…')
+        openGridBtn.disable = !dbFile.exists()
+        openGridBtn.tooltip = new Tooltip(dbFile.exists() ? 'Open JEI-style item grid (may take a moment for huge databases)' :
+            'Database file not found on disk (expected item_index.db or items.db)')
+
+        openGridBtn.onAction = { event ->
+            openItemGridViewer(dbFile, null, openGridBtn)
+        }
+
+        VBox container = new VBox(10)
+        container.padding = new Insets(10)
+        container.children.addAll(openGridBtn, textArea)
+        VBox.setVgrow(textArea, Priority.ALWAYS)
+
+        itemsTab.content = container
     }
 
     /**
@@ -547,24 +763,210 @@ class OutputViewer extends Stage {
      * Update the Portals tab.
      */
     private void updatePortalsTab() {
+        Tab portalsTab = contentTabs.tabs[4]
         if (model.portals.isEmpty()) {
+            Label placeholder = new Label('No portals found in output folder')
+            placeholder.style = '-fx-text-fill: gray; -fx-font-style: italic;'
+            portalsTab.content = new BorderPane(placeholder)
             return
         }
 
-        Tab portalsTab = contentTabs.tabs[4]
-        TextArea textArea = new TextArea()
-        textArea.editable = false
-        textArea.wrapText = true
-        textArea.text = "Loaded ${model.portals.size()} portals\n\n" +
-            model.portals.collect { portal ->
-                "Portal ID: ${portal.portal_id}\n" +
-                "Dimension: ${portal.dimension}\n" +
-                "Blocks: ${portal.block_count}\n" +
-                "Center: (${portal.center_x}, ${portal.center_y}, ${portal.center_z})\n" +
-                "Bounds: X[${portal.min_x}..${portal.max_x}] Y[${portal.min_y}..${portal.max_y}] Z[${portal.min_z}..${portal.max_z}]\n"
-            }.join('\n---\n')
+        try {
+            List<PortalDetector.Portal> portalObjs = []
+            model.portals.each { Map p ->
+                try {
+                    int anchorX = (p.anchor_x ?: p.anchor?.x ?: p.anchorX ?: 0) as int
+                    int anchorY = (p.anchor_y ?: p.anchor?.y ?: p.anchorY ?: 0) as int
+                    int anchorZ = (p.anchor_z ?: p.anchor?.z ?: p.anchorZ ?: 0) as int
+                    int width = (p.width ?: p.size?.width ?: 0) as int
+                    int height = (p.height ?: p.size?.height ?: 0) as int
+                    String axis = (p.axis ?: 'z') as String
+                    int blockCount = (p.block_count ?: p.blockCount ?: 0) as int
 
-        portalsTab.content = textArea
+                    double centerX = (p.center_x ?: p.center?.x ?: p.centerX ?: 0.0) as double
+                    double centerY = (p.center_y ?: p.center?.y ?: p.centerY ?: 0.0) as double
+                    double centerZ = (p.center_z ?: p.center?.z ?: p.centerZ ?: 0.0) as double
+
+                    portalObjs << new PortalDetector.Portal(
+                        (p.dimension ?: 'overworld') as String,
+                        anchorX, anchorY, anchorZ,
+                        width, height, axis,
+                        blockCount,
+                        centerX, centerY, centerZ
+                    )
+                } catch (Exception ignored) {
+                    // Skip malformed portal rows
+                }
+            }
+
+            portalViewer = new PortalViewer(portalObjs)
+            portalsTab.content = portalViewer
+            LOGGER.info("PortalViewer integrated with ${portalObjs.size()} portals")
+        } catch (Exception e) {
+            LOGGER.error("Failed to create PortalViewer: ${e.message}", e)
+
+            // Fallback to text
+            TextArea textArea = new TextArea(editable: false, wrapText: true)
+            textArea.text = "Loaded ${model.portals.size()} portals\n\n" +
+                model.portals.collect { portal ->
+                    "Portal ID: ${portal.portal_id}\n" +
+                        "Dimension: ${portal.dimension}\n" +
+                        "Blocks: ${portal.block_count}\n" +
+                        "Center: (${portal.center_x}, ${portal.center_y}, ${portal.center_z})\n"
+                }.join('\n---\n')
+            portalsTab.content = textArea
+        }
+    }
+
+    /**
+     * Update the Map tab with embedded MapViewer and populate markers.
+     */
+    private void updateMapTab() {
+        Tab mapTab = contentTabs.tabs[5]
+
+        try {
+            if (!mapViewer) {
+                mapViewer = new MapViewer()
+            }
+
+            // Update markers from current model (markers render when a map image is loaded)
+            mapViewer.clearMarkers()
+            List<MapViewer.MapMarker> markers = []
+
+            model.signs.each { Map sign ->
+                try {
+                    markers << new MapViewer.MapMarker(
+                        'sign',
+                        (sign.x ?: 0) as int,
+                        (sign.z ?: 0) as int,
+                        (sign.y ?: 0) as int,
+                        'Sign',
+                        [
+                            dimension: sign.dimension,
+                            lines: (sign.lines ?: [sign.line1, sign.line2, sign.line3, sign.line4]).findAll { it != null }
+                        ]
+                    )
+                } catch (Exception ignored) {
+                    // ignore malformed
+                }
+            }
+
+            model.portals.each { Map portal ->
+                try {
+                    markers << new MapViewer.MapMarker(
+                        'portal',
+                        (portal.center_x ?: portal.center?.x ?: 0) as int,
+                        (portal.center_z ?: portal.center?.z ?: 0) as int,
+                        (portal.center_y ?: portal.center?.y ?: 0) as int,
+                        "Portal ${(portal.width ?: portal.size?.width ?: '?')}×${(portal.height ?: portal.size?.height ?: '?')}",
+                        [
+                            dimension: portal.dimension,
+                            width: portal.width ?: portal.size?.width,
+                            height: portal.height ?: portal.size?.height,
+                            axis: portal.axis
+                        ]
+                    )
+                } catch (Exception ignored) {
+                    // ignore malformed
+                }
+            }
+
+            // Add custom-name markers (best-effort, capped to avoid UI freezes)
+            int maxCustomNameMarkers = 500
+            int addedCustom = 0
+            model.customNames?.each { Map cn ->
+                if (addedCustom >= maxCustomNameMarkers) {
+                    return
+                }
+                try {
+                    def x = cn.x
+                    def y = cn.y
+                    def z = cn.z
+                    if (x == null || z == null) {
+                        return
+                    }
+                    markers << new MapViewer.MapMarker(
+                        'item',
+                        (x ?: 0) as int,
+                        (z ?: 0) as int,
+                        (y ?: 0) as int,
+                        (cn.name ?: cn.customName ?: 'Custom Name') as String,
+                        [
+                            dimension : cn.dimension ?: cn.Dimension,
+                            customName: cn.name ?: cn.customName,
+                            itemId    : cn.item_id ?: cn.itemId,
+                            type      : cn.type,
+                            x         : x,
+                            y         : y,
+                            z         : z
+                        ]
+                    )
+                    addedCustom++
+                } catch (Exception ignored) {
+                    // ignore malformed
+                }
+            }
+
+            if (!markers.isEmpty()) {
+                mapViewer.addMarkers(markers)
+            }
+
+            mapTab.content = mapViewer
+        } catch (Exception e) {
+            LOGGER.error("Failed to create MapViewer: ${e.message}", e)
+            // Keep the existing placeholder if something goes wrong
+        }
+    }
+
+    private void openItemGridViewer(File dbFile, String prefillQuery = null, Button sourceButton = null) {
+        if (!dbFile?.exists()) {
+            showError('Item database not found', 'Expected item_index.db or items.db in the output folder.')
+            return
+        }
+
+        sourceButton?.disable = true
+        if (statusBar) {
+            statusBar.text = 'Preparing Item Grid Viewer...'
+        }
+
+        Thread.start {
+            try {
+                ItemGridViewer viewer = new ItemGridViewer(dbFile)
+                if (prefillQuery) {
+                    viewer.setSearchText(prefillQuery)
+                }
+                javafx.application.Platform.runLater {
+                    try {
+                        viewer.show()
+                    } finally {
+                        sourceButton?.disable = false
+                        if (statusBar) {
+                            statusBar.text = model.getSummaryText()
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                LOGGER.error("Failed to open ItemGridViewer: ${e.message}", e)
+                javafx.application.Platform.runLater {
+                    sourceButton?.disable = false
+                    if (statusBar) {
+                        statusBar.text = model.getSummaryText()
+                    }
+                    showError('Failed to open Item Grid Viewer', e.message ?: 'Unknown error')
+                }
+            }
+        }
+    }
+
+    private static void copyToClipboard(String text) {
+        if (!text) return
+        try {
+            ClipboardContent content = new ClipboardContent()
+            content.putString(text)
+            Clipboard.systemClipboard.setContent(content)
+        } catch (Exception ignored) {
+            // Clipboard can be unavailable in some environments; don't fail navigation on that.
+        }
     }
 
     /**
@@ -574,8 +976,10 @@ class OutputViewer extends Stage {
         Tab statsTab = contentTabs.tabs[6]
 
         try {
-            // Create StatsDashboard and populate with data
-            StatsDashboard dashboard = new StatsDashboard()
+            // Create StatsDashboard once and update it
+            if (!statsDashboard) {
+                statsDashboard = new StatsDashboard()
+            }
 
             // Convert books to the format StatsDashboard expects (grouped by author)
             Map<String, List<Map>> booksByAuthor = model.books.groupBy { it.author ?: 'Unknown' }
@@ -587,7 +991,7 @@ class OutputViewer extends Stage {
             }
 
             // Update dashboard with model data
-            dashboard.updateData(
+            statsDashboard.updateData(
                 booksByAuthor,
                 signsByHash,
                 model.itemDatabase,
@@ -595,7 +999,7 @@ class OutputViewer extends Stage {
                 model.portals
             )
 
-            statsTab.content = dashboard
+            statsTab.content = statsDashboard
             LOGGER.info('StatsDashboard integrated')
         } catch (Exception e) {
             LOGGER.error("Failed to create StatsDashboard: ${e.message}", e)

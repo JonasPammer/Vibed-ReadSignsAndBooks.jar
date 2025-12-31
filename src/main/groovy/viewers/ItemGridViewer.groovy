@@ -1,30 +1,32 @@
 package viewers
 
 import groovy.json.JsonSlurper
-import javafx.animation.Animation
-import javafx.animation.KeyFrame
-import javafx.animation.Timeline
 import javafx.application.Application
 import javafx.application.Platform
+import javafx.collections.FXCollections
+import javafx.collections.ObservableList
 import javafx.geometry.Insets
 import javafx.geometry.Pos
+import javafx.scene.Node
 import javafx.scene.Scene
-import javafx.scene.canvas.Canvas
-import javafx.scene.canvas.GraphicsContext
 import javafx.scene.control.*
 import javafx.scene.input.Clipboard
 import javafx.scene.input.ClipboardContent
 import javafx.scene.input.KeyCode
+import javafx.scene.input.KeyCodeCombination
+import javafx.scene.input.KeyCombination
 import javafx.scene.input.MouseButton
+import javafx.scene.image.ImageView
 import javafx.scene.layout.*
-import javafx.scene.paint.Color
-import javafx.scene.paint.CycleMethod
-import javafx.scene.paint.LinearGradient
-import javafx.scene.paint.Stop
 import javafx.scene.text.Font
 import javafx.scene.text.FontWeight
+import javafx.scene.text.TextFlow
+import javafx.stage.DirectoryChooser
+import javafx.stage.FileChooser
 import javafx.stage.Stage
-import javafx.util.Duration
+import org.fxmisc.flowless.Cell
+import org.fxmisc.flowless.VirtualFlow
+import org.fxmisc.flowless.VirtualizedScrollPane
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
@@ -51,10 +53,6 @@ class ItemGridViewer {
     private static final int SLOT_SIZE = 48
     private static final int SLOT_PADDING = 2
     private static final int ICON_SIZE = 32
-    private static final Color SLOT_BG = Color.rgb(55, 55, 55)
-    private static final Color NAMED_BORDER = Color.GOLD
-    private static final Color ENCHANT_PURPLE_1 = Color.rgb(155, 89, 182, 0.5)
-    private static final Color ENCHANT_PURPLE_2 = Color.rgb(142, 68, 173, 0.8)
 
     // Database
     private ItemDatabase database
@@ -63,10 +61,30 @@ class ItemGridViewer {
     private Stage stage
     private TextField searchField
     private ToggleGroup categoryGroup
-    private ScrollPane scrollPane
-    private GridPane itemGrid
-    private Label statusLabel
+    // Note: historically a ScrollPane; now a Flowless VirtualizedScrollPane, but tests stub it as a ScrollPane.
+    private def scrollPane
+    // Container for the virtualized grid (kept as a field for GUI tests)
+    private StackPane itemGrid
+    private def statusLabel
     private Tooltip itemTooltip
+
+    // Virtualized grid (Flowless)
+    private final ObservableList<RowModel> rowModels = FXCollections.observableArrayList()
+    private VirtualFlow<RowModel, Cell<RowModel, Node>> rowFlow
+    private VirtualizedScrollPane<VirtualFlow<RowModel, Cell<RowModel, Node>>> rowFlowScroll
+    private int currentColumns = 0
+    private Label emptyOverlayLabel
+
+    // Selection + details panel
+    private Map selectedItem = null
+    private Node selectedSlotNode = null
+    private VBox detailsPanel
+    private ImageView detailsIcon
+    private TextFlow detailsTitleFlow
+    private Label detailsSubtitleLabel
+    private TextArea detailsMetaText
+    private Button copyTpButton
+    private Button copyIdButton
 
     // Data
     private List<Map> allItems = []
@@ -74,9 +92,15 @@ class ItemGridViewer {
     private String currentSearchText = ''
     private String currentCategory = 'All'
 
-    // Animation
-    private Timeline glintTimeline
-    private double glintOffset = 0.0
+    private def textureSourceLabel
+    private boolean gridDirty = true
+
+    private static class RowModel {
+        List<Map> items
+        RowModel(List<Map> items) {
+            this.items = items
+        }
+    }
 
     /**
      * Constructor - opens existing database for viewing.
@@ -117,60 +141,378 @@ class ItemGridViewer {
      */
     void show() {
         stage = new Stage()
-        stage.title = 'Item Grid Viewer - Minecraft Item Database'
+        stage.title = 'Item Atlas - Indexed Items'
+
+        // Theme + Minecraft CSS
+        ThemeManager.initialize()
 
         BorderPane root = new BorderPane()
 
-        // Top: Search bar + category tabs
-        VBox topSection = new VBox(10)
-        topSection.padding = new Insets(10)
+        // Top: Menu + search + categories
+        MenuBar menuBar = createMenuBar()
 
-        // Search bar
+        VBox topControls = new VBox(8)
+        topControls.padding = new Insets(10)
+
         HBox searchBox = createSearchBar()
-
-        // Category tabs
         HBox categoryTabs = createCategoryTabs()
+        topControls.children.addAll(searchBox, categoryTabs)
 
-        topSection.children.addAll(searchBox, categoryTabs)
+        root.top = new VBox(menuBar, topControls)
 
-        // Center: Scrollable item grid
-        scrollPane = new ScrollPane()
-        scrollPane.fitToWidth = true
-        scrollPane.hbarPolicy = ScrollPane.ScrollBarPolicy.NEVER
-        scrollPane.vbarPolicy = ScrollPane.ScrollBarPolicy.AS_NEEDED
+        // Center: Virtualized grid + details
+        rowFlow = VirtualFlow.createVertical(rowModels, { RowModel row ->
+            Cell.wrapNode(createRowNode(row))
+        })
+        rowFlowScroll = new VirtualizedScrollPane<>(rowFlow)
+        scrollPane = rowFlowScroll
 
-        itemGrid = new GridPane()
-        itemGrid.padding = new Insets(10)
-        itemGrid.hgap = SLOT_PADDING
-        itemGrid.vgap = SLOT_PADDING
+        itemGrid = new StackPane(rowFlowScroll)
+        // Keep background concrete to avoid CSS lookup recursion in some JavaFX theme/test setups.
+        itemGrid.style = '-fx-background-color: #1d1d1d;'
 
-        scrollPane.content = itemGrid
+        emptyOverlayLabel = new Label('No items match the current filters')
+        emptyOverlayLabel.style = '-fx-text-fill: gray; -fx-font-style: italic; -fx-font-size: 13px;'
+        emptyOverlayLabel.visible = false
+        itemGrid.children.add(emptyOverlayLabel)
+        StackPane.setAlignment(emptyOverlayLabel, Pos.CENTER)
+
+        detailsPanel = createDetailsPanel()
+
+        SplitPane split = new SplitPane()
+        split.items.addAll(itemGrid, detailsPanel)
+        split.dividerPositions = [0.72] as double[]
+        root.center = split
 
         // Bottom: Status bar
-        statusLabel = new Label("${allItems.size()} items total")
-        statusLabel.padding = new Insets(5, 10, 5, 10)
-        statusLabel.style = '-fx-font-size: 11px; -fx-background-color: derive(-fx-base, -5%);'
-        statusLabel.maxWidth = Double.MAX_VALUE
+        statusLabel = new Label()
+        statusLabel.style = '-fx-font-size: 11px; -fx-text-fill: #b0b0b0;'
 
-        root.top = topSection
-        root.center = scrollPane
-        root.bottom = statusLabel
+        textureSourceLabel = new Label("Textures: ${IconManager.getTextureSourceLabel()}")
+        textureSourceLabel.style = '-fx-font-size: 11px; -fx-text-fill: #b0b0b0;'
 
-        Scene scene = new Scene(root, 1000, 700)
+        Region spacer = new Region()
+        HBox.setHgrow(spacer, Priority.ALWAYS)
+
+        HBox bottomBar = new HBox(10, statusLabel, spacer, textureSourceLabel)
+        bottomBar.padding = new Insets(6, 10, 6, 10)
+        bottomBar.alignment = Pos.CENTER_LEFT
+        bottomBar.style = '-fx-background-color: #1d1d1d;'
+        root.bottom = bottomBar
+
+        Scene scene = new Scene(root, 1200, 760)
+        ThemeManager.registerScene(scene)
         stage.scene = scene
+
+        // Keyboard shortcuts
+        scene.accelerators.put(new KeyCodeCombination(KeyCode.F, KeyCombination.CONTROL_DOWN), { ->
+            focusSearch()
+        })
+
+        scene.onKeyPressed = { event ->
+            if (event.code == KeyCode.C && selectedItem != null) {
+                copyTeleportCommand(selectedItem)
+            } else if (event.code == KeyCode.R && selectedItem != null) {
+                showItemDetails(selectedItem)
+            } else if (event.code == KeyCode.ESCAPE) {
+                clearSelection()
+            }
+        }
+
+        // Reflow grid on resize
+        scrollPane.widthProperty().addListener { obs, oldVal, newVal ->
+            Platform.runLater { updateGrid(false) }
+        }
+
         stage.show()
 
-        // Initial render
-        updateGrid()
-
-        // Start enchantment glint animation
-        startGlintAnimation()
+        // Initial render (respect any pre-set search text)
+        // IMPORTANT: schedule after the current FX pulse so show() returns quickly (keeps GUI tests reliable).
+        Platform.runLater {
+            if (currentSearchText?.trim()) {
+                // Triggers applyFilters() via listener
+                searchField.text = currentSearchText
+            } else {
+                updateGrid(true)
+                updateStatus()
+            }
+        }
 
         // Cleanup on close
         stage.onCloseRequest = { event ->
-            stopGlintAnimation()
+            ThemeManager.unregisterScene(scene)
             database?.close()
         }
+    }
+
+    /**
+     * Set search text programmatically (useful for GlobalSearch navigation).
+     * Can be called before or after show().
+     */
+    void setSearchText(String text) {
+        currentSearchText = text ?: ''
+        if (searchField) {
+            // Triggers applyFilters() via listener
+            searchField.text = currentSearchText
+        }
+    }
+
+    private void focusSearch() {
+        if (!searchField) return
+        searchField.requestFocus()
+        searchField.selectAll()
+    }
+
+    private MenuBar createMenuBar() {
+        MenuBar bar = new MenuBar()
+
+        // Textures menu (user-provided assets only; we do not ship MC textures)
+        Menu texturesMenu = new Menu('Textures')
+
+        MenuItem loadJar = new MenuItem('Load Minecraft Client .jar...')
+        loadJar.onAction = { event ->
+            FileChooser chooser = new FileChooser()
+            chooser.title = 'Select Minecraft client .jar (e.g., .minecraft/versions/<ver>/<ver>.jar)'
+            chooser.extensionFilters.add(new FileChooser.ExtensionFilter('Minecraft client jar', '*.jar'))
+            chooser.extensionFilters.add(new FileChooser.ExtensionFilter('Archives', '*.jar', '*.zip'))
+
+            File selected = chooser.showOpenDialog(stage)
+            if (selected) {
+                boolean ok = IconManager.setExternalTextureSource(selected)
+                if (!ok) {
+                    showErrorDialog("Failed to load textures from: ${selected.absolutePath}")
+                }
+                updateGrid(true)
+                updateStatus()
+            }
+        }
+
+        MenuItem loadZip = new MenuItem('Load Resource Pack .zip...')
+        loadZip.onAction = { event ->
+            FileChooser chooser = new FileChooser()
+            chooser.title = 'Select a resource pack .zip (must contain assets/minecraft/textures/)'
+            chooser.extensionFilters.add(new FileChooser.ExtensionFilter('Resource pack zip', '*.zip'))
+            chooser.extensionFilters.add(new FileChooser.ExtensionFilter('Archives', '*.zip', '*.jar'))
+
+            File selected = chooser.showOpenDialog(stage)
+            if (selected) {
+                boolean ok = IconManager.setExternalTextureSource(selected)
+                if (!ok) {
+                    showErrorDialog("Failed to load textures from: ${selected.absolutePath}")
+                }
+                updateGrid(true)
+                updateStatus()
+            }
+        }
+
+        MenuItem loadFolder = new MenuItem('Load Extracted Assets Folder...')
+        loadFolder.onAction = { event ->
+            DirectoryChooser chooser = new DirectoryChooser()
+            chooser.title = 'Select a folder containing assets/minecraft/textures/'
+
+            File selected = chooser.showDialog(stage)
+            if (selected) {
+                boolean ok = IconManager.setExternalTextureSource(selected)
+                if (!ok) {
+                    showErrorDialog("Failed to load textures from: ${selected.absolutePath}")
+                }
+                updateGrid(true)
+                updateStatus()
+            }
+        }
+
+        MenuItem useBuiltIn = new MenuItem('Use Built-in Placeholders')
+        useBuiltIn.onAction = { event ->
+            IconManager.clearExternalTextureSource()
+            updateGrid(true)
+            updateStatus()
+        }
+
+        texturesMenu.items.addAll(loadJar, loadZip, loadFolder, new SeparatorMenuItem(), useBuiltIn)
+
+        // View menu
+        Menu viewMenu = new Menu('View')
+        MenuItem toggleTheme = new MenuItem('Toggle Theme')
+        toggleTheme.onAction = { event ->
+            ThemeManager.toggleTheme()
+        }
+        viewMenu.items.add(toggleTheme)
+
+        // Help menu
+        Menu helpMenu = new Menu('Help')
+        MenuItem syntaxItem = new MenuItem('Search Syntax...')
+        syntaxItem.onAction = { event ->
+            Alert alert = new Alert(Alert.AlertType.INFORMATION)
+            alert.title = 'Item Search Syntax'
+            alert.headerText = 'JEI-style search'
+            alert.contentText = [
+                'Examples:',
+                '  diamond',
+                '  @<player_uuid>     (player inventory owner)',
+                '  #sharpness        (enchantment text)',
+                '  $named            (only custom-named items)',
+                '  ~nether           (dimension filter)',
+                '',
+                'Tip: Right-click an item for quick actions.'
+            ].join('\n')
+            alert.showAndWait()
+        }
+        helpMenu.items.add(syntaxItem)
+
+        bar.menus.addAll(texturesMenu, viewMenu, helpMenu)
+        return bar
+    }
+
+    private VBox createDetailsPanel() {
+        VBox panel = new VBox(10)
+        panel.padding = new Insets(12)
+        panel.minWidth = 340
+        panel.prefWidth = 360
+        // Keep background concrete to avoid CSS lookup recursion in some JavaFX theme/test setups.
+        panel.style = '-fx-background-color: #2b2b2b;'
+
+        Label header = new Label('Details')
+        header.font = Font.font('System', FontWeight.BOLD, 14)
+
+        // Title row
+        detailsIcon = new ImageView()
+        detailsIcon.fitWidth = 32
+        detailsIcon.fitHeight = 32
+        detailsIcon.preserveRatio = false
+        detailsIcon.smooth = false
+
+        detailsTitleFlow = new TextFlow()
+        detailsSubtitleLabel = new Label('Select an item')
+        detailsSubtitleLabel.style = '-fx-font-size: 11px; -fx-text-fill: #b0b0b0;'
+
+        VBox titleText = new VBox(2, detailsTitleFlow, detailsSubtitleLabel)
+        HBox titleRow = new HBox(10, detailsIcon, titleText)
+        titleRow.alignment = Pos.CENTER_LEFT
+
+        // Buttons
+        copyTpButton = new Button('Copy /tp')
+        copyTpButton.disable = true
+        copyTpButton.onAction = { event ->
+            if (selectedItem) {
+                copyTeleportCommand(selectedItem)
+            }
+        }
+
+        copyIdButton = new Button('Copy ID')
+        copyIdButton.disable = true
+        copyIdButton.onAction = { event ->
+            if (selectedItem) {
+                copyTextToClipboard(selectedItem.item_id as String)
+                statusLabel?.setText("Copied: ${selectedItem.item_id}")
+            }
+        }
+
+        HBox buttonRow = new HBox(8, copyTpButton, copyIdButton)
+        buttonRow.alignment = Pos.CENTER_LEFT
+
+        // Meta details
+        detailsMetaText = new TextArea()
+        detailsMetaText.editable = false
+        detailsMetaText.wrapText = true
+        detailsMetaText.prefRowCount = 18
+        detailsMetaText.style = '-fx-font-family: Consolas, monospace; -fx-font-size: 12px;'
+        VBox.setVgrow(detailsMetaText, Priority.ALWAYS)
+
+        panel.children.addAll(header, titleRow, buttonRow, new Separator(), detailsMetaText)
+
+        updateDetailsPanel(null)
+        return panel
+    }
+
+    private void updateDetailsPanel(Map item) {
+        if (!detailsMetaText || !detailsSubtitleLabel || !detailsIcon || !detailsTitleFlow) {
+            return
+        }
+
+        if (!item) {
+            detailsIcon.image = null
+            detailsTitleFlow.children.clear()
+            detailsTitleFlow.children.addAll(MinecraftTextRenderer.render('§7Select an item§r').children)
+            detailsSubtitleLabel.text = 'Tip: Double-click for full details'
+            detailsMetaText.text = [
+                '• Left click: select',
+                '• Double click: open details dialog',
+                '• Right click: context menu',
+                '',
+                'Keyboard:',
+                '  Ctrl+F  focus search',
+                '  R       details',
+                '  C       copy /tp',
+                '  Esc     clear selection'
+            ].join('\n')
+
+            copyTpButton.disable = true
+            copyIdButton.disable = true
+            return
+        }
+
+        String itemId = (item.item_id ?: 'Unknown') as String
+        detailsIcon.image = IconManager.getIcon(itemId)
+
+        detailsTitleFlow.children.clear()
+        String titleText = hasCustomName(item) ? "§e${item.custom_name}§r" : "§f${itemId}§r"
+        detailsTitleFlow.children.addAll(MinecraftTextRenderer.render(titleText).children)
+
+        String dim = (item.dimension ?: 'unknown') as String
+        detailsSubtitleLabel.text = "${dim}  (${item.x}, ${item.y}, ${item.z})"
+
+        detailsMetaText.text = buildDetailsText(item)
+
+        copyIdButton.disable = !(itemId?.trim())
+        copyTpButton.disable = (item.x == null || item.y == null || item.z == null)
+    }
+
+    private String buildDetailsText(Map item) {
+        StringBuilder sb = new StringBuilder()
+
+        sb.append("ID: ${item.item_id}\n")
+        if (item.count != null) sb.append("Count: ${item.count}\n")
+        if (item.custom_name) sb.append("Name: ${item.custom_name}\n")
+
+        sb.append('\n')
+        sb.append("Dimension: ${item.dimension ?: 'unknown'}\n")
+        sb.append("Location: (${item.x}, ${item.y}, ${item.z})\n")
+        if (item.container_type) sb.append("Container: ${item.container_type}\n")
+        if (item.player_uuid) sb.append("Player: ${item.player_uuid}\n")
+
+        if (hasEnchantments(item)) {
+            sb.append('\n')
+            sb.append('Enchantments:\n')
+            if (item.enchantments) {
+                parseEnchantments(item.enchantments as String).each { ench, level ->
+                    sb.append("  - ${ench} ${level}\n")
+                }
+            }
+            if (item.stored_enchantments) {
+                parseEnchantments(item.stored_enchantments as String).each { ench, level ->
+                    sb.append("  - ${ench} ${level} (stored)\n")
+                }
+            }
+        }
+
+        if (item.lore) {
+            List<String> lore = parseLore(item.lore as String)
+            if (lore) {
+                sb.append('\n')
+                sb.append('Lore:\n')
+                lore.each { line -> sb.append("  ${line}\n") }
+            }
+        }
+
+        sb.append('\n')
+        sb.append('Teleport:\n')
+        if (item.x != null && item.y != null && item.z != null) {
+            sb.append("/tp @s ${item.x} ${item.y} ${item.z}\n")
+        } else {
+            sb.append('(no coordinates)\n')
+        }
+
+        return sb.toString().trim()
     }
 
     /**
@@ -185,6 +527,7 @@ class ItemGridViewer {
 
         searchField = new TextField()
         searchField.promptText = 'diamond, @steve, #sharpness, $named, ~nether'
+        searchField.styleClass.add('search-field')
         HBox.setHgrow(searchField, Priority.ALWAYS)
 
         searchField.textProperty().addListener { obs, oldVal, newVal ->
@@ -215,6 +558,7 @@ class ItemGridViewer {
             btn.toggleGroup = categoryGroup
             btn.userData = category
             btn.minWidth = 80
+            btn.styleClass.add('category-tab')
 
             if (category == 'All') {
                 btn.selected = true
@@ -238,6 +582,7 @@ class ItemGridViewer {
      */
     private void applyFilters() {
         filteredItems.clear()
+        gridDirty = true
 
         // Parse search syntax
         Map<String, String> searchCriteria = parseSearchText(currentSearchText)
@@ -268,7 +613,7 @@ class ItemGridViewer {
             filteredItems.add(item)
         }
 
-        updateGrid()
+        updateGrid(false)
         updateStatus()
     }
 
@@ -322,11 +667,19 @@ class ItemGridViewer {
                        itemId.contains('planks') || itemId.contains('log') || itemId.contains('dirt')
             case 'Materials':
                 return itemId.contains('ingot') || itemId.contains('gem') || itemId.contains('dust') ||
-                       itemId.contains('nugget') || itemId.contains('stick') || itemId.contains('string')
+                       itemId.contains('nugget') || itemId.contains('stick') || itemId.contains('string') ||
+                       // Gems/minerals (avoid matching tools like diamond_sword)
+                       itemId == 'minecraft:diamond' || itemId == 'minecraft:emerald' ||
+                       itemId == 'minecraft:lapis_lazuli' || itemId == 'minecraft:amethyst_shard' ||
+                       itemId == 'minecraft:quartz'
             case 'Food':
-                return itemId.contains('apple') || itemId.contains('bread') || itemId.contains('meat') ||
-                       itemId.contains('fish') || itemId.contains('carrot') || itemId.contains('potato') ||
-                       itemId.contains('beetroot') || itemId.contains('stew')
+                return itemId.contains('apple') || itemId.contains('bread') ||
+                       itemId.contains('beef') || itemId.contains('pork') || itemId.contains('porkchop') ||
+                       itemId.contains('chicken') || itemId.contains('mutton') || itemId.contains('rabbit') ||
+                       itemId.contains('fish') || itemId.contains('cod') || itemId.contains('salmon') ||
+                       itemId.contains('carrot') || itemId.contains('potato') || itemId.contains('beetroot') ||
+                       itemId.contains('stew') || itemId.contains('cookie') || itemId.contains('cake') ||
+                       itemId.contains('pumpkin_pie') || itemId.contains('golden_apple')
             case 'Misc':
             case 'All':
             default:
@@ -363,86 +716,221 @@ class ItemGridViewer {
     /**
      * Update the item grid display.
      */
-    private void updateGrid() {
-        itemGrid.children.clear()
-
-        int columns = calculateColumns()
-        int row = 0
-        int col = 0
-
-        filteredItems.each { Map item ->
-            Canvas slot = createItemSlot(item)
-            itemGrid.add(slot, col, row)
-
-            col++
-            if (col >= columns) {
-                col = 0
-                row++
-            }
+    private void updateGrid(boolean force = false) {
+        if (rowModels == null) {
+            return
         }
+
+        int cols = calculateColumns()
+        if (force || cols != currentColumns) {
+            currentColumns = cols
+            gridDirty = true
+        }
+
+        if (!gridDirty) {
+            return
+        }
+
+        // Rebuild row models (VirtualFlow only renders visible rows)
+        rowModels.setAll(buildRows(filteredItems, currentColumns))
+        gridDirty = false
+
+        if (emptyOverlayLabel) {
+            emptyOverlayLabel.visible = (filteredItems == null || filteredItems.isEmpty())
+        }
+    }
+
+    private List<RowModel> buildRows(List<Map> items, int cols) {
+        List<RowModel> rows = []
+        if (!items || cols <= 0) {
+            return rows
+        }
+
+        for (int i = 0; i < items.size(); i += cols) {
+            int end = Math.min(i + cols, items.size())
+            rows << new RowModel(items.subList(i, end))
+        }
+
+        return rows
+    }
+
+    private Node createRowNode(RowModel row) {
+        HBox box = new HBox(SLOT_PADDING)
+        box.alignment = Pos.CENTER_LEFT
+        box.padding = new Insets(0, 10, 0, 10)
+
+        row.items.each { Map item ->
+            box.children.add(createItemSlotNode(item))
+        }
+
+        return box
     }
 
     /**
      * Calculate number of columns based on window width.
      */
     private int calculateColumns() {
-        double width = scrollPane.width > 0 ? scrollPane.width : 950
+        double width = scrollPane?.width ?: 0
+        if (width <= 0) {
+            width = 950
+        }
         int columns = ((width - 40) / (SLOT_SIZE + SLOT_PADDING)) as int
         return Math.max(1, columns)
     }
 
     /**
-     * Create a single item slot canvas.
+     * Create a single JEI-style item slot node.
      */
-    private Canvas createItemSlot(Map item) {
-        Canvas canvas = new Canvas(SLOT_SIZE, SLOT_SIZE)
-        GraphicsContext gc = canvas.graphicsContext2D
+    private Node createItemSlotNode(Map item) {
+        StackPane slot = new StackPane()
+        slot.prefWidth = SLOT_SIZE
+        slot.prefHeight = SLOT_SIZE
+        slot.minWidth = SLOT_SIZE
+        slot.minHeight = SLOT_SIZE
+        slot.maxWidth = SLOT_SIZE
+        slot.maxHeight = SLOT_SIZE
 
-        // Background
-        gc.fill = SLOT_BG
-        gc.fillRect(0, 0, SLOT_SIZE, SLOT_SIZE)
-
-        // Named item border
-        if (hasCustomName(item)) {
-            gc.stroke = NAMED_BORDER
-            gc.lineWidth = 2
-            gc.strokeRect(1, 1, SLOT_SIZE - 2, SLOT_SIZE - 2)
-        }
-
-        // Item icon placeholder (centered 32x32)
-        double iconX = (SLOT_SIZE - ICON_SIZE) / 2
-        double iconY = (SLOT_SIZE - ICON_SIZE) / 2
-
-        // Draw item ID text (placeholder for icon)
-        gc.fill = Color.WHITE
-        gc.font = Font.font('Monospaced', FontWeight.BOLD, 8)
-        String shortId = extractItemName(item.item_id as String)
-        gc.fillText(shortId, iconX + 2, iconY + 10, ICON_SIZE - 4)
-
-        // Stack count (bottom-right)
-        int count = item.count as Integer
-        if (count > 1) {
-            gc.fill = Color.WHITE
-            gc.strokeText(count.toString(), SLOT_SIZE - 15, SLOT_SIZE - 5)
-            gc.fillText(count.toString(), SLOT_SIZE - 15, SLOT_SIZE - 5)
-        }
-
-        // Enchantment glint overlay (if enchanted)
+        slot.styleClass.add('item-slot')
         if (hasEnchantments(item)) {
-            drawEnchantmentGlint(gc, glintOffset)
+            slot.styleClass.add('enchanted')
+        }
+        if (hasCustomName(item)) {
+            slot.styleClass.add('named')
         }
 
-        // Tooltip
-        installTooltip(canvas, item)
+        // Icon
+        String itemId = (item.item_id ?: '') as String
+        ImageView icon = new ImageView(IconManager.getIcon(itemId))
+        icon.fitWidth = ICON_SIZE
+        icon.fitHeight = ICON_SIZE
+        icon.preserveRatio = false
+        icon.smooth = false
+        icon.userData = itemId
+        slot.children.add(icon)
+        StackPane.setAlignment(icon, Pos.CENTER)
 
-        // Click handlers
-        canvas.onMouseClicked = { event ->
+        // Glint overlay (animated, only for enchanted items)
+        if (hasEnchantments(item)) {
+            Node glint = IconManager.createEnchantGlint()
+            glint.mouseTransparent = true
+            slot.children.add(glint)
+            StackPane.setAlignment(glint, Pos.CENTER)
+        }
+
+        // Count overlay (bottom-right)
+        int count = (item.count ?: 1) as int
+        if (count > 1) {
+            Label countLabel = new Label(formatCount(count))
+            countLabel.styleClass.add('item-count')
+            slot.children.add(countLabel)
+            StackPane.setAlignment(countLabel, Pos.BOTTOM_RIGHT)
+            StackPane.setMargin(countLabel, new Insets(0, 2, 2, 0))
+        }
+
+        Tooltip.install(slot, createTooltip(item))
+
+        // Interactions
+        slot.onMouseClicked = { event ->
             if (event.button == MouseButton.PRIMARY) {
-                handleItemClick(item, event)
+                selectItem(item, slot)
+                if (event.clickCount == 2) {
+                    showItemDetails(item)
+                }
+            } else if (event.button == MouseButton.SECONDARY) {
+                showContextMenu(item, slot, event.screenX, event.screenY)
             }
         }
 
-        return canvas
+        return slot
+    }
+
+    private void selectItem(Map item, Node slotNode) {
+        if (selectedSlotNode) {
+            try {
+                selectedSlotNode.styleClass.remove('selected')
+            } catch (Exception ignored) {
+                // ignore
+            }
+        }
+
+        selectedItem = item
+        selectedSlotNode = slotNode
+        try {
+            selectedSlotNode.styleClass.add('selected')
+        } catch (Exception ignored) {
+            // ignore
+        }
+
+        updateDetailsPanel(item)
+    }
+
+    private void clearSelection() {
+        if (selectedSlotNode) {
+            try {
+                selectedSlotNode.styleClass.remove('selected')
+            } catch (Exception ignored) {
+                // ignore
+            }
+        }
+        selectedItem = null
+        selectedSlotNode = null
+        updateDetailsPanel(null)
+    }
+
+    private Tooltip createTooltip(Map item) {
+        Tooltip tooltip = new Tooltip()
+        tooltip.text = buildTooltipText(item)
+        tooltip.styleClass.add('minecraft-tooltip')
+        return tooltip
+    }
+
+    private void showContextMenu(Map item, Node anchor, double screenX, double screenY) {
+        ContextMenu menu = new ContextMenu()
+
+        MenuItem copyId = new MenuItem('Copy Item ID')
+        copyId.onAction = { evt ->
+            copyTextToClipboard(item.item_id as String)
+            statusLabel?.setText("Copied: ${item.item_id}")
+        }
+
+        MenuItem copyTp = new MenuItem('Copy Teleport (/tp)')
+        copyTp.disable = (item.x == null || item.y == null || item.z == null)
+        copyTp.onAction = { evt ->
+            copyTeleportCommand(item)
+        }
+
+        MenuItem filterToThis = new MenuItem('Filter to this Item ID')
+        filterToThis.onAction = { evt ->
+            if (searchField) {
+                searchField.text = (item.item_id ?: '') as String
+            } else {
+                setSearchText(item.item_id as String)
+            }
+        }
+
+        MenuItem details = new MenuItem('Show Details...')
+        details.onAction = { evt -> showItemDetails(item) }
+
+        menu.items.addAll(copyId, copyTp, new SeparatorMenuItem(), filterToThis, details)
+        menu.show(anchor, screenX, screenY)
+    }
+
+    private static void copyTextToClipboard(String text) {
+        if (!text) return
+        try {
+            ClipboardContent content = new ClipboardContent()
+            content.putString(text)
+            Clipboard.systemClipboard.setContent(content)
+        } catch (Exception ignored) {
+            // clipboard can fail in CI/headless
+        }
+    }
+
+    private static String formatCount(int count) {
+        if (count >= 1000000) return String.format('%.1fm', count / 1000000.0)
+        if (count >= 10000) return String.format('%.1fk', count / 1000.0)
+        if (count >= 1000) return "${(int) (count / 1000)}k"
+        return count.toString()
     }
 
     /**
@@ -462,43 +950,6 @@ class ItemGridViewer {
         String storedEnchantments = item.stored_enchantments as String
         return (enchantments && enchantments != '{}' && enchantments != '[]') ||
                (storedEnchantments && storedEnchantments != '{}' && storedEnchantments != '[]')
-    }
-
-    /**
-     * Draw enchantment glint effect.
-     */
-    private void drawEnchantmentGlint(GraphicsContext gc, double offset) {
-        // Animated linear gradient sweep
-        Stop[] stops = [
-            new Stop(0, Color.TRANSPARENT),
-            new Stop(0.3 + offset * 0.5, ENCHANT_PURPLE_1),
-            new Stop(0.5 + offset * 0.5, ENCHANT_PURPLE_2),
-            new Stop(0.7 + offset * 0.5, ENCHANT_PURPLE_1),
-            new Stop(1, Color.TRANSPARENT)
-        ]
-
-        LinearGradient gradient = new LinearGradient(
-            0, 0, SLOT_SIZE, SLOT_SIZE,
-            false, CycleMethod.NO_CYCLE, stops
-        )
-
-        gc.save()
-        gc.globalAlpha = 0.3
-        gc.fill = gradient
-        gc.fillRect(0, 0, SLOT_SIZE, SLOT_SIZE)
-        gc.restore()
-    }
-
-    /**
-     * Install tooltip on item slot.
-     */
-    private void installTooltip(Canvas canvas, Map item) {
-        Tooltip tooltip = new Tooltip()
-        tooltip.text = buildTooltipText(item)
-        tooltip.showDelay = Duration.millis(200)
-        tooltip.style = '-fx-font-size: 12px; -fx-background-color: rgba(0, 0, 0, 0.9); -fx-text-fill: white;'
-
-        Tooltip.install(canvas, tooltip)
     }
 
     /**
@@ -630,45 +1081,39 @@ class ItemGridViewer {
     /**
      * Copy teleport command to clipboard.
      */
-    private void copyTeleportCommand(Map item) {
+    private String copyTeleportCommand(Map item) {
         int x = item.x as Integer
         int y = item.y as Integer
         int z = item.z as Integer
         String command = "/tp @s ${x} ${y} ${z}"
 
-        ClipboardContent content = new ClipboardContent()
-        content.putString(command)
-        Clipboard.systemClipboard.setContent(content)
+        try {
+            ClipboardContent content = new ClipboardContent()
+            content.putString(command)
+            Clipboard.systemClipboard.setContent(content)
+        } catch (Exception e) {
+            // Clipboard access can fail in CI/headless/remote environments or when not on the FX thread.
+            LOGGER.debug("Failed to copy teleport command to clipboard: ${e.message}")
+        }
 
+        if (statusLabel) {
+            statusLabel.text = "Copied: ${command}"
+        }
         LOGGER.info("Copied teleport command: ${command}")
-        statusLabel.text = "Copied: ${command}"
+        return command
     }
 
     /**
      * Update status bar.
      */
     private void updateStatus() {
+        if (!statusLabel) {
+            return
+        }
         statusLabel.text = "${filteredItems.size()} / ${allItems.size()} items"
-    }
-
-    /**
-     * Start enchantment glint animation.
-     */
-    private void startGlintAnimation() {
-        glintTimeline = new Timeline(new KeyFrame(Duration.millis(50), { event ->
-            glintOffset = (glintOffset + 0.02) % 1.0
-            // Redraw all enchanted items
-            updateGrid()
-        }))
-        glintTimeline.cycleCount = Animation.INDEFINITE
-        glintTimeline.play()
-    }
-
-    /**
-     * Stop enchantment glint animation.
-     */
-    private void stopGlintAnimation() {
-        glintTimeline?.stop()
+        if (textureSourceLabel) {
+            textureSourceLabel.text = "Textures: ${IconManager.getTextureSourceLabel()}"
+        }
     }
 
     /**

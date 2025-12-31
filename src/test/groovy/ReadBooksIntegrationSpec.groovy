@@ -1897,9 +1897,12 @@ class ReadBooksIntegrationSpec extends Specification {
         and: 'block search creates JSON output when blocks are found'
         testWorlds.every { worldInfo ->
             setupTestWorld(worldInfo)
-            Main.searchBlocks = ['minecraft:stone']
+            // Use a rare block type to avoid OOM when parsing large JSON files
+            Main.searchBlocks = ['minecraft:diamond_ore']
             Main.searchDimensions = ['overworld']
             Main.blockOutputFormat = 'json'
+            // Limit to prevent huge JSON files
+            Main.indexLimit = 100
 
             try {
                 runReadBooksProgram()
@@ -1935,6 +1938,7 @@ class ReadBooksIntegrationSpec extends Specification {
             } finally {
                 Main.searchBlocks = []
                 Main.blockOutputFormat = 'csv'
+                Main.indexLimit = 5000  // Reset to default
             }
         }
     }

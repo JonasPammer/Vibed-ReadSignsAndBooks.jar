@@ -48,6 +48,7 @@ class GUI extends Application {
     CheckBox skipCommonItemsCheckBox
     CheckBox trackFailedRegionsCheckBox
     CheckBox findPortalsCheckBox
+    CheckBox indexAllBlocksCheckBox
     CheckBox overworldCheckBox
     CheckBox netherCheckBox
     CheckBox endCheckBox
@@ -196,7 +197,7 @@ class GUI extends Application {
         findPortalsCheckBox.tooltip = new Tooltip('Scans for portal blocks and groups them into portal structures.\nOutputs coordinates with overworld/nether pairing.')
 
         // Index all blocks checkbox
-        CheckBox indexAllBlocksCheckBox = new CheckBox('Index ALL blocks (rarity-filtered)')
+        indexAllBlocksCheckBox = new CheckBox('Index ALL blocks (rarity-filtered)')
         indexAllBlocksCheckBox.selected = false
         indexAllBlocksCheckBox.tooltip = new Tooltip('Scan and index all block types in the world.\nSkips only air/cave_air. Uses the limit per type setting.')
 
