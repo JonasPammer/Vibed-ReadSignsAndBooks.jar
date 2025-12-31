@@ -79,6 +79,8 @@ class Main implements Runnable {
     static Map<String, Integer> booksByLocationType = [:]
     static List<Map<String, String>> bookMetadataList = []
     static List<Map<String, Object>> bookCsvData = []
+    // Book JSON for OutputViewer / BookViewer (pages preserved with § formatting codes)
+    static List<Map<String, Object>> bookStendhalJsonData = []
     static List<Map<String, Object>> signCsvData = []
     static int emptySignsRemoved = 0
     static BufferedWriter combinedBooksWriter      // Clean version (formatting stripped)
@@ -138,6 +140,9 @@ class Main implements Runnable {
     @Option(names = ['--index-dimension'], description = 'Filter query results by dimension (overworld, nether, end)')
     static String indexDimension = null
 
+    @Option(names = ['--block-output-format'], description = 'Block output format for --search-blocks results: csv, json, txt, all (default: csv)', defaultValue = 'csv')
+    static String blockOutputFormat = 'csv'
+
     // Item index database options
 
     @Option(names = ['--index-items'], description = 'Build item index database during extraction', defaultValue = 'false')
@@ -191,6 +196,7 @@ class Main implements Runnable {
         booksByLocationType = [:]
         bookMetadataList = []
         bookCsvData = []
+        bookStendhalJsonData = []
         signCsvData = []
         signsByHash = [:]
         booksByAuthor = [:]
@@ -223,6 +229,7 @@ class Main implements Runnable {
         commandSpec = null
         findPortals = false
         searchDimensions = DEFAULT_DIMENSIONS
+        blockOutputFormat = 'csv'
         blockSearchResults = []
         portalResults = []
 
@@ -851,7 +858,7 @@ class Main implements Runnable {
         // Reset collections but preserve @Option fields that were intentionally set
         // (e.g., customWorldDirectory set by tests or CLI arguments)
         [bookHashes, signHashes, customNameHashes, customNameData, booksByContainerType,
-         booksByLocationType, bookMetadataList, bookCsvData, signCsvData, booksByAuthor,
+         booksByLocationType, bookMetadataList, bookCsvData, bookStendhalJsonData, signCsvData, booksByAuthor,
          signsByHash, bookGenerationByHash].each { collection -> collection.clear() }
         bookCounter = 0
         emptySignsRemoved = 0
@@ -982,6 +989,7 @@ class Main implements Runnable {
 
             // Write CSV exports
             writeBooksCSV()
+            writeBooksStendhalJson()
             writeSignsCSV()
             writeCustomNamesOutput()
 
@@ -1063,6 +1071,26 @@ class Main implements Runnable {
         OutputWriters.writeBooksCSV(baseDirectory, outputFolder, bookCsvData)
     }
 
+    /**
+     * Write the books JSON file used by the Interactive Output Viewer / BookViewer.
+     * This preserves Minecraft formatting codes (§) in page text.
+     *
+     * Output: all_books_stendhal.json
+     * Format: { "books": [ { title, author, pages: [...], ... }, ... ] }
+     */
+    static void writeBooksStendhalJson() {
+        File outputBaseDir = resolveOutputBaseDir()
+        File jsonFile = new File(outputBaseDir, 'all_books_stendhal.json')
+
+        // Always write the file (even if empty) so downstream tools/tests have a stable contract.
+        Map payload = [books: (bookStendhalJsonData ?: [])]
+        String json = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(payload))
+        jsonFile.withWriter('UTF-8') { BufferedWriter writer ->
+            writer.write(json)
+        }
+        LOGGER.info('Books JSON written to: all_books_stendhal.json')
+    }
+
     static void writeSignsCSV() {
         OutputWriters.writeSignsCSV(baseDirectory, outputFolder, signCsvData)
     }
@@ -1082,14 +1110,31 @@ class Main implements Runnable {
             return
         }
 
+        File outputBaseDir = resolveOutputBaseDir()
+
+        // Stable contract for downstream tools/tests: when the flag is enabled, always write the files
+        // (even if no custom names are found).
         if (customNameData.empty) {
-            LOGGER.debug('Skipping custom names output: no custom names found')
+            new File(outputBaseDir, 'all_custom_names.csv').withWriter('UTF-8') { BufferedWriter writer ->
+                writer.writeLine('CustomName,Type,ItemOrEntityID,X,Y,Z,Location')
+            }
+
+            new File(outputBaseDir, 'all_custom_names.txt').withWriter('UTF-8') { BufferedWriter writer ->
+                writer.writeLine('Custom Names Extraction Report')
+                writer.writeLine('=' * 80)
+                writer.writeLine('')
+                writer.writeLine('No custom names found.')
+            }
+
+            new File(outputBaseDir, 'all_custom_names.json').withWriter('UTF-8') { BufferedWriter writer ->
+                writer.writeLine('[]')
+            }
+
+            LOGGER.info('No custom names found; wrote empty all_custom_names.csv/.txt/.json')
             return
         }
 
         LOGGER.info("Writing custom names output (${customNameData.size()} unique custom names found)")
-
-        File outputBaseDir = resolveOutputBaseDir()
 
         // Write CSV file
         File csvFile = new File(outputBaseDir, 'all_custom_names.csv')
@@ -1192,8 +1237,11 @@ class Main implements Runnable {
      * are then extracted from results for clustering, avoiding duplicate world scans.
      */
     static void runBlockSearch() {
-        boolean hasSpecificBlocks = searchBlocks && !searchBlocks.empty
-        boolean hasIndexAllMode = searchBlocksSpecified && !hasSpecificBlocks
+        // Check if user specified "*" wildcard for all blocks
+        boolean isWildcard = searchBlocks && searchBlocks.size() == 1 && BlockSearcher.isWildcardSearch(searchBlocks[0])
+
+        boolean hasSpecificBlocks = searchBlocks && !searchBlocks.empty && !isWildcard
+        boolean hasIndexAllMode = (searchBlocksSpecified && !hasSpecificBlocks) || isWildcard
         boolean hasBlockSearch = hasSpecificBlocks || hasIndexAllMode
         boolean hasPortalSearch = findPortals
 
@@ -1271,7 +1319,9 @@ class Main implements Runnable {
                 if (hasBlockSearch) {
                     if (hasIndexAllMode) {
                         // Index-all mode: scan all blocks except air/cave_air
-                        LOGGER.info("INDEX-ALL MODE: Scanning all blocks (rarity-filtered by limit: ${indexLimit == 0 ? 'unlimited' : indexLimit})")
+                        // Triggered by either --search-blocks (no args) or --search-blocks "*"
+                        String modeIndicator = isWildcard ? 'wildcard "*"' : 'no arguments'
+                        LOGGER.info("INDEX-ALL MODE (${modeIndicator}): Scanning all blocks (rarity-filtered by limit: ${indexLimit == 0 ? 'unlimited' : indexLimit})")
                         LOGGER.info("Dimensions: ${searchDimensions.join(', ')}")
                         LOGGER.info('Skipping: minecraft:air, minecraft:cave_air')
 
@@ -1322,9 +1372,10 @@ class Main implements Runnable {
     static void writeBlockSearchOutput() {
         boolean hasBlockResults = blockSearchResults && !blockSearchResults.empty
         boolean hasIndexAllMode = searchBlocksSpecified && (searchBlocks == null || searchBlocks.empty)
+        boolean hasPortalSearch = findPortals
         boolean hasPortalResults = portalResults && !portalResults.empty
 
-        if (!hasBlockResults && !hasIndexAllMode && !hasPortalResults) {
+        if (!hasBlockResults && !hasIndexAllMode && !hasPortalSearch && !hasPortalResults) {
             LOGGER.debug('No block/portal search results to write')
             return
         }
@@ -1332,7 +1383,7 @@ class Main implements Runnable {
         String outputPath = resolveOutputBaseDir().absolutePath
 
         // Write portal results
-        if (hasPortalResults) {
+        if (hasPortalSearch || hasPortalResults) {
             writePortalOutput(outputPath)
         }
 
@@ -1438,10 +1489,26 @@ class Main implements Runnable {
     static void writeBlockOutput(String outputPath) {
         LOGGER.info("Writing block output (${blockSearchResults.size()} blocks found)")
 
-        // Output all 3 formats (CSV, JSON, TXT)
-        writeBlockCsv(outputPath)
-        writeBlockJson(outputPath)
-        writeBlockTxt(outputPath)
+        String fmt = (blockOutputFormat ?: 'csv').toLowerCase()
+        switch (fmt) {
+            case 'csv':
+                writeBlockCsv(outputPath)
+                break
+            case 'json':
+                writeBlockJson(outputPath)
+                break
+            case 'txt':
+                writeBlockTxt(outputPath)
+                break
+            case 'all':
+                writeBlockCsv(outputPath)
+                writeBlockJson(outputPath)
+                writeBlockTxt(outputPath)
+                break
+            default:
+                LOGGER.warn("Unknown --block-output-format '${blockOutputFormat}', defaulting to csv")
+                writeBlockCsv(outputPath)
+        }
     }
 
     static void writeBlockCsv(String outputPath) {
@@ -1567,10 +1634,26 @@ class Main implements Runnable {
             int totalBlocks = db.totalBlockCount
             LOGGER.info("Writing block output from database (${totalBlocks} blocks indexed)")
 
-            // Output all 3 formats (CSV, JSON, TXT)
-            writeBlockCsvFromDb(outputPath, db)
-            writeBlockJsonFromDb(outputPath, db)
-            writeBlockTxtFromDb(outputPath, db)
+            String fmt = (blockOutputFormat ?: 'csv').toLowerCase()
+            switch (fmt) {
+                case 'csv':
+                    writeBlockCsvFromDb(outputPath, db)
+                    break
+                case 'json':
+                    writeBlockJsonFromDb(outputPath, db)
+                    break
+                case 'txt':
+                    writeBlockTxtFromDb(outputPath, db)
+                    break
+                case 'all':
+                    writeBlockCsvFromDb(outputPath, db)
+                    writeBlockJsonFromDb(outputPath, db)
+                    writeBlockTxtFromDb(outputPath, db)
+                    break
+                default:
+                    LOGGER.warn("Unknown --block-output-format '${blockOutputFormat}', defaulting to csv")
+                    writeBlockCsvFromDb(outputPath, db)
+            }
         } finally {
             db.close()
         }
@@ -3281,19 +3364,38 @@ class Main implements Runnable {
             counter++
         }
 
+        // Precompute pages with formatting preserved (used for .stendhal output + OutputViewer JSON).
+        List<String> stendhalPages = []
+        (0..<pages.size()).each { int pc ->
+            String pageText = extractPageText(pages, pc)
+            if (pageText) {
+                stendhalPages.add(extractTextContentPreserveFormatting(pageText))
+            }
+        }
+
+        // Add to OutputViewer JSON dataset (one entry per extracted book)
+        bookStendhalJsonData.add([
+            title: title ?: 'Untitled',
+            author: author ?: '',
+            pages: stendhalPages,
+            pageCount: pages.size(),
+            generation: generation,
+            generationName: generationName,
+            foundWhere: foundWhere,
+            x: x,
+            y: y,
+            z: z,
+            duplicate: isDuplicate,
+            outputFile: filename
+        ])
+
         // Write .stendhal file (preserve formatting codes)
         bookFile.withWriter('UTF-8') { BufferedWriter writer ->
             writer.writeLine("title: ${title ?: 'Untitled'}")
             writer.writeLine("author: ${author ?: ''}")
             writer.writeLine('pages:')
 
-            (0..<pages.size()).each { int pc ->
-                String pageText = extractPageText(pages, pc)
-                if (!pageText) {
-                    return
-                }
-
-                String pageContent = extractTextContentPreserveFormatting(pageText)
+            stendhalPages.each { String pageContent ->
                 writer.write('#- ')
                 writer.writeLine(pageContent)
             }
@@ -3311,13 +3413,8 @@ class Main implements Runnable {
             writeLine("author: ${TextUtils.removeTextFormatting(author ?: '')}")
             writeLine('pages:')
 
-            (0..<pages.size()).each { int pc ->
-                String pageText = extractPageText(pages, pc)
-                if (!pageText) {
-                    return
-                }
-
-                String pageContent = TextUtils.removeTextFormatting(extractTextContentPreserveFormatting(pageText))
+            stendhalPages.each { String rawPage ->
+                String pageContent = TextUtils.removeTextFormatting(rawPage)
                 writeLine('#- ')
                 writeLine(pageContent)
             }
@@ -3335,13 +3432,7 @@ class Main implements Runnable {
             writeLine("author: ${author ?: ''}")
             writeLine('pages:')
 
-            (0..<pages.size()).each { int pc ->
-                String pageText = extractPageText(pages, pc)
-                if (!pageText) {
-                    return
-                }
-
-                String pageContent = extractTextContentPreserveFormatting(pageText)
+            stendhalPages.each { String pageContent ->
                 writeLine('#- ')
                 writeLine(pageContent)
             }
@@ -3472,20 +3563,38 @@ class Main implements Runnable {
             counter++
         }
 
+        // Precompute pages (writable books store plain strings; preserve formatting codes if present).
+        List<String> stendhalPages = []
+        (0..<pages.size()).each { int pc ->
+            String pageText = extractPageText(pages, pc)
+            if (pageText) {
+                stendhalPages.add(pageText)
+            }
+        }
+
+        // Add to OutputViewer JSON dataset
+        bookStendhalJsonData.add([
+            title: 'Writable Book',
+            author: '',
+            pages: stendhalPages,
+            pageCount: pages.size(),
+            generation: 0,
+            generationName: 'Original',
+            foundWhere: foundWhere,
+            x: x,
+            y: y,
+            z: z,
+            duplicate: isDuplicate,
+            outputFile: filename
+        ])
+
         // Write .stendhal file (preserve formatting codes)
         bookFile.withWriter('UTF-8') { BufferedWriter writer ->
             writer.writeLine('title: Writable Book')
             writer.writeLine('author: ')
             writer.writeLine('pages:')
 
-            (0..<pages.size()).each { int pc ->
-                String pageText = extractPageText(pages, pc)
-                if (!pageText) {
-                    return
-                }
-
-                // For .stendhal files, always preserve formatting codes
-                String pageContent = pageText
+            stendhalPages.each { String pageContent ->
                 writer.write('#- ')
                 writer.writeLine(pageContent)
             }
@@ -3503,13 +3612,8 @@ class Main implements Runnable {
             writeLine('author: ')
             writeLine('pages:')
 
-            (0..<pages.size()).each { int pc ->
-                String pageText = extractPageText(pages, pc)
-                if (!pageText) {
-                    return
-                }
-
-                String pageContent = TextUtils.removeTextFormatting(pageText)
+            stendhalPages.each { String rawPage ->
+                String pageContent = TextUtils.removeTextFormatting(rawPage)
                 writeLine('#- ')
                 writeLine(pageContent)
             }
@@ -3527,13 +3631,7 @@ class Main implements Runnable {
             writeLine('author: ')
             writeLine('pages:')
 
-            (0..<pages.size()).each { int pc ->
-                String pageText = extractPageText(pages, pc)
-                if (!pageText) {
-                    return
-                }
-
-                String pageContent = pageText
+            stendhalPages.each { String pageContent ->
                 writeLine('#- ')
                 writeLine(pageContent)
             }

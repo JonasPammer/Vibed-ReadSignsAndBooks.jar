@@ -1,0 +1,202 @@
+/*
+ * Minecraft Theme CSS
+ *
+ * Theme colors are provided as JavaFX "looked-up colors" (custom CSS properties)
+ * set by ThemeManager on the root node:
+ * -mc-slot-bg, -mc-slot-border, -mc-tooltip-bg, -mc-enchant-purple, -mc-gold-text, etc.
+ *
+ * JavaFX CSS does NOT support web `var()`; looked-up colors are referenced directly:
+ *   -fx-background-color: -mc-slot-bg;
+ */
+
+/* Default palette (ThemeManager overrides these per theme) */
+.root {
+    -mc-slot-bg: #373737;
+    -mc-slot-border: #1d1d1d;
+    -mc-tooltip-bg: rgba(16, 0, 16, 0.94);
+    -mc-enchant-purple: #8040ff;
+    -mc-gold-text: #ffaa00;
+    -mc-book-page: #E8D5B3;
+    -mc-sign-wood: #8B7355;
+    -mc-sign-border: #5D4E37;
+}
+
+/* Minecraft-style tooltip */
+.minecraft-tooltip {
+    -fx-background-color: -mc-tooltip-bg;
+    -fx-border-color: #5000ff #28007f #28007f #5000ff;
+    -fx-border-width: 2;
+    -fx-padding: 6;
+    -fx-font-family: "Consolas", monospace;
+}
+
+/* Item slot styling */
+.item-slot {
+    -fx-background-color: -mc-slot-bg;
+    -fx-border-color: -mc-slot-border #5a5a5a #5a5a5a -mc-slot-border;
+    -fx-border-width: 2;
+    -fx-padding: 4;
+    -fx-pref-width: 48;
+    -fx-pref-height: 48;
+}
+
+.item-slot:hover {
+    -fx-background-color: #4a4a4a;
+    -fx-scale-x: 1.05;
+    -fx-scale-y: 1.05;
+}
+
+.item-slot.selected {
+    -fx-border-color: #55ffff;
+    -fx-border-width: 3;
+}
+
+.item-slot.enchanted {
+    -fx-border-color: #8040ff;
+}
+
+.item-slot.named {
+    -fx-border-color: #ffaa00;
+    -fx-border-width: 3;
+}
+
+/* Stack count label */
+.item-count {
+    -fx-font-family: "Consolas", monospace;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-text-fill: white;
+    -fx-effect: dropshadow(gaussian, #3f3f3f, 1, 1, 1, 1);
+}
+
+/* Tooltip text styles */
+.item-name { -fx-text-fill: white; -fx-font-weight: bold; }
+.renamed-item { -fx-text-fill: #ffff55; -fx-font-weight: bold; }
+.custom-name-italic { -fx-text-fill: #ffaa00; -fx-font-style: italic; }
+.enchantment-text { -fx-text-fill: #aaaaff; }
+.lore-text { -fx-text-fill: #aa00aa; -fx-font-style: italic; }
+.location-text { -fx-text-fill: #aaaaaa; -fx-font-size: 11px; }
+
+/* Book viewer styles */
+.book-page {
+    -fx-background-color: #E8D5B3;
+    -fx-padding: 20;
+}
+
+.book-text {
+    -fx-font-family: "Consolas", monospace;
+    -fx-font-size: 13px;
+}
+
+/* Sign card styles */
+.sign-card {
+    -fx-background-color: #8B7355;
+    -fx-border-color: #5D4E37;
+    -fx-border-width: 3;
+    -fx-padding: 10;
+    -fx-background-radius: 5;
+    -fx-border-radius: 5;
+}
+
+.sign-text {
+    -fx-font-family: "Consolas", monospace;
+    -fx-font-size: 11px;
+    -fx-text-fill: black;
+    -fx-text-alignment: center;
+}
+
+/* Portal card styles */
+.portal-card {
+    -fx-background-color: derive(-fx-base, 10%);
+    -fx-border-color: #8040ff;
+    -fx-border-width: 2;
+    -fx-padding: 15;
+    -fx-background-radius: 8;
+    -fx-border-radius: 8;
+}
+
+.portal-card.overworld {
+    -fx-border-color: #55ff55;
+}
+
+.portal-card.nether {
+    -fx-border-color: #ff5555;
+}
+
+/* KPI card for statistics */
+.kpi-card {
+    -fx-background-color: derive(-fx-base, 15%);
+    -fx-border-color: derive(-fx-base, -10%);
+    -fx-border-width: 1;
+    -fx-padding: 15;
+    -fx-background-radius: 8;
+    -fx-border-radius: 8;
+    -fx-min-width: 150;
+}
+
+.kpi-value {
+    -fx-font-size: 28px;
+    -fx-font-weight: bold;
+}
+
+.kpi-label {
+    -fx-font-size: 12px;
+    -fx-text-fill: derive(-fx-text-fill, 30%);
+}
+
+/* Category tabs */
+.category-tab {
+    -fx-background-color: #373737;
+    -fx-text-fill: white;
+    -fx-padding: 8 16;
+}
+
+.category-tab:selected {
+    -fx-background-color: #4a4a4a;
+    -fx-border-color: #8040ff;
+    -fx-border-width: 0 0 2 0;
+}
+
+/* Search bar */
+.search-field {
+    -fx-background-color: #2a2a2a;
+    -fx-text-fill: white;
+    -fx-prompt-text-fill: #888888;
+    -fx-border-color: #444444;
+    -fx-border-radius: 15;
+    -fx-background-radius: 15;
+    -fx-padding: 8 15;
+}
+
+/* Map viewer */
+.map-marker {
+    -fx-cursor: hand;
+}
+
+.map-marker:hover {
+    -fx-scale-x: 1.2;
+    -fx-scale-y: 1.2;
+}
+
+/* Dimension badges */
+.dimension-badge {
+    -fx-padding: 2 8;
+    -fx-background-radius: 10;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+}
+
+.dimension-overworld {
+    -fx-background-color: #55ff55;
+    -fx-text-fill: black;
+}
+
+.dimension-nether {
+    -fx-background-color: #ff5555;
+    -fx-text-fill: white;
+}
+
+.dimension-end {
+    -fx-background-color: #aa00aa;
+    -fx-text-fill: white;
+}
